@@ -16,6 +16,9 @@ import { findDocumentEntryLead } from "@/lib/pricing/document-entry";
 import { documentSharingEnabled } from "@/lib/pricing/document-share-feature";
 import { publicDocumentOrderEntryEnabled } from "@/lib/pricing/public-document-order-feature";
 import { documentExtensionEnabled } from "@/lib/pricing/document-extension-feature";
+import { documentVatEnabled } from "@/lib/pricing/document-vat-feature";
+import { documentFooterFormattingEnabled } from "@/lib/pricing/document-footer-format";
+
 export const dynamic = "force-dynamic";
 export default async function DocumentsPage({
   searchParams,
@@ -52,12 +55,15 @@ export default async function DocumentsPage({
           key={`${companyId}:${entry.leadContext?.id || ""}:${entry.initialStartKind || ""}`}
           companyId={companyId}
           extensionEnabled={documentExtensionEnabled(companyId)}
+          footerFormattingEnabled={documentFooterFormattingEnabled(companyId)}
+
           initialStartKind={entry.initialStartKind}
           leadContext={entry.leadContext}
           sharingEnabled={documentSharingEnabled(companyId)}
           publicSharingAvailable={publicDocumentOrderEntryEnabled(companyId)}
           storeLinksEnabled={storeOrderingEnabled() && isFeatureEnabled("STORE_ORDERING", companyId)}
           manager={manager}
+          vatEnabled={documentVatEnabled(companyId)}
         />
       </Suspense>
     </main>

@@ -52,7 +52,8 @@ import {
   normalizeEmailInput,
   normalizeFaxNumberInput,
   normalizeNaverTalktalkInput,
-  type LeadContactChannel
+  type LeadContactChannel,
+  type LeadContactFilterChannel
 } from "../domains/lead/contact-channels";
 import { displayLeadNextAction, recommendLeadNextAction } from "../domains/lead/next-action";
 export { classifyPermitLeadIndustry } from "../domains/lead/industry-classification";
@@ -266,6 +267,7 @@ export type CustomerMasterItem = {
   deliveryTerritoryName?: string;
   deliveryZone?: string;
   email?: string;
+  expectedOpeningDate?: string;
   grade: "A" | "B" | "C";
   industry: string;
   lastOrderDays: number;
@@ -288,6 +290,7 @@ export type CustomerMasterItem = {
   relationshipStatusNote?: string;
   relationshipStatusUpdatedAt?: string;
   representativeName?: string;
+  taxInvoiceEmail?: string;
   subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
@@ -323,6 +326,7 @@ export type CustomerMasterInput = {
   deliveryTerritoryId?: string;
   deliveryZone?: string;
   email?: string;
+  expectedOpeningDate?: string;
   industry?: string;
   lastOrderDays?: number;
   loadingPosition?: string;
@@ -339,6 +343,7 @@ export type CustomerMasterInput = {
   phone?: string;
   region?: string;
   representativeName?: string;
+  taxInvoiceEmail?: string;
   subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
@@ -4977,6 +4982,7 @@ export async function getCustomerMaster(
     place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
+    tax_invoice_email?: string | null;
     sub_business_number?: string | null;
     visit_count: number | null;
     loading_position: string | null;
@@ -5447,6 +5453,7 @@ export async function upsertCustomerMaster(
       delivery_vehicle: deliveryVehicle || null,
       delivery_zone: input.deliveryZone || null,
       email: input.email || null,
+      expected_opening_date: input.expectedOpeningDate || null,
       industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
       kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,
       last_order_days: input.lastOrderDays || 0,
@@ -5458,6 +5465,7 @@ export async function upsertCustomerMaster(
       place_links_checked_at: resolvedPlaceLinks.checkedAt,
       region: input.region || "미분류",
       representative_name: input.representativeName || null,
+      tax_invoice_email: input.taxInvoiceEmail || null,
       sub_business_number: businessIdentity.subBusinessNumber || null,
       visit_count: input.visitCount || 0,
       loading_position: input.loadingPosition || null,
@@ -5582,6 +5590,9 @@ export async function upsertCustomerMaster(
     delivery_minutes: input.deliveryMinutes || null,
     delivery_zone: input.deliveryZone || null,
     email: input.email || null,
+    ...(input.expectedOpeningDate !== undefined
+      ? { expected_opening_date: toPostgresDate(input.expectedOpeningDate) }
+      : {}),
     industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
     last_order_days: input.lastOrderDays || 0,
     monthly_revenue: input.monthlyRevenue || 0,
@@ -5590,6 +5601,9 @@ export async function upsertCustomerMaster(
     phone: input.phone || resolvedPlaceLinks.enrichedPhone || null,
     region: input.region || "미분류",
     representative_name: input.representativeName || null,
+    ...(input.taxInvoiceEmail !== undefined
+      ? { tax_invoice_email: input.taxInvoiceEmail || null }
+      : {}),
     sub_business_number: businessIdentity.subBusinessNumber || null,
     visit_count: input.visitCount || 0,
     loading_position: input.loadingPosition || null
@@ -7090,6 +7104,23 @@ export async function uploadSalesQuotePhoto(input: {
   if (!leads[0]) throw new Error("이 회사에서 접근할 수 있는 리드가 아닙니다.");
   const storagePath = `${input.companyId}/sales-quotes/${input.leadId}/${randomUUID()}-${sanitizeStorageFilename(input.filename)}`;
   await supabaseStorageRequest(`object/${SALES_QUOTE_PHOTO_BUCKET}/${storagePath}`, {
+    method: "POST",
+    headers: { "Content-Type": input.contentType, "x-upsert": "false" },
+    body: input.bytes
+  });
+  return storagePath;
+}
+
+export async function uploadLeadVisitPhoto(input: {
+  bytes: ArrayBuffer;
+  companyId: string;
+  contentType: string;
+  filename: string;
+  stopId: string;
+}) {
+  if (!isProductionStoreConfigured()) throw new Error("방문 사진 저장 환경이 준비되지 않았습니다.");
+  const storagePath = `lead-visits/${input.companyId}/${input.stopId}/${randomUUID()}-${sanitizeStorageFilename(input.filename)}`;
+  await supabaseStorageRequest(`object/${CUSTOMER_ATTACHMENT_BUCKET}/${storagePath}`, {
     method: "POST",
     headers: { "Content-Type": input.contentType, "x-upsert": "false" },
     body: input.bytes
@@ -8618,6 +8649,8 @@ export type PermitLeadItem = {
   openDate?: string;
   address?: string;
   phone?: string;
+  ownerMobilePhone?: string;
+  storePhone?: string;
   jurisdiction?: string;
   latitude?: number;
   longitude?: number;
@@ -8698,6 +8731,8 @@ type PermitLeadRow = {
   administrative_area: string | null;
   administrative_subarea: string | null;
   phone: string | null;
+  owner_mobile_phone?: string | null;
+  store_phone?: string | null;
   jurisdiction: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -8856,6 +8891,8 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     openDate: row.open_date || undefined,
     address: row.address || undefined,
     phone: row.phone || undefined,
+    ownerMobilePhone: row.owner_mobile_phone || undefined,
+    storePhone: row.store_phone || undefined,
     jurisdiction: row.jurisdiction || undefined,
     latitude: row.latitude ?? undefined,
     longitude: row.longitude ?? undefined,
@@ -10349,6 +10386,20 @@ function normalizeLeadNameForDedupe(value: string) {
   return value.toLowerCase().replace(/\s/g, "").replace(/[^0-9a-z가-힣]/g, "");
 }
 
+export function resolveKakaoKeywordLeadIndustry(
+  kakaoCategoryName: string,
+  queryIndustry: string,
+  businessName: string
+) {
+  const categoryName = kakaoCategoryName.trim();
+  if (!categoryName) return queryIndustry;
+
+  const categoryClassification = classifyPermitLeadIndustry(categoryName, businessName);
+  return categoryClassification.tags.length > 0 || !categoryClassification.isTarget
+    ? categoryName
+    : queryIndustry;
+}
+
 /**
  * "영업리드(신규리드, 개업일자 아님)" — 2026-08-31 피드백: 개업일자와 무관하게 이미 운영 중인
  * 매장까지 카카오 로컬 키워드 검색으로 찾아 business_permit_leads에 채워 넣습니다.
@@ -10467,7 +10518,11 @@ export async function runKakaoKeywordLeadSweep(
             businessName: candidate.businessName,
             address: candidate.address,
             phone: candidate.phone || undefined,
-            industry: rule.primary,
+            industry: resolveKakaoKeywordLeadIndustry(
+              candidate.kakaoCategoryName,
+              rule.primary,
+              candidate.businessName
+            ),
             kakaoCategoryName: candidate.kakaoCategoryName,
             latitude: candidate.latitude,
             longitude: candidate.longitude,
@@ -10556,8 +10611,10 @@ export type PermitLeadFilters = {
   targetType?: "restaurant" | "distributor";
   grade?: string;
   hasPhone?: boolean;
+  contactChannel?: LeadContactFilterChannel;
   industry?: string;
   limit?: number;
+  offset?: number;
   /** 전체 건수(count=exact) 조회를 건너뛴다. 건수를 안 쓰는 호출(액션 큐)용. */
   skipTotal?: boolean;
   period?: PermitLeadPeriod | "all";
@@ -10568,6 +10625,15 @@ export type PermitLeadFilters = {
   leadId?: string;
   storeAreaRange?: StoreAreaRange;
 };
+
+export function permitLeadContactChannelParams(channel?: PermitLeadFilters["contactChannel"]): string[] {
+  if (channel === "sms") return ["phone=like.010*"];
+  if (channel === "instagram") return ["instagram_url=not.is.null", "instagram_url=neq."];
+  if (channel === "talktalk") return ["naver_talktalk_url=not.is.null", "naver_talktalk_url=neq."];
+  if (channel === "email") return ["email=not.is.null", "email=neq."];
+  if (channel === "fax") return ["fax=not.is.null", "fax=neq."];
+  return [];
+}
 
 type LeadBusinessHourRow = {
   lead_id: string;
@@ -10639,6 +10705,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.grade) params.push(`grade=eq.${encodeURIComponent(filters.grade)}`);
   if (filters.targetType) params.push(`target_type=eq.${filters.targetType}`);
   if (filters.hasPhone) params.push("phone=not.is.null");
+  params.push(...permitLeadContactChannelParams(filters.contactChannel));
   if (process.env.LEAD_STORE_AREA_ENABLED === "true" && filters.storeAreaRange) {
     const bounds = getStoreAreaSqmFilterBounds(filters.storeAreaRange);
     if (bounds.min !== undefined) params.push(`store_area_sqm=gte.${bounds.min}`);
@@ -10659,9 +10726,10 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   // 않았습니다. 데이터 양이 많아져도 화면(테이블 페이지네이션·지도)이 감당하도록 상한을 대폭
   // 올립니다 -- 실제 병목은 이 조회 상한이지, 목록/지도 렌더링 쪽이 아니었습니다.
   const limit = Math.min(5000, filters.limit || 3000);
+  const offset = Math.max(0, filters.offset || 0);
 
   const rows = await supabaseRequest<PermitLeadRow[]>(
-    `business_permit_leads?select=*&${params.join("&")}&order=score_total.desc,permit_date.desc.nullslast&limit=${limit}`
+    `business_permit_leads?select=*&${params.join("&")}&order=score_total.desc,permit_date.desc.nullslast&limit=${limit}&offset=${offset}`
   ).catch(() => []);
 
   let leads = await attachLatestLeadEnrichmentMetadata(companyId, rows.map(toPermitLeadItem));
@@ -11261,6 +11329,84 @@ export type PermitLeadProfileInput = {
   email?: string | null;
   naverTalktalkUrl?: string | null;
 };
+
+export type PermitLeadContactPhoneInput = {
+  ownerMobilePhone?: string | null;
+  storePhone?: string | null;
+};
+
+export function isPermitLeadContactPhoneWriteEnabled(companyId: string) {
+  if (process.env.FEATURE_LEAD_CONTACT_PHONES !== "true") return false;
+  return (process.env.FEATURE_LEAD_CONTACT_PHONES_COMPANY_IDS || "")
+    .split(",")
+    .some((id) => id.trim() === companyId);
+}
+
+export function buildPermitLeadContactPhoneChanges(input: PermitLeadContactPhoneInput) {
+  const changes: PermitLeadContactPhoneInput = {};
+  if ("ownerMobilePhone" in input) {
+    const value = (input.ownerMobilePhone || "").replace(/[ -]/g, "");
+    if (value && !/^010[0-9]{8}$/.test(value)) {
+      return { ok: false as const, message: "점주 휴대폰은 010으로 시작하는 11자리 번호를 입력해주세요." };
+    }
+    changes.ownerMobilePhone = value || null;
+  }
+  if ("storePhone" in input) {
+    const value = (input.storePhone || "").replace(/[ -]/g, "");
+    if (value && !/^(02[0-9]{7,8}|070[0-9]{8}|0(3[1-3]|4[1-4]|5[1-5]|6[1-4])[0-9]{7,8})$/.test(value)) {
+      return { ok: false as const, message: "매장 전화는 02, 070 또는 국내 지역번호를 입력해주세요." };
+    }
+    changes.storePhone = value || null;
+  }
+  if (!Object.keys(changes).length) return { ok: false as const, message: "바꿀 전화번호가 없습니다." };
+  return { changes, ok: true as const };
+}
+
+export async function updatePermitLeadContactPhones(
+  companyId: string,
+  leadId: string,
+  actorCompanyMemberId: string,
+  input: PermitLeadContactPhoneInput
+): Promise<{ ok: boolean; message?: string; ownerMobilePhone?: string; storePhone?: string }> {
+  if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
+  if (!isPermitLeadContactPhoneWriteEnabled(companyId)) {
+    return { ok: false, message: "점주 휴대폰·매장 전화 저장 기능이 아직 이 회사에 활성화되지 않았습니다." };
+  }
+  const normalized = buildPermitLeadContactPhoneChanges(input);
+  if (!normalized.ok) return normalized;
+
+  try {
+    const rows = await supabaseRequest<Array<{ owner_mobile_phone: string | null; store_phone: string | null }>>(
+      "rpc/update_lead_contact_phones_v1",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          p_actor_company_member_id: actorCompanyMemberId,
+          p_changes: normalized.changes,
+          p_company_id: companyId,
+          p_lead_id: leadId
+        })
+      }
+    );
+    const row = rows[0];
+    if (!row) return { ok: false, message: "리드를 찾을 수 없습니다." };
+    return {
+      ok: true,
+      ownerMobilePhone: row.owner_mobile_phone || undefined,
+      storePhone: row.store_phone || undefined
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (/lead_contact_phone_not_found/i.test(message)) return { ok: false, message: "리드를 찾을 수 없습니다." };
+    if (/lead_contact_phone_forbidden/i.test(message)) return { ok: false, message: "이 회사 리드의 전화번호를 수정할 권한이 없습니다." };
+    if (/lead_owner_mobile_phone_invalid/i.test(message)) return { ok: false, message: "점주 휴대폰은 010으로 시작하는 11자리 번호를 입력해주세요." };
+    if (/lead_store_phone_invalid/i.test(message)) return { ok: false, message: "매장 전화는 02, 070 또는 국내 지역번호를 입력해주세요." };
+    if (/PGRST202|42883|does not exist|schema cache/i.test(message)) {
+      return { ok: false, message: "점주 휴대폰·매장 전화 저장 계약이 아직 DB에 적용되지 않았습니다." };
+    }
+    throw error;
+  }
+}
 
 const PERMIT_LEAD_CONTACT_CHANNEL_COLUMNS = ["fax", "email", "naver_talktalk_url", "contact_channels_updated_at"];
 
@@ -15204,6 +15350,7 @@ function toCustomerMasterItem(
     delivery_territory_name?: string | null;
     delivery_zone: string | null;
     email: string | null;
+    expected_opening_date?: string | null;
     google_map_url?: string | null;
     grade_override?: string | null;
     industry: string | null;
@@ -15216,6 +15363,7 @@ function toCustomerMasterItem(
     place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
+    tax_invoice_email?: string | null;
     sub_business_number?: string | null;
     visit_count: number | null;
     loading_position: string | null;
@@ -15277,6 +15425,7 @@ function toCustomerMasterItem(
     kakaoPlaceUrl: row.kakao_place_url || undefined,
     memoCount: 2 + (index % 4),
     monthlyRevenue,
+    expectedOpeningDate: row.expected_opening_date || undefined,
     naverPlaceUrl: row.naver_place_url || undefined,
     openingDate: row.opening_date || undefined,
     phone: row.phone || undefined,
@@ -15286,6 +15435,7 @@ function toCustomerMasterItem(
     relationshipStatusNote: row.relationship_status_note || undefined,
     relationshipStatusUpdatedAt: row.relationship_status_updated_at || undefined,
     representativeName: row.representative_name || undefined,
+    taxInvoiceEmail: row.tax_invoice_email || undefined,
     subBusinessNumber: row.sub_business_number || undefined,
     reviewSummary: row.review_summary || undefined,
     reviewKeywords: row.review_keywords && row.review_keywords.length ? row.review_keywords : undefined,

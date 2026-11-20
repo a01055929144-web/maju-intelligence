@@ -1,0 +1,117 @@
+-- Synthetic fixture: current read-only outer P1 definition, no operating rows.
+-- The body uses CRLF in the approved baseline; normalize explicitly on every platform.
+do $fixture$ begin
+execute replace(replace($outer_fixture$CREATE OR REPLACE FUNCTION public.pricing_p1(p_company uuid, p_actor text, p_manager boolean, p_action text, p_payload jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare v_id uuid:=(p_payload->>'id')::uuid; expected integer:=(p_payload->>'expected')::integer;
+ d pricing_documents; v pricing_document_versions; pr pricing_promotions; st pricing_product_sets;
+ clean jsonb; result jsonb; n integer; ids uuid[]; codes text[]; price bigint; bp numeric;
+ page integer:=greatest(1,least(coalesce((p_payload->>'page')::integer,1),100000)); q text:=left(coalesce(p_payload->>'search',''),100);
+ today date:=(now() at time zone 'Asia/Seoul')::date;
+begin
+ if p_actor is null or p_actor !~ '^[0-9a-f]{64}$' or p_manager is null then raise exception 'Actor required'; end if;
+ if p_action='catalog' then
+   if jsonb_typeof(p_payload->'productCodes')='array' then select coalesce(array_agg(value),'{}'::text[]) into codes from jsonb_array_elements_text(p_payload->'productCodes'); if cardinality(codes)>100 then raise exception 'Too many product codes'; end if; end if;
+   if jsonb_typeof(p_payload->'productIds')='array' then select coalesce(array_agg(value::uuid),'{}'::uuid[]) into ids from jsonb_array_elements_text(p_payload->'productIds'); if cardinality(ids)>100 then raise exception 'Too many product IDs'; end if; end if;
+   select jsonb_build_object('items',coalesce(jsonb_agg(item order by product_id),'[]'::jsonb),'total',(select count(*) from product_catalog c where c.company_id=p_company and c.is_active and (ids is null or c.id=any(ids)) and (codes is null or c.product_code=any(codes)) and (p_manager or nullif(trim(c.sales_product_name),'') is not null) and (q='' or strpos(lower(case when p_manager then coalesce(c.canonical_name,c.purchase_product_name) else c.sales_product_name end),lower(q))>0))) into result
+   from (select c.id product_id,jsonb_build_object('id',c.id,'productCode',c.product_code,'name',case when p_manager then coalesce(c.canonical_name,c.purchase_product_name) else c.sales_product_name end,'displayName',coalesce(c.sales_product_name,''),'brand',coalesce(c.brand_name,''),'spec',coalesce(c.sales_spec,''),'unit',coalesce(c.sales_unit,''),'taxType',coalesce(c.tax_type,'unknown'),'price',pricing_p0_price(e.cost,e.effective_margin_bp,e.effective_rounding,e.direct_price)) || case when p_manager then jsonb_build_object('cost',c.purchase_price) else '{}'::jsonb end item
+   from product_catalog c join pricing_p0_effective e on e.company_id=c.company_id and e.product_id=c.id
+   where c.company_id=p_company and c.is_active and (p_manager or nullif(trim(c.sales_product_name),'') is not null)
+   and (ids is null or c.id=any(ids)) and (codes is null or c.product_code=any(codes)) and (q='' or strpos(lower(case when p_manager then coalesce(c.canonical_name,c.purchase_product_name) else c.sales_product_name end),lower(q))>0)
+   order by c.id limit case when ids is null and codes is null then 50 else 100 end offset case when ids is null and codes is null then (page-1)*50 else 0 end) x;
+   return result;
+ elsif p_action='list' then
+   select jsonb_build_object('items',coalesce(jsonb_agg(x.item order by x.updated_at desc,x.id),'[]'::jsonb),'total',(select count(*) from pricing_documents a where a.company_id=p_company and (a.kind='sheet' or a.owner_key=p_actor) and (q='' or strpos(lower(a.content->>'title'),lower(q))>0))) into result
+   from (select a.id,a.updated_at,jsonb_build_object('id',a.id,'revision',a.revision,'content',a.content,'updatedAt',a.updated_at) item from pricing_documents a where a.company_id=p_company and (a.kind='sheet' or a.owner_key=p_actor) and (q='' or strpos(lower(a.content->>'title'),lower(q))>0) order by a.updated_at desc,a.id limit 50 offset (page-1)*50) x;
+   return result;
+ elsif p_action='versions' then
+   select * into d from pricing_documents a where a.company_id=p_company and a.id=v_id and (a.kind='sheet' or a.owner_key=p_actor);
+   if not found then raise exception 'Document not found'; end if;
+   select coalesce(jsonb_agg(pricing_p1_version(p_company,x) order by x.version desc),'[]'::jsonb) into result from (select * from pricing_document_versions a where a.company_id=p_company and a.document_id=v_id order by a.version desc limit 50 offset (page-1)*50) x;
+   return result;
+ elsif p_action='promotions' then
+   select coalesce(jsonb_agg(jsonb_build_object('id',p.id,'productId',p.product_id,'name',case when p_manager then p.name else p.display_name end,'displayName',p.display_name,'startsOn',p.starts_on,'endsOn',p.ends_on,'price',p.price,'stock',p.stock,'perStoreLimit',p.per_store_limit,'allowSheet',p.allow_sheet,'badge',p.badge,'taxType',p.tax_type,'revision',p.revision) || case when p_manager then jsonb_build_object('cost',p.purchase_cost,'regularCost',c.purchase_price,'margin',p.margin_bp/100.0) else '{}'::jsonb end order by p.ends_on,p.id),'[]'::jsonb) into result from pricing_promotions p join product_catalog c on c.company_id=p.company_id and c.id=p.product_id where p.company_id=p_company and (p_manager or (today between p.starts_on and p.ends_on and p.stock is distinct from 0));return result;
+ elsif p_action='sets' then
+   select coalesce(jsonb_agg(jsonb_build_object('id',s.id,'name',s.name,'kind',s.kind,'shared',s.shared,'productIds',s.product_ids,'revision',s.revision,'editable',case when s.shared then p_manager else s.owner_key=p_actor end) order by s.name,s.id),'[]'::jsonb) into result from pricing_product_sets s where s.company_id=p_company and (s.shared or s.owner_key=p_actor);return result;
+ elsif p_action='profile' then
+   select jsonb_build_object('revision',a.revision,'content',a.content) into result from pricing_print_profiles a where a.company_id=p_company;return coalesce(result,jsonb_build_object('revision',0,'content',jsonb_build_object('companyName','','contact','','footer','')));
+ end if;
+ -- All mutations serialize per company; quote authorship is checked after the lock.
+ perform 1 from companies where companies.id=p_company for update;
+ if not found or expected is null or expected<0 or v_id is null then raise exception 'Invalid write scope'; end if;
+ clean:=p_payload->'content';
+ if p_action in ('save','publish') then
+   select * into d from pricing_documents a where a.company_id=p_company and a.id=v_id for update;
+   if found and ((d.kind='quote' and d.owner_key<>p_actor) or (d.kind='sheet' and not p_manager)) then raise exception 'Document not found'; end if;
+   if p_action='save' then
+     clean:=pricing_p1_clean(p_company,clean);
+     if clean->>'kind'='sheet' and not p_manager then raise exception 'Manager required'; end if;
+     if d.id is null then
+       if expected<>0 then raise exception 'Stale document'; end if;
+       insert into pricing_documents(id,company_id,owner_key,kind,revision,content) values(v_id,p_company,p_actor,clean->>'kind',1,clean) returning * into d;
+     else
+       if d.kind<>clean->>'kind' then raise exception 'Kind cannot change'; end if;
+       if d.revision<>expected then
+         if not (expected=d.revision-1 and d.content=clean) then raise exception 'Stale document'; end if;
+       else update pricing_documents a set content=clean,revision=a.revision+1,updated_at=clock_timestamp() where a.company_id=p_company and a.id=v_id returning * into d; end if;
+     end if;
+     return jsonb_build_object('id',d.id,'revision',d.revision,'content',d.content,'updatedAt',d.updated_at);
+   else
+     if d.id is null or d.revision<>expected then raise exception 'Stale document'; end if;
+     select * into v from pricing_document_versions a where a.company_id=p_company and a.document_id=v_id and a.revision=expected;
+     if v.id is null then
+       clean:=pricing_p1_clean(p_company,d.content);
+       if (clean->>'validUntil')::date<today then raise exception 'Expired document'; end if;
+       if not exists(select from jsonb_array_elements(clean->'lines') l where (l->>'visible')::boolean and (l->>'promotionId' is null or (today between (l->>'startsOn')::date and (l->>'endsOn')::date and (l->>'remaining')::bigint is distinct from 0))) then raise exception 'No available lines'; end if;
+       select coalesce(max(a.version),0)+1 into n from pricing_document_versions a where a.company_id=p_company and a.document_id=v_id;
+       insert into pricing_document_versions(company_id,document_id,version,revision,content) values(p_company,v_id,n,expected,clean) returning * into v;
+     end if;
+     return pricing_p1_version(p_company,v);
+   end if;
+ elsif p_action='save-promotion' then
+   if not p_manager then raise exception 'Manager required'; end if;
+   select * into pr from pricing_promotions a where a.company_id=p_company and a.id=v_id for update;
+   if (pr.id is null and expected<>0) or (pr.id is not null and pr.revision<>expected) then raise exception 'Stale promotion'; end if;
+   if not exists(select from product_catalog c where c.company_id=p_company and c.id=(clean->>'productId')::uuid and c.is_active) then raise exception 'Product not found'; end if;
+   bp:=(clean->>'margin')::numeric*100;
+   if bp<>trunc(bp) or length(trim(coalesce(clean->>'name',''))) not between 1 and 120 or length(trim(coalesce(clean->>'displayName',''))) not between 1 and 120 then raise exception 'Invalid promotion'; end if;
+   if coalesce(clean->>'startsOn','') !~ '^\d{4}-\d{2}-\d{2}$' or coalesce(clean->>'endsOn','') !~ '^\d{4}-\d{2}-\d{2}$' then raise exception 'Promotion dates required'; end if;
+   if (clean->>'cost')::numeric<>round((clean->>'cost')::numeric,2) then raise exception 'Use 2 decimal cost'; end if;
+   if (clean->>'stock')::numeric<>trunc((clean->>'stock')::numeric) or (clean->>'perStoreLimit')::numeric<>trunc((clean->>'perStoreLimit')::numeric) then raise exception 'Use whole quantities'; end if;
+   price:=pricing_p0_price((clean->>'cost')::numeric,bp::integer,10);
+   insert into pricing_promotions(id,company_id,product_id,name,display_name,starts_on,ends_on,purchase_cost,margin_bp,price,stock,per_store_limit,tax_type,allow_sheet,badge,revision)
+   values(v_id,p_company,(clean->>'productId')::uuid,trim(clean->>'name'),trim(clean->>'displayName'),(clean->>'startsOn')::date,(clean->>'endsOn')::date,(clean->>'cost')::numeric,bp,price,(clean->>'stock')::bigint,(clean->>'perStoreLimit')::bigint,clean->>'taxType',(clean->>'allowSheet')::boolean,clean->>'badge',expected+1)
+   on conflict(id) do update set product_id=excluded.product_id,name=excluded.name,display_name=excluded.display_name,starts_on=excluded.starts_on,ends_on=excluded.ends_on,purchase_cost=excluded.purchase_cost,margin_bp=excluded.margin_bp,price=excluded.price,stock=excluded.stock,per_store_limit=excluded.per_store_limit,tax_type=excluded.tax_type,allow_sheet=excluded.allow_sheet,badge=excluded.badge,revision=excluded.revision
+   where pricing_promotions.company_id=p_company;
+   if not found then raise exception 'Promotion not found'; end if;return jsonb_build_object('saved',true);
+ elsif p_action='delete-promotion' then
+   if not p_manager then raise exception 'Manager required'; end if;
+   delete from pricing_promotions a where a.company_id=p_company and a.id=v_id and a.revision=expected;
+   if not found then raise exception 'Stale promotion'; end if;return jsonb_build_object('saved',true);
+ elsif p_action='save-set' then
+   select * into st from pricing_product_sets a where a.company_id=p_company and a.id=v_id for update;
+   if st.id is not null and ((st.shared and not p_manager) or (not st.shared and st.owner_key<>p_actor)) then raise exception 'Set not found'; end if;
+   if (st.id is null and expected<>0) or (st.id is not null and st.revision<>expected) then raise exception 'Stale set'; end if;
+   if (clean->>'shared')::boolean and not p_manager then raise exception 'Manager required'; end if;
+   select array_agg(value::uuid) into ids from jsonb_array_elements_text(clean->'productIds');
+   if ids is null or cardinality(ids) not between 1 and 100 or cardinality(ids)<>(select count(distinct x) from unnest(ids) x) or (select count(*) from product_catalog c where c.company_id=p_company and c.id=any(ids) and c.is_active)<>cardinality(ids) or length(trim(coalesce(clean->>'name',''))) not between 1 and 100 then raise exception 'Invalid set'; end if;
+   insert into pricing_product_sets(id,company_id,owner_key,name,kind,shared,product_ids,revision) values(v_id,p_company,p_actor,trim(clean->>'name'),clean->>'kind',(clean->>'shared')::boolean,ids,expected+1)
+   on conflict(id) do update set owner_key=excluded.owner_key,name=excluded.name,kind=excluded.kind,shared=excluded.shared,product_ids=excluded.product_ids,revision=excluded.revision where pricing_product_sets.company_id=p_company;
+   if not found then raise exception 'Set not found'; end if;return jsonb_build_object('saved',true);
+ elsif p_action='delete-set' then
+   delete from pricing_product_sets a where a.company_id=p_company and a.id=v_id and a.revision=expected and ((a.shared and p_manager) or (not a.shared and a.owner_key=p_actor));
+   if not found then raise exception 'Stale set'; end if;return jsonb_build_object('saved',true);
+ elsif p_action='save-profile' then
+   if not p_manager or length(trim(coalesce(clean->>'companyName',''))) not between 1 and 100 or length(coalesce(clean->>'contact',''))>100 or length(coalesce(clean->>'footer',''))>400 then raise exception 'Invalid print profile'; end if;
+   select a.revision into n from pricing_print_profiles a where a.company_id=p_company;
+   if coalesce(n,0)<>expected then raise exception 'Stale profile'; end if;
+   insert into pricing_print_profiles(company_id,content,revision) values(p_company,jsonb_build_object('companyName',clean->>'companyName','contact',coalesce(clean->>'contact',''),'footer',coalesce(clean->>'footer','')),expected+1)
+   on conflict(company_id) do update set content=excluded.content,revision=excluded.revision;return jsonb_build_object('saved',true);
+ end if;
+ raise exception 'Unknown P1 action';
+end $function$
+$outer_fixture$,chr(13)||chr(10),chr(10)),chr(10),chr(13)||chr(10));
+end $fixture$;

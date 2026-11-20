@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { storeOrderDetailEnabled } from "@/lib/pricing/store-order-detail-feature";
+import { readStorePromotionAvailability } from "@/lib/pricing/storefront-promotion-availability";
+import { storeOrderCutoffGuidanceEnabled } from "@/lib/pricing/store-order-cutoff-feature";
 import { dateField, isId } from "@/domains/pricing/document";
 import { storeMemberSessionEnabled } from "@/lib/auth";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
@@ -57,10 +60,13 @@ export async function POST(request: NextRequest) {
       token?: unknown;
       deliveryDate?: unknown;
       historyPage?: unknown;
+      orderDetailId?: unknown;
     };
     if (typeof body.token !== "string" || body.token.length > 200)
       return unavailable();
     const token = body.token;
+    if (body.orderDetailId !== undefined && !isId(body.orderDetailId))
+      return NextResponse.json({ message: "주문을 확인해 주세요." }, { status: 400 });
     const requestedDate =
       body.deliveryDate === undefined ? undefined : body.deliveryDate;
     if (requestedDate !== undefined && typeof requestedDate !== "string")
@@ -113,6 +119,16 @@ export async function POST(request: NextRequest) {
           if (accounts[0] && isId(accounts[0].id)) memberLogin = { enabled: true, companyId: store.companyId, storeAccountId: accounts[0].id };
         } catch { memberLogin = { enabled: false, message: "매장 로그인 정보를 불러오지 못했습니다. 로그인 상태를 다시 확인하거나 담당자에게 문의해 주세요." }; }
       }
+    }
+    const detailEnabled = storeOrderDetailEnabled(store.companyId);
+    if (body.orderDetailId !== undefined) {
+      if (!detailEnabled || !store.priceAvailable) return unavailable();
+      if (!orderMember) return NextResponse.json({ message: "이 매장의 구성원으로 로그인한 뒤 확인해 주세요." }, { status: 403 });
+      const { listStorePortalOrders } = await import("@/lib/store/07-store-portal");
+      const orderDetail = (await listStorePortalOrders({ companyId: orderMember.companyId,
+        storeAccountId: orderMember.storeAccountId }, true)).find(order => order.id === body.orderDetailId);
+      if (!orderDetail) return unavailable();
+      return NextResponse.json({ orderDetail }, { headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
     }
     const orders = store.priceAvailable
       ? await supabaseRequest<
@@ -190,9 +206,14 @@ export async function POST(request: NextRequest) {
         }),
       }).catch(() => null);
     }
+    const promotionAvailability = store.priceAvailable && store.canOrder
+      ? await readStorePromotionAvailability(store.companyId, store.lines.flatMap(line => line.promotionId ? [line.promotionId] : [])) : undefined;
     return NextResponse.json(
       {
         store: toPublicStorefront(store),
+        ...(detailEnabled && orderMember && store.priceAvailable ? { orderDetailsEnabled: true } : {}),
+        ...(promotionAvailability ? { promotionAvailability } : {}),
+        ...(storeOrderCutoffGuidanceEnabled(store.companyId) ? { orderCutoffGuidance: { serverNow: new Date().toISOString() } } : {}),
         ...(process.env.STORE_MOBILE_COMMON_ENABLED === "true" &&
           (process.env.FEATURE_STORE_MOBILE_COMMON_COMPANY_IDS ?? "").split(",").some(id => id.trim() === store.companyId)
             ? { mobileCommon: true } : {}),

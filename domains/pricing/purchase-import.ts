@@ -15,8 +15,8 @@ export const PURCHASE_IMPORT_FIELDS = [
   { key: "vatAmount", label: "부가세", aliases: ["부가세", "세액", "vat"] },
   { key: "totalAmount", label: "합계", aliases: ["합계", "합계금액", "총액", "금액"] },
   { key: "code", label: "ERP 코드", aliases: ["erp코드", "기본코드", "상품코드", "품목코드", "코드"] },
-  { key: "supplier", label: "매입처", aliases: ["매입처", "유통사", "공급처", "거래처"] },
-  { key: "purchaseDate", label: "구매일", aliases: ["구매일", "매입일", "입고일", "거래일", "일자", "날짜"] }
+  { key: "supplier", label: "매입처", aliases: ["매입처", "유통사", "공급처", "거래처", "거래처명"] },
+  { key: "purchaseDate", label: "구매일", aliases: ["구매일", "매입일", "입고일", "거래일", "일자", "일자-No.", "날짜"] }
 ] as const;
 export type PurchaseImportFieldKey = (typeof PURCHASE_IMPORT_FIELDS)[number]["key"];
 export type PurchaseImportMapping = Partial<Record<PurchaseImportFieldKey, number>>;
@@ -195,7 +195,7 @@ export type PurchaseImportLine = {
   vatAmount?: number;
   totalAmount?: number;
   vatIncluded: boolean;
-  /** 부가세 열을 골랐을 때만: 금액 있음=과세, 0·빈칸=면세. 부가세가 따로 적힌 파일은 단가가 '별도' 금액입니다. */
+  /** 부가세 열을 골랐을 때만: 금액 있음=과세, 명시적 0=면세, 빈칸=미정. */
   taxType?: "taxable" | "exempt";
   cost: number;
   lineKey: string;
@@ -205,6 +205,10 @@ export type PurchaseImportLine = {
   /** 파일에 구매일 열이 있을 때만 설정됩니다. 없으면 업로드 화면의 날짜를 사용합니다. */
   purchaseDate?: string;
 };
+
+export function catalogTaxEvidence(taxType: "taxable" | "exempt") {
+  return { supplyAmount: 100, vat: taxType === "taxable" ? 10 : 0 };
+}
 
 export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImportMapping, vatMode: VatMode): { lines: PurchaseImportLine[]; skipped: number[]; dateIssues: number[] } {
   if (mapping.name === undefined || mapping.cost === undefined) throw new Error("필수 열(품목·단가)을 골라 주세요.");
@@ -230,7 +234,9 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
     const vatAmount = toNumber(read(row.cells, "vatAmount"));
     const totalAmount = toNumber(read(row.cells, "totalAmount"));
     const vatIncluded = vatMode === "auto" ? inferVatIncluded({ cost: rawCost, quantity, supplyAmount, totalAmount, vatAmount }) : vatMode === "included";
-    const taxType = mapping.vatAmount === undefined ? undefined : vatAmount && vatAmount > 0 ? "taxable" as const : "exempt" as const;
+    const taxType = mapping.vatAmount === undefined || vatAmount === undefined || vatAmount < 0
+      ? undefined
+      : vatAmount > 0 ? "taxable" as const : "exempt" as const;
     lines.push({
       code: read(row.cells, "code"),
       cost: costExcludingVat(rawCost, vatIncluded),

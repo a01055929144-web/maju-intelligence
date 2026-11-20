@@ -7,7 +7,7 @@ import { connectPublicDocumentOrder } from "../lib/pricing/public-document-order
 import { issueStoreLinkToken } from "../lib/pricing/store-link-token";
 const company = "00000000-0000-4000-8000-000000000001", store = "10000000-0000-4000-8000-000000000001";
 const customer = "20000000-0000-4000-8000-000000000001", user = "30000000-0000-4000-8000-000000000001";
-const context = { companyId: company, documentId: store, documentVersionId: customer, shareLinkId: user,
+const context = { companyId: company, documentId: store, documentVersionId: customer, shareLinkId: user, items: [],
   tokenHash: "a".repeat(64), issuerActorKey: "b".repeat(64), orderExpiresAt: "2026-11-23T15:00:00.000Z", expiresAt: "2027-11-23T15:00:00.000Z" };
 beforeEach(() => {
   vi.useFakeTimers(); vi.setSystemTime(new Date("2026-11-09T15:00:00.000Z"));
@@ -59,4 +59,30 @@ it("never issues a link after the verified price cutoff while public QR reading 
   expect(Date.parse(context.expiresAt)).toBeGreaterThan(Date.now());
   await expect(connectPublicDocumentOrder(context)).rejects.toMatchObject({ status: 404 });
   expect(mocks.member).not.toHaveBeenCalled(); expect(mocks.db).not.toHaveBeenCalled();
+});
+
+
+it("moves only eligible items into the verified account cart and preserves quantities on retry", async () => {
+  const key = "a".repeat(32);
+  const draft = [{ key, quantity: 3 }];
+  const source = { ...context, items: [{ key, productId: customer, promotionId: null }] };
+  const previous = mocks.db.getMockImplementation()!;
+  let saved = 0;
+  mocks.db.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url === "rpc/store_order_cart_lines") return saved ? [{ product_id: customer, promotion_id: null, quantity: saved }] : [];
+    if (url === "rpc/save_store_order_cart_line") {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        p_company: company, p_account: store, p_user: user, p_product: customer, p_promotion: null, p_quantity: 3,
+      });
+      saved = 3;
+      return;
+    }
+    return previous(url, init);
+  });
+  expect(await connectPublicDocumentOrder(source, draft)).toMatchObject({ cart: [{ productId: customer, promotionId: null, quantity: 3 }] });
+  expect(await connectPublicDocumentOrder(source, [{ key, quantity: 5 }])).toMatchObject({ cart: [{ quantity: 3 }] });
+  expect(mocks.db.mock.calls.filter(([url]) => url === "rpc/save_store_order_cart_line")).toHaveLength(1);
+  mocks.db.mockClear();
+  await expect(connectPublicDocumentOrder(source, [{ key: "b".repeat(32), quantity: 3 }])).rejects.toMatchObject({ status: 409 });
+  expect(mocks.db).not.toHaveBeenCalled();
 });

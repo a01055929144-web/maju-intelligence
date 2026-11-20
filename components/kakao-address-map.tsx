@@ -336,7 +336,6 @@ export function KakaoAddressMap({
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const mapViewportReadyRef = useRef(false);
-  const refitViewportRef = useRef<(() => void) | null>(null);
   const boundsRef = useRef<KakaoLatLngBounds | null>(null);
   // marker.id -> 지오코딩된 LatLng 캐시. 마커를 선택(focusedMarkerId 변경)할 때마다 지도를
   // 통째로 다시 만들고 모든 주소를 재지오코딩하면(과거 버그) 마커가 많을수록 브라우저가 몇 초씩
@@ -477,7 +476,6 @@ export function KakaoAddressMap({
       runStartedAt = performance.now();
       stage = "start";
       mapViewportReadyRef.current = false;
-      refitViewportRef.current = null;
       fittedOnceRef.current = false;
       setStatus("loading");
       setFallbackReason("");
@@ -590,7 +588,6 @@ export function KakaoAddressMap({
       ignore = true;
       window.clearInterval(watchdog);
       mapViewportReadyRef.current = false;
-      refitViewportRef.current = null;
     };
     // focusedMarkerId·onMarkerClick은 의도적으로 제외합니다 — 마커 선택/부모 리렌더마다 지도를 다시 만들면 안 됩니다.
     // 마커·길 선이 바뀌어도 지도는 다시 만들지 않고 아래 배치 effect가 레이어만 교체합니다(CC-42a).
@@ -876,13 +873,12 @@ export function KakaoAddressMap({
             map.setBounds(primaryFound > 0 ? primaryBounds : bounds);
           }
         };
-        refitViewportRef.current = fitViewport;
         setLayerId((value) => value + 1);
         window.setTimeout(() => {
           map.relayout?.();
           window.requestAnimationFrame(() => {
             // 화면 맞춤은 첫 배치 때만 — 이후 필터·마커 변경은 사용자가 보던 위치·확대를 그대로 둔다(R1).
-            // "전체 보기"(refitViewportRef)·검색 이동(focusedMarkerId)은 따로 맞춘다.
+            // 검색 이동(focusedMarkerId)은 따로 맞춘다.
             if (!fittedOnceRef.current && (found > 0 || hasRoadPath)) {
               fitViewport();
               fittedOnceRef.current = true;
@@ -1054,7 +1050,6 @@ export function KakaoAddressMap({
           }
         }
         const fitBoundary = () => map.setBounds(bounds, 48, 48, 48, 48);
-        refitViewportRef.current = fitBoundary;
         map.relayout?.();
         window.requestAnimationFrame(fitBoundary);
         const elapsed = performance.now() - startedAt;
@@ -1419,7 +1414,6 @@ export function KakaoAddressMap({
         const map = mapInstanceRef.current;
         if (!map || !mapViewportReadyRef.current || container.clientWidth === 0 || container.clientHeight === 0) return;
         map.relayout?.();
-        refitViewportRef.current?.();
       });
     };
     const observer = new ResizeObserver(relayoutPreservingViewport);

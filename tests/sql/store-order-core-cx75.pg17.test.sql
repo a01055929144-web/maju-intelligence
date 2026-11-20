@@ -13,6 +13,7 @@ alter table public.customer_notes add constraint cx75_notes_scope_uq unique(comp
 \ir ../../docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.sql
 update public.normalized_customers set address='cx75 synthetic address' where id='20000000-0000-4000-8000-000000000001';
 \i :CX75_DELIVERY_SQL
+\ir store-order-core-cx75-erp-fixture.sql
 create temporary table cx75_original_functions as
 select oid original_oid,proname,pg_get_function_identity_arguments(oid) args,pg_get_functiondef(oid) definition,proacl
 from pg_proc where pronamespace='public'::regnamespace and proname in
@@ -60,7 +61,7 @@ on conflict(company_id,product_id) do update set price=excluded.price;
 insert into public.storefront_links(company_id,customer_id,source,token_nonce,token_hash,expires_at)
 values('00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','catalog',repeat('c',32),repeat('c',64),'2099-12-31');
 do $$
-declare e text; r jsonb; result jsonb; rejected boolean; member_entry boolean; kind int;
+declare e text; r jsonb; result jsonb; rejected boolean; member_entry boolean; kind int; before_postings jsonb; before_effects jsonb; invalid jsonb;
 begin
  foreach e in array array['place_store_order','place_store_member_order','place_store_catalog_order_core_v1',
  'place_store_catalog_order_v1','place_store_catalog_member_order_v1','place_store_account_order','place_store_order_with_delivery_snapshot_09'] loop
@@ -73,8 +74,28 @@ begin
  'p_store_account_id',case when member_entry then '30000000-0000-4000-8000-000000000001' end,
  'p_member_id',case when member_entry then '40000000-0000-4000-8000-000000000001' end,
  'p_auth_user_id',case when member_entry then '50000000-0000-4000-8000-000000000001' end);
+ before_postings:=pg_temp.cx75_postings();
  result:=public.cx75_test_call(e,r);
- if result->>'id' is null or public.cx75_test_call(e,r)<>result then raise exception 'cx75_wrapper_replay_%',e; end if;
+ if result->>'id' is null then raise exception 'cx75_wrapper_missing_order_%',e; end if;
+ if not exists(select 1 from public.store_orders where id=(result->>'id')::uuid and status='submitted')
+   or pg_temp.cx75_postings()<>before_postings
+   or exists(select 1 from public.business_documents where status='confirmed')
+   or exists(select 1 from public.partner_ledger_entries)
+   or (select count(*) from public.inventory_movements)<>1
+   or (select count(*) from public.inventory_balances)<>1 then raise exception 'cx75_submission_posted_%',e; end if;
+ if public.cx75_test_call(e,r)<>result or pg_temp.cx75_postings()<>before_postings
+   or not exists(select 1 from public.store_orders where id=(result->>'id')::uuid and status='submitted')
+   then raise exception 'cx75_wrapper_replay_posted_%',e; end if;
+ -- Fresh key for each invalid shape; a prior valid replay must not mask validation.
+ for kind in 1..3 loop
+   invalid:=(r-'p_lines')||jsonb_build_object('p_idempotency_key',gen_random_uuid());
+   if kind=1 then invalid:=invalid||jsonb_build_object('p_lines','[]'::jsonb);
+   elsif kind=3 then invalid:=invalid||jsonb_build_object('p_lines','{}'::jsonb); end if;
+   before_effects:=pg_temp.cx75_effects(); rejected:=false;
+   begin perform public.cx75_test_call(e,invalid);
+   exception when raise_exception or invalid_parameter_value then rejected:=true; end;
+   if not rejected or pg_temp.cx75_effects()<>before_effects then raise exception 'cx75_empty_lines_effect_%_%',e,kind; end if;
+ end loop;
  for kind in 1..3 loop
  rejected:=false;
  begin
@@ -120,12 +141,13 @@ declare
  p uuid:='60000000-0000-4000-8000-000000000001';
  k uuid:=gen_random_uuid(); bad uuid:=gen_random_uuid();
  lines jsonb:=jsonb_build_array(jsonb_build_object('productId',p,'quantity',2));
- batch jsonb; result jsonb; changed jsonb; o uuid; n int;
+ batch jsonb; result jsonb; changed jsonb; o uuid; n int; before_postings jsonb; before_effects jsonb; rejected boolean;
 begin
  batch:=jsonb_build_array(
  jsonb_build_object('companyId',c,'storeAccountId',a,'deliveryDate','2099-01-05','lines',lines,'idempotencyKey',k,'memo','cx75'),
  jsonb_build_object('companyId','00000000-0000-4000-8000-000000000002','storeAccountId','30000000-0000-4000-8000-000000000002',
  'deliveryDate','2099-01-05','lines',lines,'idempotencyKey',bad));
+ before_postings:=pg_temp.cx75_postings();
  result:=public.place_store_account_orders(a,u,batch);
  if result->0->'order' is null or result->1->>'error'<>'Store member unavailable'
    then raise exception 'cx75_fresh_batch %',result; end if;
@@ -138,7 +160,21 @@ begin
    or exists(select 1 from public.store_account_order_requests where idempotency_key=bad)
    or exists(select 1 from public.company_notifications where idempotency_key=bad::text)
    then raise exception 'cx75_batch_counts'; end if;
- if public.place_store_account_orders(a,u,batch)<>result then raise exception 'cx75_batch_replay'; end if;
+ if not exists(select 1 from public.store_orders where id=o and status='submitted')
+   or pg_temp.cx75_postings()<>before_postings then raise exception 'cx75_batch_submission_posted'; end if;
+ if public.place_store_account_orders(a,u,batch)<>result or pg_temp.cx75_postings()<>before_postings
+   or not exists(select 1 from public.store_orders where id=o and status='submitted') then raise exception 'cx75_batch_replay_posted'; end if;
+ for n in 1..3 loop
+   changed:=((batch->0)-'lines')||jsonb_build_object('idempotencyKey',gen_random_uuid());
+   if n=1 then changed:=changed||jsonb_build_object('lines','[]'::jsonb);
+   elsif n=3 then changed:=changed||jsonb_build_object('lines','{}'::jsonb); end if;
+   before_effects:=pg_temp.cx75_effects(); rejected:=false;
+   begin
+     changed:=public.place_store_account_orders(a,u,jsonb_build_array(changed));
+     rejected:=coalesce(changed->0 ? 'error',false) and not coalesce(changed->0 ? 'order',false);
+   exception when raise_exception or invalid_parameter_value then rejected:=true; end;
+   if not rejected or pg_temp.cx75_effects()<>before_effects then raise exception 'cx75_batch_empty_lines_effect_%',n; end if;
+ end loop;
  for n in 1..3 loop
    changed:=case n when 1 then jsonb_set(batch,'{0,lines,0,quantity}','3')
      when 2 then jsonb_set(batch,'{0,memo}','"changed"')
@@ -281,7 +317,8 @@ end $$;
 -- D4 schema is test-only here; product cutoffs use server Asia/Seoul time.
 alter table public.product_catalog add column order_cutoff_days_before smallint, add column order_cutoff_time time;
 do $$
-declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+1;
+-- Keep the same weekday as tomorrow, but beyond the company deadline even after 22:00 KST.
+declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+8;
  r jsonb; k uuid:=gen_random_uuid();
 begin
  deadline:=(clock_timestamp() at time zone 'Asia/Seoul')-interval '1 minute';
@@ -329,6 +366,10 @@ begin
 end $$;
 drop trigger cx75_test_drift on public.store_orders;
 drop function public.cx75_test_drift();
+\ir promotion-cancelled-reservation-cx74.pg17.test.sql
+\set CX74_CURRENT_ENGINE_VARIANT true
+\ir promotion-cancelled-reservation-cx74.pg17.test.sql
+\unset CX74_CURRENT_ENGINE_VARIANT
 \set ON_ERROR_STOP off
 \ir ../../docs/sql-drafts/2026-11-18-CX-75-common-order-core.down.sql
 \set ON_ERROR_STOP on
