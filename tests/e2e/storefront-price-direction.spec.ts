@@ -2,6 +2,75 @@ import { expect, test } from "@playwright/test";
 import { storeTab } from "./store-tab";
 const company = "00000000-0000-4000-8000-000000000001";
 
+for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves server amounts and clears revoked documents at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const id = "70000000-0000-4000-8000-000000000067";
+  let detailReads = 0, writes = 0, mode = "error", detailsEnabled = true;
+  const lines = [
+    { id: "line", product_id: "product", promotion_id: null, product_name: "합성 긴 상품명 주문 당시 스냅샷", specification: "2.5kg", sales_unit: "BOX", tax_type: "exempt", quantity: 2.5, unit_price: 1000, total_amount: 1234 },
+    { id: "zero", product_id: "free", promotion_id: null, product_name: "합성 무상 품목", specification: "", sales_unit: "EA", quantity: 1, unit_price: 0, total_amount: 0 },
+    { id: "market", product_id: "market", promotion_id: null, product_name: "합성 시가 품목", specification: "", sales_unit: "EA", quantity: 1, unit_price: null, total_amount: null },
+  ];
+  await page.route("**/api/storefront", route => {
+    if (route.request().method() !== "POST") { writes++; return route.fulfill({ status: 500, json: {} }); }
+    const body = route.request().postDataJSON();
+    if (body.orderDetailId) {
+      detailReads++;
+      expect(body).toEqual({ token: "synthetic-cx67", orderDetailId: id });
+      if (mode === "error" || mode === "revoked") return route.fulfill({ status: mode === "revoked" ? 403 : 503, json: { message: "합성 읽기 오류" } });
+      return route.fulfill({ json: { orderDetail: { id, delivery_date: "2099-01-05", status: mode === "empty" ? "received" : "in_delivery",
+        known_total: mode === "empty" ? 0 : 7777, has_market_price: mode !== "empty", submitted_at: "2026-11-18T00:00:00Z",
+        lines: mode === "empty" ? [] : lines,
+        ...(mode === "empty" ? {} : { document: { id: "document", revision: 2, documentNumber: "합성-전표-067", totalAmount: 1501,
+          lines: [{ id: "document-line", name: "합성 실제 출고 품목", quantity: 1.5, unit: "BOX", unitPrice: 1000, lineAmount: 1499 }] } }) } } });
+    }
+    const expired = body.token === "synthetic-cx67-expired";
+    return route.fulfill({ json: { mobileCommon: true, orderDetailsEnabled: !expired && detailsEnabled,
+      store: { title: "합성 CX67", companyName: expired ? "합성 만료 유통" : "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 배송지", version: 1,
+        validUntil: "2099-12-31", priceAvailable: !expired, canOrder: !expired, selectedDeliveryDate: "2099-01-05", nextDeliveryDate: "2099-01-05",
+        notice: "", marketPriceNotice: "", lines: [], policy: { weekdays: [0,1,2,3,4,5,6], holidays: [], cutoffDaysBefore: 1, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 } },
+      preferences: [], orders: expired ? [] : [{ id, status: "in_delivery", deliveryDate: "2099-01-05", knownTotal: 7777,
+        requestMemo: "합성 요청 메모", marketPricePending: true, submittedAt: "2026-11-18T00:00:00Z", revision: 3, lines }], historyPage: 1, historyHasMore: false } });
+  });
+  await page.goto("/store#synthetic-cx67");
+  await storeTab(page, "내역").click();
+  const detail = page.getByLabel(`주문 상세 ${id}`, { exact: true });
+  const summary = detail.locator(":scope > summary");
+  await summary.click(); expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await expect(detail).toContainText("7,777원"); await expect(detail).toContainText("1,234원");
+  await expect(detail).toContainText("단가 미정"); await expect(detail).toContainText("금액 미정");
+  await expect(detail.getByText("0원", { exact: true }).first()).toBeVisible();
+  expect(detailReads).toBe(0);
+  const refresh = detail.getByRole("button", { name: "최신 주문·전표 확인", exact: true });
+  expect((await refresh.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await refresh.click(); await expect(detail).toContainText("주문·전표를 확인하지 못했습니다");
+  mode = "ready"; await detail.getByRole("button", { name: "전표 다시 확인", exact: true }).click();
+  const documentSummary = detail.locator("summary").filter({ hasText: "합성-전표-067" });
+  await expect(documentSummary).toContainText("1,501원"); await documentSummary.click();
+  await expect(detail).toContainText("1,499원"); await expect(detail).toContainText("배송 중");
+  expect((await documentSummary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  // The full smoke pass clears layout output; this existing artifact folder is retained.
+  await page.screenshot({ path: `test-results/readonly-pg17/cx67-ui/cx67-order-detail-${width}.png`, fullPage: true });
+  mode = "revoked"; await refresh.click();
+  await expect(detail).toContainText("주문·전표를 확인하지 못했습니다");
+  await expect(detail.locator("summary").filter({ hasText: "합성-전표-067" })).toHaveCount(0);
+  mode = "empty"; await detail.getByRole("button", { name: "전표 다시 확인", exact: true }).click();
+  await expect(detail).toContainText("주문 품목 정보가 없습니다"); await expect(detail).toContainText("출고 확인 전");
+  await expect(detail).toContainText("확인 가능한 확정 전표가 없습니다");
+  detailsEnabled = false;
+  await page.reload();
+  await storeTab(page, "내역").click();
+  await expect(page.locator(`[data-store-order-id="${id}"]`)).toContainText("7,777원");
+  await expect(detail).toHaveCount(0);
+  await page.evaluate(() => { window.location.hash = "synthetic-cx67-expired"; });
+  await expect(page.getByText("합성 만료 유통 · 합성 매장", { exact: true })).toBeVisible();
+  await storeTab(page, "내역").click();
+  await expect(page.getByText("문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다.", { exact: false })).toBeVisible();
+  await expect(page.getByLabel(`주문 상세 ${id}`, { exact: true })).toHaveCount(0);
+  expect(detailReads).toBe(4); expect(writes).toBe(0);
+});
+
 for (const width of [1440, 390]) test(`store links verify settings before issuance at ${width}px`, async ({ page }, info) => {
   page.setDefaultTimeout(15_000);
   await page.setViewportSize({ width, height: 900 });

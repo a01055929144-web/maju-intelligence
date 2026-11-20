@@ -1,7 +1,7 @@
 "use client";
 
 import { formatWon } from "@/domains/shared/money";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { storeViewFrom, type StoreView } from "@/lib/store-navigation";
@@ -9,6 +9,7 @@ import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/doma
 import { orderCutoffGuidance } from "@/domains/order/order-cutoff-guidance";
 import type { PromotionAvailability } from "@/domains/order/promotion-availability";
 import { StorefrontPromotionAvailability } from "./storefront-promotion-availability";
+import { StorefrontOrderDetail } from "./storefront-order-detail";
 import { Notice } from "./ui/notice";
 import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
 import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry";
@@ -50,6 +51,7 @@ type Order = { id: string; deliveryDate: string | null; status: string; knownTot
 type Preference = { productId: string; isFavorite: boolean;
   isHidden: boolean; willNotOrder: boolean };
 type Response = { store: Store; orders: Order[]; preferences: Preference[];
+  orderDetailsEnabled?: boolean;
   promotionAvailability?: Record<string, PromotionAvailability>;
   orderCutoffGuidance?: { serverNow: string };
   memberLogin?: StoreKakaoLogin;
@@ -582,16 +584,19 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       {pricesReady && store.priceAvailable && Boolean(data?.orders.length) && <table className="w-full border-collapse text-sm"><thead className="hidden bg-slate-50 md:table-header-group"><tr>
         <th scope="col" className="p-3 text-left">주문일 · 배송일</th><th scope="col" className="p-3 text-left">상태</th>
         <th scope="col" className="p-3 text-left">품목</th><th scope="col" className="p-3 text-left">합계</th><th scope="col" className="p-3 text-left">동작</th>
-      </tr></thead><tbody>{data?.orders.map((order) => <tr key={order.id} className="block border-b py-2 md:table-row">
+      </tr></thead><tbody>{data?.orders.map((order) => <Fragment key={order.id}><tr data-store-order-id={order.id} className="block border-b py-2 md:table-row">
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">주문일 · 배송일</span><span>{kstDay(order.submittedAt)} · {order.deliveryDate || DELIVERY_CONFIRMATION_NOTICE}{order.authorLabel && <span className="block break-words">작성자: {order.authorLabel}</span>}</span></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">상태</span><span>{order.deliveryDate === null ? order.status === "cancelled" ? "취소됨" : "접수됨 · 배송일 확인 대기" : storeOrderStatusLabel(order.status)}</span></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">품목</span><ul className="min-w-0 break-words">{order.lines.map((line, index) => <li key={index}>{line.product_name} {line.quantity}{line.sales_unit || "개"}{line.specification ? ` · ${line.specification}` : ""}{line.tax_type ? ` · ${line.tax_type === "exempt" ? "면세" : "과세"}` : ""} · {line.unit_price === null ? "단가 미정" : won(line.unit_price)}</li>)}</ul></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">합계</span><span>{won(order.knownTotal)}{order.marketPricePending ? " + 시세 품목 가격 미정" : ""}</span></td>
-        <td className="p-2 md:p-3"><div className="flex gap-2"><button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, false)}>다시 담기</button>
+        <td className="p-2 md:p-3"><div className="flex flex-wrap gap-2"><button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, false)}>다시 담기</button>
           {order.status === "submitted" && order.deliveryDate && store.priceAvailable && store.policy.weekdays.length > 0 &&
             canOrderForDelivery(order.deliveryDate, store.policy) &&
             <button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, true)}>마감 전 수정</button>}</div></td>
-      </tr>)}</tbody></table>}
+      </tr>{data.orderDetailsEnabled === true && <tr className="block md:table-row"><td colSpan={5} className="block min-w-0 py-2 md:table-cell">
+        <StorefrontOrderDetail key={`${token}:${order.id}:${order.revision}:${data.orderDetailsEnabled === true}`}
+          token={token} order={order} documentReadEnabled={data.orderDetailsEnabled === true} />
+      </td></tr>}</Fragment>)}</tbody></table>}
       {pricesReady && store.priceAvailable && <div className="flex items-center justify-between gap-2 text-sm">
         <button disabled={data?.historyPage === 1 || busy} className="min-h-[44px] rounded border px-3 disabled:opacity-50"
           onClick={() => void load(deliveryDate, (data?.historyPage ?? 1) - 1).catch(() => setMessage("이전 내역을 불러오지 못했습니다."))}>이전</button>
