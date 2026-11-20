@@ -12,7 +12,7 @@ import { GET } from "../app/api/leads/favorites/route";
 
 const first = "00000000-0000-4000-8000-000000000011";
 const second = "00000000-0000-4000-8000-000000000012";
-const request = (query = `leadId=${first}&leadId=${second}`) => new NextRequest(`https://example.test/api/leads/favorites?${query}`);
+const request = (query = `companyId=admin-company&leadId=${first}&leadId=${second}`) => new NextRequest(`https://example.test/api/leads/favorites?${query}`);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -26,6 +26,7 @@ describe("GET /api/leads/favorites", () => {
   it("reads multiple favorite states within the authenticated company", async () => {
     const response = await GET(request());
     expect(response.status).toBe(200);
+    expect(mocks.auth).toHaveBeenCalledWith(expect.anything(), "admin-company");
     expect(mocks.getMany).toHaveBeenCalledWith("company-1", [first, second]);
     expect(await response.json()).toMatchObject({ favorites: [{ leadId: first, starred: true }] });
   });

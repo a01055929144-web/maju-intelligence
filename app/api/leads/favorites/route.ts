@@ -6,7 +6,7 @@ import { leadFavoriteRepository, leadFavoritesEnabled } from "@/lib/lead-favorit
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const scope = await getRequestAuthScope(request);
+  const scope = await getRequestAuthScope(request, request.nextUrl.searchParams.get("companyId") || undefined);
   if (!scope.ok || !scope.companyId) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   if (!scopeHasCapability(scope, "manage_customers")) return NextResponse.json({ message: "리드 즐겨찾기를 볼 권한이 없습니다." }, { status: 403 });
   if (!leadFavoritesEnabled(scope.companyId)) return NextResponse.json({ message: "Not found" }, { status: 404 });
