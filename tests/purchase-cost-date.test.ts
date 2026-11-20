@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { buildPurchaseSheet, parsePurchaseLines, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
-import { buildPurchaseDateRows, validPurchaseDateRows } from "../domains/pricing/purchase-cost-date";
+import { buildPurchaseDateRows, holdFuturePrices, validPurchaseDateRows } from "../domains/pricing/purchase-cost-date";
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), db: vi.fn(), manage: vi.fn(), feature: vi.fn(), legacy: vi.fn(), legacySave: vi.fn(), legacyRestore: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getRequestAuthScope: mocks.auth }));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
@@ -64,6 +64,10 @@ it.each([0.3, 0.25, 1.5])("forwards source unit price independently of decimal q
   expect(row).toMatchObject({ quantity, unitPrice, cost: unitPrice, supplyAmount: unitPrice * quantity, priceSelected: true });
   expect(validPurchaseDateRows([row])).toBe(true);
 });
+it("keeps future effective rows as history without promoting the selected price early", () => {
+  const rows = buildPurchaseDateRows(fixture(1, 1).map(line => ({ ...line, purchaseDate: "2099-11-20" })), [2], []);
+  expect(holdFuturePrices(rows, "2026-11-21")).toMatchObject([{ priceDate: "2099-11-20", priceSelected: false, priceHeld: true }]);
+});
 it("requires explicit selection or hold for each of 188 conflicting groups", () => {
   const lines = fixture(376, 188).map((line, index) => ({ ...line, cost: index < 188 ? 150 : 220 }));
   expect(() => buildPurchaseDateRows(lines, [], [])).toThrow();
@@ -111,6 +115,15 @@ it("holds only the mismatched-unit current price and preserves the receipt in th
   expect((await post(payload())).status).toBe(200);
   const write = mocks.db.mock.calls.find(([path]) => path.startsWith("rpc/"));
   expect(JSON.parse(write?.[1].body).p_rows[0]).toMatchObject({ selectedSourceRowNumber: 2, unit: "봉", priceSelected: false, priceHeld: true });
+});
+it("holds a future selected price at the API boundary while preserving its receipt row", async () => {
+  vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
+  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: "봉" }]).mockResolvedValueOnce({ batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 1 });
+  const input = payload();
+  const response = await post({ ...input, rows: [{ ...input.rows[0], priceDate: "2099-11-20" }] });
+  expect(response.status).toBe(200);
+  const write = mocks.db.mock.calls.find(([path]) => path.startsWith("rpc/"));
+  expect(JSON.parse(write?.[1].body).p_rows[0]).toMatchObject({ priceDate: "2099-11-20", priceSelected: false, priceHeld: true });
 });
 
 it("normalizes equal-price selections to one marker and preserves blank source units", () => {
