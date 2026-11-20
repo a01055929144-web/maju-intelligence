@@ -16,7 +16,7 @@
 - 반환: `documentId`, `revision`, `mode`, 정규화 `content`, 불투명 `token`, `summary:{unchanged,changed,added,removed}`, `loweredProfitCount`, `minimumProfitRate`, 줄별 `key,name,source,promiseUntil,before,calculated,price,difference,profitRate,belowThreshold,manual`.
 - `source`는 CX-120 결과를 공개 안전 값 `catalog`/`base`로 변환하고, 활성 행사는 `promotion`으로 표시한다. `promiseUntil`은 최신 게시본 약속 종료일이다. 최신가 계산에서 약속가를 제외했더라도 비교 근거로 반환한다.
 - `before`는 최신 게시본 약속가, `calculated`는 약속가를 제외한 서버 최신가, `price`는 이번 게시 후보 단가다. `difference = price - calculated`, `manual = price != calculated`이며 금액은 모두 정수 원이다. 시가는 가격을 만들지 않고 해당 줄의 가격 검토를 실패시킨다.
-- `profitRate`는 이번 게시 후보 `price`와 서버 원가로 계산한 매출총이익률 퍼센트이고, 원가는 반환하지 않는다. `minimumProfitRate`는 확인 가능한 줄의 최솟값이며 하나도 확인할 수 없으면 null이다. UI가 원가·마진으로 가격·차이·이익률을 계산하지 않는다.
+- `profitRate`는 이번 게시 후보 `price`와 서버 원가로 계산한 매출총이익률 퍼센트이고, 원가는 반환하지 않는다. `loweredProfitCount`는 최신 게시본 단가의 현재 이익률보다 후보 이익률이 낮아진 줄 수, `belowThreshold`는 회사 최저 이익률 미만 여부다. `minimumProfitRate`는 확인 가능한 줄의 최솟값이며 하나도 확인할 수 없으면 null이다. UI가 원가·마진으로 가격·차이·이익률을 계산하지 않는다.
 - `key`는 `productId + promotionId(null 포함) + 판매 단위`의 서버 정규화 키다. `summary`는 이 키로 최신 게시본과 게시 후보를 비교한다. 같은 키에서 가격만 달라지면 `changed`, 새 키는 `added`, 사라진 키는 `removed`, 나머지는 `unchanged`다. 숨긴 줄은 게시 후보에서 제거된 것으로 센다.
 - review 단계는 수신 편집 내용의 단가를 덮어쓰지 않고 최신 계산가와 비교한다. 직접 수정은 표시하되 기준 미만 경고로 게시를 차단하지 않는다. 추가·삭제·그대로·가격 변경 수는 최신 게시본의 품목/행사/단위 기준으로 서버가 계산한다.
 - `extension-save`: 기존 save 권한/동시성 + mode/연장 기준 게시본을 서버에 보존. 새로고침/다른 창의 ordinary publish로 확인 절차를 우회할 수 없어야 한다. DB 추가가 필요하면 별도 SQL 초안·down·PG17·승인 절차이며 이 화면 PR에서 운영 적용하지 않는다.
