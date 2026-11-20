@@ -69,4 +69,11 @@ describe("company pricing gates", () => {
     expect(isFeatureEnabled("STAGE_D_ORDER_COMPLETION", "company-a")).toBe(true);
     expect(isFeatureEnabled("STAGE_D_ORDER_COMPLETION", "company-b")).toBe(false);
   });
+
+  it("keeps price explanations off by default and allows only listed companies", () => {
+    expect(isFeatureEnabled("PRICE_EXPLANATION", "company-a")).toBe(false);
+    process.env.FEATURE_PRICE_EXPLANATION_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("PRICE_EXPLANATION", "company-a")).toBe(true);
+    expect(isFeatureEnabled("PRICE_EXPLANATION", "company-b")).toBe(false);
+  });
 });

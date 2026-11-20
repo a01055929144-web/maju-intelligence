@@ -47,7 +47,7 @@ insert into public.pricing_document_versions values
   ('50000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001',
    '{"showPrice":true,"validUntil":"2026-11-20","display":{"priceIncludesTax":false},"lines":[{"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","visible":true,"price":1500,"taxType":"taxable"}]}'::jsonb,'2026-11-18 01:00+00'),
   ('50000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000002',
-   '{"showPrice":true,"validUntil":"2026-11-30","display":{"priceIncludesTax":true},"lines":[{"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","visible":true,"price":1700,"taxType":"taxable"}]}'::jsonb,'2026-11-21 01:00+00'),
+   '{"priceContract":"promotion-gross-v1","showPrice":true,"validUntil":"2026-11-30","display":{"priceIncludesTax":true},"lines":[{"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","visible":true,"price":1700,"taxType":"taxable","priceIncludesTax":false},{"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","visible":true,"price":1100,"taxType":"taxable","priceIncludesTax":true,"promotionId":"70000000-0000-4000-8000-000000000001"},{"productId":"30000000-0000-4000-8000-000000000002","unit":"EA","visible":true,"price":800,"taxType":"exempt","priceIncludesTax":false}]}'::jsonb,'2026-11-21 01:00+00'),
   ('50000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000003',
    '{"showPrice":true,"validUntil":"2099-12-31","lines":[{"productId":"30000000-0000-4000-8000-000000000004","unit":"BOX","visible":true,"price":7777,"taxType":"taxable"}]}'::jsonb,'2026-11-18 01:00+00');
 insert into public.customer_pricing_document_links values
@@ -72,11 +72,15 @@ begin
   if (r.price,r.tax_type,r.includes_tax,r.source,r.promise_until) is distinct from
     (1870::bigint,'taxable'::text,true,'promise'::text,'2026-11-30'::date) then raise exception 'new extension tax-inclusive promise failed: %', row_to_json(r); end if;
 
+  select * into r from public.self_order_price_v2('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000002','2026-11-21',true);
+  if (r.price,r.tax_type,r.includes_tax,r.source,r.promise_until) is distinct from
+    (800::bigint,'exempt'::text,true,'promise'::text,'2026-11-30'::date) then raise exception 'tax-exempt promise was converted: %', row_to_json(r); end if;
+
   select * into r from public.self_order_price_v2('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','2026-11-21',false);
   if (r.price,r.tax_type,r.includes_tax,r.source,r.promise_until) is distinct from
     (1200::bigint,'taxable'::text,false,'catalog'::text,null::date) then raise exception 'promise exclusion failed: %', row_to_json(r); end if;
 
-  select * into r from public.self_order_price_v2('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000002','2026-11-21',true);
+  select * into r from public.self_order_price_v2('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000002','2026-12-01',true);
   if (r.price,r.tax_type,r.includes_tax,r.source) is distinct from
     (700::bigint,'exempt'::text,false,'base'::text) then raise exception 'base tax fallback failed: %', row_to_json(r); end if;
 

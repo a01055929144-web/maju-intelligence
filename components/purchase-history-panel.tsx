@@ -9,7 +9,7 @@ import { useTableSort } from "@/lib/use-table-sort";
 const money = formatWon;
 
 /** 11/4: 매일 올린 매입 엑셀의 품목별 단가 변동·수량을 한눈에 봅니다. */
-export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly companyId: string; readonly refreshKey: number }) {
+export function PurchaseHistoryPanel({ batch, companyId, refreshKey, restore }: { readonly batch?: { fileName?: string; receiptDate?: string; rowCount: number; status: string }; readonly companyId: string; readonly refreshKey: number; readonly restore?: { disabled: boolean; label: string; run: () => void } }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
@@ -134,6 +134,7 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="mr-auto font-semibold">매입 이력</h2>
         <span className="text-xs font-semibold text-slate-500">불러온 기록 기준 {dates}일 · 품목 {items.length}개 · 인상 {up} · 인하 {down}</span>
+        {restore ? <button className="maju-button-secondary min-h-11" disabled={restore.disabled} onClick={restore.run} type="button">{restore.label}</button> : null}
         <label className="text-xs">시작일 <input aria-label="매입 시작일" className="maju-input min-h-11" onChange={(event) => { setFrom(event.target.value); setPage(1); }} type="date" value={from} /></label>
         <label className="text-xs">종료일 <input aria-label="매입 종료일" className="maju-input min-h-11" onChange={(event) => { setTo(event.target.value); setPage(1); }} type="date" value={to} /></label>
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600"><input checked={onlyChanged} onChange={(event) => { setOnlyChanged(event.target.checked); setPage(1); }} type="checkbox" />단가 바뀐 품목만</label>
@@ -143,6 +144,7 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
         </form>
         {(from || to || searchInput || search) ? <button className="maju-button-secondary min-h-11" onClick={() => { setFrom(""); setTo(""); setSearchInput(""); setSearch(""); setPage(1); }} type="button">전체 보기</button> : null}
       </div>
+      {batch ? <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"><b>직전 업로드 묶음</b> · {batch.receiptDate || "날짜 미확인"} · {batch.fileName || "파일명 미확인"} · 원본 {batch.rowCount.toLocaleString("ko-KR")}행 · {batch.status === "restored" ? "되돌림 완료" : "저장 완료"}</p> : null}
       {error ? <div className="flex items-center gap-2 text-sm text-rose-700" role="alert">{error}<button className="maju-button-secondary min-h-11" onClick={() => setReloadKey((value) => value + 1)} type="button">다시 시도</button></div> : null}
       {rows === null ? <p className="text-sm text-slate-500">불러오는 중입니다.</p> : !items.length ? <p className="text-sm text-slate-500">조회 조건에 맞는 매입 기록이 없습니다. 기간이나 검색어를 바꿔 보세요.</p> : (
         <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200">

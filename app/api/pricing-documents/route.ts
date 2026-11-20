@@ -11,6 +11,8 @@ import { DocumentSendError } from "../../../domains/pricing/document-send";
 import { PricingInputError } from "../../../domains/pricing/document";
 import { resolveLeadContactActorName } from "../../../domains/lead/lead-action";
 import { documentSharingEnabled } from "../../../lib/pricing/document-share-feature";
+import { documentRequestError } from "../../../lib/pricing/document-request-error";
+import { documentVatEnabled } from "../../../lib/pricing/document-vat-feature";
 export const dynamic = "force-dynamic";
 const documents = pricingDocuments(pricingDocumentsRepository);
 async function handle(request: NextRequest, write: boolean) {
@@ -72,6 +74,7 @@ async function handle(request: NextRequest, write: boolean) {
       )
       .digest("hex"),
     manager,
+    documentVatEnabled: documentVatEnabled(auth.companyId),
     ...(documentSharingEnabled(auth.companyId) ? { sharingEnabled: true, actorName: resolveLeadContactActorName([getCustomerOperationalName(auth.customerSession), auth.customerSession?.name, auth.adminSession?.name]) } : {}),
     ...(documentArchiveEnabled() ? { archiveEnabled: true } : {}),
   };
@@ -136,23 +139,9 @@ async function handle(request: NextRequest, write: boolean) {
     if (error instanceof PricingInputError) return NextResponse.json({ message: error.message }, { status: 400 });
     if (sharingAction) return NextResponse.json({ message: "공유 요청을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요." }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
     if (recordSend) return NextResponse.json({ message: "전달 기록을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요." }, { status: 503 });
-    console.error("Pricing P1 request failed", error);
-    return NextResponse.json(
-      {
-        message: write
-          ? "저장하지 못했습니다. 다른 화면에서 바뀌었을 수 있어요. 새로고침한 뒤 다시 시도해 주세요."
-          : "문서를 불러오지 못했습니다. 다시 시도해 주세요.",
-      },
-      {
-        status:
-          error instanceof Error &&
-          /Document not found|Set not found/.test(error.message)
-            ? 404
-            : write
-              ? 409
-              : 500,
-      },
-    );
+    const { status, ...failure } = documentRequestError(error, write);
+    console.error("pricing_document_request_failed", { status, code: failure.code, ...(failure.databaseCode ? { databaseCode: failure.databaseCode } : {}) });
+    return NextResponse.json(failure, { status, headers: { "Cache-Control": "private, no-store" } });
   }
 }
 export const GET = (request: NextRequest) => handle(request, false);

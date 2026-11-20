@@ -11,8 +11,8 @@ import { CommonDataTable, type CommonTableColumn } from "@/components/common-dat
 import { PurchaseHistoryPanel } from "@/components/purchase-history-panel";
 import type { PurchaseHistoryItem } from "@/domains/pricing/purchase-receipt";
 import { PurchaseSheetMapper } from "@/components/purchase-sheet-mapper";
-import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, supplierLinkTargets, type CostImportRow, type CostProduct, type PurchaseCostCandidate } from "@/domains/pricing/purchase-cost";
-import { buildPurchaseSheet, COMMON_UNITS, costExcludingVat, mergeDuplicateLines, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchasePriceConflict, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
+import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, mergePurchaseLinesForCatalog, supplierLinkTargets, type CostImportRow, type CostProduct, type PurchaseCostCandidate } from "@/domains/pricing/purchase-cost";
+import { buildPurchaseSheet, catalogTaxEvidence, COMMON_UNITS, costExcludingVat, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchasePriceConflict, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
 import { buildCatalogPreview, type CatalogMapping } from "@/domains/product/catalog-import";
 import { MAX_PURCHASE_DATE_BODY_BYTES, buildPurchaseDateRows, type DatedPurchaseLine } from "@/domains/pricing/purchase-cost-date";
 import { dateRequestDigest, pendingDateRequest, rememberDateRequest, forgetDateRequest } from "@/lib/pricing/purchase-cost-date-client";
@@ -28,8 +28,8 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 // rawName·fileSpec·fileUnit 은 엑셀 원문 그대로(원문 연결용), name·spec·unit 은 고친 값(상품관리에 저장).
 type DatedProduct = CostProduct & { priceDate?: string };
 type NewRow = CostImportRow & { purchaseDate?: string; rowId: string; quantity?: number; rawCost?: number; taxType?: "taxable" | "exempt"; vatIncluded?: boolean; rawName: string; fileSpec: string; fileUnit: string; notDuplicate?: boolean };
-/** 11/4: 단가·견적·주문에는 단위가 꼭 필요합니다. 규격은 비워도 됩니다. */
-const missingFields = (row: NewRow) => [!row.unit.trim() ? "단위" : "", !row.name.trim() ? "품목" : ""].filter(Boolean);
+/** 신규 상품은 단위와 과세 구분을 확정해야 합니다. 규격은 비워도 됩니다. */
+const missingFields = (row: NewRow) => [!row.unit.trim() ? "단위" : "", !row.name.trim() ? "품목" : "", !row.taxType ? "과세 구분" : ""].filter(Boolean);
 type LinkInput = { productId: string; rawName: string; spec: string; unit: string; cost: number; supplierName: string };
 type Candidate = { purchaseDate?: string; cost: number; rawCost?: number; vatIncluded?: boolean; taxType?: "taxable" | "exempt"; quantity?: number; supplierProductId?: string; method: "직접" | "엑셀" | "매입처"; source: string; reviewOnly?: boolean; fileNote?: string; link?: LinkInput; updateFields?: { name: string; spec: string; unit: string } };
 const money = formatWon;
@@ -279,30 +279,13 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         }
         return { ...line, purchaseDate: date };
       });
-      const merged = mergeDuplicateLines(lines);
-      const catalogGroups = new Map<string, { product: CostProduct; lines: PurchaseImportLine[] }>();
-      for (const line of lines) {
-        const product = matchByAlias(aliasKey(line.rawName, line.spec, line.unit), line.supplier, products) || matchCostImportRow(line, products)
-          || matchCostImportRow({ ...line, supplier: "" }, unique);
-        if (!product) continue;
-        const key = `${product.id}|${line.purchaseDate}`;
-        const group = catalogGroups.get(key) || { product, lines: [] };
-        group.lines.push(line); catalogGroups.set(key, group);
-      }
-      const supplierConflicts: PurchasePriceConflict[] = [], covered = new Set<number>();
-      for (const [key, group] of Array.from(catalogGroups.entries())) {
-        if (new Set(group.lines.map(line => line.supplier)).size < 2 || new Set(group.lines.map(line => line.cost)).size < 2) continue;
-        supplierConflicts.push({ key: `product:${key}`, name: group.product.name, spec: group.product.spec, unit: group.product.unit,
-          supplier: "여러 매입처", purchaseDate: group.lines[0].purchaseDate, candidates: group.lines });
-        group.lines.forEach(line => covered.add(line.rowNumber));
-      }
-      return { lines, merged: merged.filter(line => !covered.has(line.rowNumber)),
-        conflicts: [...merged.conflicts.filter(group => !group.candidates.some(line => covered.has(line.rowNumber))), ...supplierConflicts],
+      const merged = mergePurchaseLinesForCatalog(lines, products);
+      return { lines, merged: merged.merged, conflicts: merged.conflicts,
         skipped: parsed.skipped, hasDates, all, savedSkipped, error: "" };
     } catch (cause) {
       return { lines: [], merged: [], conflicts: [], skipped: [], hasDates: false, all: [] as PurchaseImportLine[], savedSkipped: 0, error: cause instanceof Error ? cause.message : "파일과 열 연결을 확인해 주세요." };
     }
-  }, [sheet, mapping, vatMode, receiptDate, products, unique, skipRows, savedExcluded]);
+  }, [sheet, mapping, vatMode, receiptDate, products, skipRows, savedExcluded]);
   const unresolvedConflicts = importPreview?.conflicts.filter(group => !conflictChoices[group.key]).length || 0;
   const reviewDates = Array.from(importedLines.reduce((dates, line) => {
     const date = line.purchaseDate || receiptDate;
@@ -463,8 +446,13 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     try {
       if (!sheet) return;
       if (!importPreview || importPreview.error) throw new Error(importPreview?.error || "파일을 확인해 주세요.");
-      if ((!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts) throw new Error("현재 가격을 변경하려면 서로 다른 단가가 있는 그룹마다 적용할 행을 선택해 주세요.");
       const { lines, skipped } = importPreview;
+      const reconciled = mergePurchaseLinesForCatalog(lines, catalogProducts);
+      const unresolved = reconciled.conflicts.filter(group => !conflictChoices[group.key]).length;
+      if ((!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolved) {
+        setMessage(`${notePrefix}연결 후 같은 상품·적용일의 상이 단가 ${reconciled.conflicts.length}그룹을 확인했습니다. 현재 가격을 바꿀 행을 선택하거나 보류해 주세요.`);
+        return;
+      }
       void saveRememberedCodes();
       const matchedRows = new Map(lines.map(line => [line.rowNumber,
         matchByAlias(aliasKey(line.rawName, line.spec, line.unit), line.supplier, catalogProducts) || matchCostImportRow(line, catalogProducts)]));
@@ -489,8 +477,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         setMessage(`${notePrefix}과거 매입 이력 ${matchedLines.length}행 · 현재 가격 변경 0품목 · 연결되지 않은 ${lines.length - matchedLines.length}행 제외. 같은 품목·날짜의 서로 다른 단가도 원문 이력으로 모두 보존합니다.`);
         return;
       }
-      const held = importPreview.conflicts.filter(group => conflictChoices[group.key] === "hold");
-      const merged = [...importPreview.merged, ...importPreview.conflicts.flatMap(group =>
+      const held = reconciled.conflicts.filter(group => conflictChoices[group.key] === "hold");
+      const merged = [...reconciled.merged, ...reconciled.conflicts.flatMap(group =>
         group.candidates.filter(line => String(line.rowNumber) === conflictChoices[group.key]))]
         .sort((a, b) => (b.purchaseDate || "").localeCompare(a.purchaseDate || ""));
       setDateSelectedRows(merged.map(line => line.rowNumber)); setDateHeldRows(held.map(group => group.candidates[0].rowNumber)); setDatePartial(""); setDateMappedIds([]); setDateCreatedCount(0); setReplaceUndatedCurrent(false);
@@ -556,7 +544,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const list = groups.get(name) || [];
       list.push(row); groups.set(name, list);
     }
-    const catalogMapping: CatalogMapping = { productName: "상품명", spec: "규격", unit: "단위", cost: "매입가", productCode: "기본코드", quantity: "수량" };
+    const catalogMapping: CatalogMapping = { productName: "상품명", spec: "규격", unit: "단위", cost: "매입가", productCode: "기본코드", quantity: "수량", supplyAmount: "공급가액", vat: "부가세" };
     for (const [supplierName, items] of Array.from(groups.entries())) {
       // Registration may reuse an explicit, unambiguous unit for the same ERP identity.
       // Original receipt units and callback keys stay untouched, including blank cells.
@@ -571,8 +559,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const raw = items.map((row) => {
         const known = sourceUnits.get(identity(row));
         const unit = row.rawName ? row.fileUnit : row.unit;
+        const tax = catalogTaxEvidence(row.taxType!);
         return { 상품명: row.rawName || row.name, 규격: row.rawName ? row.fileSpec : row.spec,
-          단위: unit || (known?.size === 1 ? Array.from(known)[0] : ""), 매입가: row.cost, 기본코드: row.code, 수량: row.quantity ?? "" };
+          단위: unit || (known?.size === 1 ? Array.from(known)[0] : ""), 매입가: row.cost, 기본코드: row.code, 수량: row.quantity ?? "",
+          공급가액: tax.supplyAmount, 부가세: tax.vat };
       });
       const preview = buildCatalogPreview(raw, catalogMapping, supplierName);
       const response = await fetch("/api/product-catalog/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "save-import", companyId, fileName: fileName || "매입가 반영", supplierName, mapping: catalogMapping, products: preview.products, excludedCount: preview.excludedCount, warnings: preview.warnings }) });
@@ -647,7 +637,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const matched = matchByAlias(aliasKey(line.rawName, line.spec, unit), line.supplier, products)
         || matchCostImportRow(edited, products)
         || matchCostImportRow({ ...edited, supplier: "" }, unique);
-      const identityChanged = matched?.id !== line.productId || (fileHadConflicts && updateCurrentPrices);
+      const identityChanged = matched?.id !== line.productId;
       if (identityChanged) blocked.add(line.rowNumber); else blocked.delete(line.rowNumber);
       return { ...edited, productId: matched?.id, supplierProductId: matched?.supplierProductId };
     });
@@ -751,7 +741,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const excludedRows = mappedLines.filter(line => line.productId && candidates[line.productId] && !selected.includes(line.productId));
       const excluded = new Set(excludedRows.map(line => line.rowNumber));
       const edited = selected.some(id => candidates[id]?.method !== "엑셀" || !mappedLines.some(line => line.productId === id && line.cost === candidates[id]?.cost));
-      if (edited) throw new Error("파일 적용 후 직접 수정한 단가는 날짜별 원문 선택과 다릅니다. 원본 파일에서 단가를 확인하고 다시 올려 주세요.");
+      if (edited) throw new Error("같은 상품·적용일의 현재 매입가 후보가 여러 개입니다. 적용할 행을 선택하거나 이번 가격 반영을 보류해 주세요.");
       const allRows = buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]).map(row => {
         const target = undatedTargets.find(item => item.productId === row.productId && item.date === row.priceDate);
         return replaceUndatedCurrent && row.priceSelected && target ? { ...row, replaceUndatedCurrent: true, expectedPurchasePrice: target.previous } : row;
@@ -788,11 +778,12 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "날짜별 저장에 실패했습니다.");
       if (result.status !== "completed" || result.batchId !== id || result.rowCount !== rows.length || !Number.isSafeInteger(result.historyOnlyProductCount) || result.historyOnlyProductCount < 0 || result.historyOnlyProductCount > new Set(rows.map(row => row.productId)).size || !(result.recalcRunId === null || typeof result.recalcRunId === "string")) throw new Error("저장 완료 상태를 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요.");
-      setDateBatch({ id, status: "completed", recalcRunId: result.recalcRunId, rowCount: result.rowCount, historyOnlyProductCount: result.historyOnlyProductCount });
+      setDateBatch({ id, status: "completed", recalcRunId: result.recalcRunId, rowCount: result.rowCount, historyOnlyProductCount: result.historyOnlyProductCount, sourceFileName: fileName || "매입가 반영", receiptDate });
       forgetDateRequest(companyId);
       setImportedLines([]); setUnmatched([]); setCandidates({}); setSelected([]); setDatePartial(""); setSaveReview(false); setConfirmedReview(""); setHistoryKey(value => value + 1);
       const currentCount = new Set(rows.map(row => row.productId)).size - result.historyOnlyProductCount;
       setSaveResult({ currentCount, historyOnlyCount: result.historyOnlyProductCount });
+      setTab("매입 이력");
       setMessage(`${returnRows.length ? `반품(수량 음수) ${returnRows.length}행은 빼고 ` : ""}원본 거래 ${result.rowCount}행 저장과 판매가 재계산을 한 요청으로 완료했습니다.${result.recalcRunId ? " 판매가 변경 완료." : " 판매가 추가 변경 없음."}${heldCount ? ` 가격 변경 보류 ${heldCount}그룹은 현재 매입가를 바꾸지 않았으며 신규 상품이면 미가격 0원으로 남습니다.` : ""}${undatedTargets.length ? ` 기준일 없는 상품 ${undatedTargets.length}품목은 이번 적용일의 현재 매입가로 자동 교체했습니다.` : ""} 같은 날짜에 예전에 올린 매입 기록은 이 파일 내용으로 바뀌었습니다. 실제 현재 매입가는 날짜 보호·보류 조건에 따라 유지될 수 있으니 목록과 이력에서 확인해 주세요.`);
       await load().catch(() => setError("저장은 완료됐지만 목록을 불러오지 못했습니다. 목록을 새로고침해 주세요."));
     } catch (cause) { setError(`${cause instanceof Error ? cause.message : "저장하지 못했습니다."} 연결 미완료 원본 행: ${mappedLines.filter(line => !line.productId).map(line => line.rowNumber).join(", ") || "없음"}. 상품 등록은 별도 단계이며, 날짜별 저장 완료 전인 행은 아래에서 확인하고 같은 요청으로 다시 시도할 수 있습니다.`); }
@@ -813,9 +804,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     // 11/4: 바뀐 매입가가 없어도 새 상품 등록·매입 기록 보관은 진행합니다(예전에는 버튼이 반응하지 않았음).
     if (!changes.length && !unmatched.length && !importedLines.length) { setMessage("저장할 변경이 없습니다."); return; }
     if (unmatched.some((row) => !row.notDuplicate && findDuplicateSuspects(row, unique, 1).length)) { setError(`중복 의심 새 상품 ${unmatched.filter((row) => !row.notDuplicate && findDuplicateSuspects(row, unique, 1).length).length}개는 줄마다 '이 상품으로 연결' 또는 '새 상품 맞음'을 골라야 저장할 수 있습니다.`); openFilter("suspect", unmatched); return; }
+    if (unmatched.some((row) => !row.taxType)) { setError("새 상품의 과세 구분을 골라 주세요."); openFilter("unit", unmatched); return; }
     if (usesDateBatch) { await saveDateBatch(); return; }
     if (batchEnabled && changes.length > 100) { setError(`가격 변경 ${changes.length}건은 한 번에 저장할 수 없습니다. 최대 100건씩 선택해 주세요. 새 상품·원본 이력도 아직 저장하지 않았습니다.`); return; }
-    if (unmatched.some((row) => missingFields(row).length || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 품목·단위·단가를 채워 주세요."); openFilter("unit", unmatched); return; }
+    if (unmatched.some((row) => missingFields(row).length || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 품목·단위·단가·과세 구분을 채워 주세요."); openFilter("unit", unmatched); return; }
     if (dateSaveBlocked) { setError("구매일 기준 저장은 아직 준비 중입니다. 날짜 보호와 원본 이력 저장을 지원하는 저장 경로가 준비된 뒤 다시 시도해 주세요."); return; }
     setSaveReview(false); setConfirmedReview("");
     setBusy(true); setError(""); setMessage(""); setCategoryReviewLink(false);
@@ -875,7 +867,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         setUndo(null);
         notes.push(`매입가 ${changes.length}건·판매가 함께 저장`);
       }
-      setCandidates({}); setSelected([]); setTab("전체"); setHistoryKey((value) => value + 1);
+      setCandidates({}); setSelected([]); setHistoryKey((value) => value + 1);
       if ((changes.length || notes.length) && (!batchEnabled || !changes.length)) {
         const previousBatch = pricing?.lastBatch;
         try {
@@ -894,6 +886,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         setError(`일부만 저장됐습니다: ${notes.join(" · ") || "매입가 변경 없음"}. ${warnings.join(" · ")}. 저장된 매입가는 다시 올리지 말고 실패 항목만 확인해 주세요.`);
       } else {
         setMessage(`${notes.join(" · ")}${receipt.note}. 표에서 품목·규격·단위·과세를 바로 고칠 수 있습니다.`);
+        setTab("매입 이력");
       }
     } catch (cause) { setMessage(""); setError(`${notes.length ? `${notes.join(" · ")} 후 멈췄습니다. ` : ""}${cause instanceof Error ? cause.message : "저장하지 못했습니다."}`); await load().catch(() => undefined); }
     finally { setBusy(false); }
@@ -978,7 +971,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   return <div className="min-w-0 space-y-4" aria-busy={busy}>
     <datalist id="purchase-unit-options">{unitOptions.map((unit) => <option key={unit} value={unit} />)}</datalist>
     {/* 11/4: 매입일·엑셀 올리기·열 정렬·저장을 한 줄에. 지금 눌러야 할 버튼을 강조합니다. */}
-    <header className="space-y-2">
+    <header className="sticky top-0 z-20 space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
       {historyOnlyDefaultEnabled && sheet ? <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-slate-200 p-2 text-sm"><legend className="px-1 text-xs font-black text-slate-600">저장 방식</legend>
         <label className="flex min-h-[44px] items-center gap-2"><input aria-label="이력만 저장" checked={!updateCurrentPrices} name="purchase-save-mode" onChange={() => { setUpdateCurrentPrices(false); setConflictChoices({}); setConfirmedReview(""); }} type="radio" />이력만 저장 <span className="text-xs text-slate-500">(현재 가격은 그대로)</span></label>
         <label className="flex min-h-[44px] items-center gap-2"><input aria-label="현재 매입가 변경" checked={updateCurrentPrices} name="purchase-save-mode" onChange={() => { setUpdateCurrentPrices(true); setConflictChoices({}); setConfirmedReview(""); }} type="radio" />현재 매입가 변경 <span className="text-xs text-slate-500">(기본값 · 판매가도 다시 계산)</span></label>
@@ -1091,11 +1084,11 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {historyError ? <p className="text-sm text-amber-800" role="alert">{historyError}</p> : null}
     {tab !== "매입 이력" ? <div className="flex flex-wrap items-center gap-2"><select aria-label="매입처" className="maju-input min-h-[44px]" onChange={(event) => setSupplier(event.target.value)} value={supplier}><option value="">매입처 전체</option>{Array.from(new Set(products.map((product) => product.supplierName).filter((name): name is string => Boolean(name)))).map((name) => <option key={name} value={name}>{name}</option>)}</select><select aria-label="바꾼 방법" className="maju-input min-h-[44px]" onChange={(event) => setMethod(event.target.value)} value={method}><option value="">바꾼 방법 전체</option><option>직접</option><option>엑셀</option><option>매입처</option><option>매입 이력</option></select><SearchInput aria-label="품목 검색" className="min-h-[44px]" onChange={setSearch} placeholder="품목·코드 검색" value={search} /><button aria-pressed={emptyOnly || (tab === "신규" && newFilter === "unit")} className="maju-button-secondary min-h-[44px]" onClick={() => { if (missingTotal) { setEmptyOnly(false); openFilter("unit"); } else { setEmptyOnly((value) => !value); setTab("전체"); } }} type="button">단위 빈 칸 {missingTotal + unique.filter((product) => !product.unit).length}개 채우기</button></div> : null}
     {tab !== "매입 이력" && tab !== "신규" ? <p className="text-xs text-slate-600">변경 후 매입가는 업로드한 값입니다. 잘못 읽힌 값은 이 칸에서 고치고 저장하세요. 후보가 없는 품목은 현재가를 유지하며, 직접 수정 버튼으로 바꿀 수 있습니다. 변동이 없으면 –로 표시합니다.</p> : null}
-    {tab === "매입 이력" ? <PurchaseHistoryPanel companyId={companyId} refreshKey={historyKey} /> : tab === "신규" && unmatched.length ? <section className="maju-section-card min-w-0 space-y-3 p-4">
+    {tab === "매입 이력" ? <PurchaseHistoryPanel batch={dateBatch ? { fileName: dateBatch.sourceFileName, receiptDate: dateBatch.receiptDate, rowCount: dateBatch.rowCount, status: dateBatch.status } : undefined} companyId={companyId} refreshKey={historyKey} restore={{ disabled: busy || (purchaseDateEnabled ? dateBatch?.status !== "completed" : !(batchEnabled && latestBatch && !latestBatch.restoredAt) && !undo), label: purchaseDateEnabled && dateBatch?.status === "completed" ? "직전 날짜별 매입가·판매가 함께 되돌리기" : batchEnabled && latestBatch && !latestBatch.restoredAt ? "직전 매입가·판매가 함께 되돌리기" : "직전 저장 되돌리기 (현재 화면)", run: () => void restore() }} /> : tab === "신규" && unmatched.length ? <section className="maju-section-card min-w-0 space-y-3 p-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="font-semibold">새 상품 {unmatched.length}개{missingTotal ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-black text-amber-800">단위 빈 칸 {missingTotal}개</span> : null}{suspectCount ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-black text-rose-700">중복 의심 {suspectCount}개</span> : null}</h2>
-          <p className="text-sm text-slate-600">상품명 옆에 섞인 규격·단위를 나눠 두었습니다. 단위는 꼭 채우고(규격은 비워도 됨), <b>중복 의심</b>은 기존 상품에 연결하거나 &lsquo;새 상품&rsquo;으로 확정하세요.</p>
+          <h2 className="font-semibold">새 상품 {unmatched.length}개{missingTotal ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-black text-amber-800">필수값 미입력 {missingTotal}개</span> : null}{suspectCount ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-black text-rose-700">중복 의심 {suspectCount}개</span> : null}</h2>
+          <p className="text-sm text-slate-600">상품명 옆에 섞인 규격·단위를 나눠 두었습니다. 단위와 과세 구분은 꼭 고르고(규격은 비워도 됨), <b>중복 의심</b>은 기존 상품에 연결하거나 &lsquo;새 상품&rsquo;으로 확정하세요.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
 
@@ -1103,7 +1096,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="새 상품 필터">
-        {([["all", `전체 ${unmatched.length}`], ["unit", `단위 빈 칸 ${missingTotal}`], ["suspect", `중복 의심 ${suspectCount}`]] as const).map(([kind, label]) => (
+        {([["all", `전체 ${unmatched.length}`], ["unit", `필수값 미입력 ${missingTotal}`], ["suspect", `중복 의심 ${suspectCount}`]] as const).map(([kind, label]) => (
           <button aria-selected={newFilter === kind} className={`rounded-full px-3 py-1.5 text-xs font-black ring-1 ring-inset ${newFilter === kind ? (kind === "unit" ? "bg-amber-500 text-white ring-amber-500" : kind === "suspect" ? "bg-rose-600 text-white ring-rose-600" : "bg-teal-700 text-white ring-teal-700") : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"}`} key={kind} onClick={() => openFilter(kind)} role="tab" type="button">{label}</button>
         ))}
         {newFilter === "unit" && filterIds ? <span className="text-xs font-semibold text-slate-500">엔터를 누르면 다음 빈 칸으로 이동합니다 · {unmatched.filter((row) => filterIds.includes(row.rowId) && !missingFields(row).length).length}/{filterIds.length} 완료{missingTotal ? "" : " · 모두 채웠습니다. 위 ③ 저장을 누르세요"}</span> : null}
@@ -1141,7 +1134,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       })}</tbody></table></div> : <p className="text-sm text-slate-500">새 상품이 없습니다.</p>}
       <Link className="text-xs font-bold text-teal-700 underline" href="/revenue/products">상품관리에서 전체 상품 보기</Link>
     </section> : <CommonDataTable selectable={false} columns={columns} emptyMessage={tab === "신규" ? "최근 30일에 등록된 상품이 없습니다. 엑셀을 올려 새 상품을 등록해 주세요." : "상품이 없습니다. 엑셀을 올리거나 상품관리에서 상품을 등록해 주세요."} filename="매입가_변경후보.csv" rowKey={(row) => row.id} rows={tab === "신규" ? recentNew : displayed} settingsKey={`purchase-cost:v2:${companyId}`} />}
-    <div className="flex flex-wrap items-center gap-3 text-sm"><span>상품 {tab === "신규" ? recentNew.length : displayed.length}개 · 현재 합 {money((tab === "신규" ? recentNew : displayed).reduce((sum, row) => sum + row.cost, 0))} · 변경 후 합 {money((tab === "신규" ? recentNew : displayed).reduce((sum, row) => sum + (candidates[row.id]?.cost ?? row.cost), 0))}</span><button className="maju-button-secondary" disabled={busy || (purchaseDateEnabled ? dateBatch?.status !== "completed" : !(batchEnabled && latestBatch && !latestBatch.restoredAt) && !undo)} onClick={() => void restore()} type="button">{purchaseDateEnabled && dateBatch?.status === "completed" ? "직전 날짜별 매입가·판매가 함께 되돌리기" : batchEnabled && latestBatch && !latestBatch.restoredAt ? "직전 매입가·판매가 함께 되돌리기" : "직전 저장 되돌리기 (현재 화면)"}</button><Link className="text-teal-700 underline" href="/revenue/pricing/margins">마진 그룹 설정</Link></div>
+    <div className="flex flex-wrap items-center gap-3 text-sm"><span>상품 {tab === "신규" ? recentNew.length : displayed.length}개 · 현재 합 {money((tab === "신규" ? recentNew : displayed).reduce((sum, row) => sum + row.cost, 0))} · 변경 후 합 {money((tab === "신규" ? recentNew : displayed).reduce((sum, row) => sum + (candidates[row.id]?.cost ?? row.cost), 0))}</span>{tab !== "매입 이력" ? <button className="maju-button-secondary" disabled={busy || (purchaseDateEnabled ? dateBatch?.status !== "completed" : !(batchEnabled && latestBatch && !latestBatch.restoredAt) && !undo)} onClick={() => void restore()} type="button">{purchaseDateEnabled && dateBatch?.status === "completed" ? "직전 날짜별 매입가·판매가 함께 되돌리기" : batchEnabled && latestBatch && !latestBatch.restoredAt ? "직전 매입가·판매가 함께 되돌리기" : "직전 저장 되돌리기 (현재 화면)"}</button> : null}<Link className="text-teal-700 underline" href="/revenue/pricing/margins">마진 그룹 설정</Link></div>
     {purchaseDateEnabled ? <p>날짜별 저장을 사용 중입니다. 직접 원가 수정과 이전 방식 복구는 차단됩니다. 적용일이 있는 파일로 저장하고 날짜별 저장 복구를 이용해 주세요.</p> : null}
     <p className="text-sm text-slate-600">직접 정한 판매가는 그대로 두고, 마진으로 계산하는 상품만 판매가를 다시 계산합니다. 저장 전 후보는 새로고침하면 사라집니다. {batchEnabled ? "원자적으로 저장한 직전 매입가·판매가는 새로고침 뒤에도 함께 되돌릴 수 있습니다." : "매입가 되돌리기는 저장한 화면에서만 가능하며, 새로고침 뒤에는 매입 이력에서 정정해 주세요."}</p>
   </div>;

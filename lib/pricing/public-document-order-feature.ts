@@ -14,3 +14,9 @@ export function publicDocumentSignupEnabled(companyId: string) {
     process.env.STORE_MEMBER_SESSION_ENABLED === "true" && isStoreMemberCompanyAllowlisted(companyId) &&
     (process.env.STORE_OWNER_ONBOARDING_SECRET?.length ?? 0) >= 32 && isFeatureEnabled("STORE_ORDERING", companyId);
 }
+
+/** The public shopping layout rolls out only to explicitly listed issuers. */
+export function publicDocumentShoppingEnabled(companyId: string) {
+  return (process.env.FEATURE_PUBLIC_DOCUMENT_SHOPPING_COMPANY_IDS || "")
+    .split(",").some(id => id.trim() === companyId);
+}

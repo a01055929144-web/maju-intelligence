@@ -1,5 +1,9 @@
 # 가격표 ①-2 — P0
 
+## 2026-11-19 업로드 파일의 부가세 근거
+
+Owner Domain: product(상품 업로드의 세금 구분), pricing(매입가 업로드의 세금 구분). 이번 수정 파일: `domains/product/catalog-import.ts`, `domains/pricing/purchase-import.ts`, `tests/catalog-import.test.ts`, `tests/purchase-import.test.ts`. 파일의 부가세 양수는 과세, 명시적 0은 면세, 빈칸·음수는 미정이다. 공급가액 대비 비율로 과세 판정을 제한하지 않는다. 기존 상품의 저장된 세금 구분이나 발행 문서는 업로드만으로 덮어쓰지 않는다.
+
 ## 매장 전용 사이트 진입 (2026-11-10)
 
 Owner Domain: organization(매장 회원). Related: pricing(발행 문서), order(기존 링크 주문). 매장 사이트의 공식 경로는 기존 `/store` 하나로 유지한다. 카카오로 로그인한 점주·직원이 자신의 활성 매장을 찾아 견적서·단가표, 주문, 원가관리·구성원 화면으로 들어간다. 처음 가입은 받은 공개 문서 링크에서만 시작한다. 새 주문 UI·가격 계산·DB 스키마를 만들지 않고 기존 링크 주문과 원가관리 부품을 재사용한다.

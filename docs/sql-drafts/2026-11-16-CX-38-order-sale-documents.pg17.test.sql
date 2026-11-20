@@ -92,10 +92,10 @@ begin
   insert into business_document_lines(company_id,document_id,sort_order,product_catalog_id,
     product_code_snapshot,product_name_snapshot,specification_snapshot,unit_snapshot,
     tax_type_snapshot,quantity,unit_price,memo)
-  select $1,$2,x.ord,nullif(x.v->>'product_catalog_id','')::uuid,x.v->>'product_code',
-    x.v->>'product_name',x.v->>'specification',x.v->>'unit',x.v->>'tax_type',
-    (x.v->>'quantity')::numeric,(x.v->>'unit_price')::bigint,x.v->>'memo'
-  from jsonb_array_elements($6) with ordinality x(v,ord);
+  select $1,$2,x.ord,nullif(x.line->>'product_catalog_id','')::uuid,x.line->>'product_code',
+    x.line->>'product_name',x.line->>'specification',x.line->>'unit',x.line->>'tax_type',
+    (x.line->>'quantity')::numeric,round((x.line->>'unit_price')::numeric)::bigint,nullif(btrim(x.line->>'memo'),'')
+  from jsonb_array_elements($6) with ordinality x(line,ord);
   select coalesce(sum(supply_amount) filter(where tax_type_snapshot='taxable'),0),
     coalesce(sum(supply_amount) filter(where tax_type_snapshot='exempt'),0),
     coalesce(sum(tax_amount),0),coalesce(sum(total_amount),0)
@@ -144,6 +144,7 @@ begin
 end $$;
 
 \ir 2026-11-16-CX-38-order-sale-documents.sql
+\ir 2026-11-19-CX-38b-order-document-money-snapshot.sql
 
 insert into companies values
  ('00000000-0000-0000-0000-0000000000c1'),('00000000-0000-0000-0000-0000000000c2');
@@ -175,11 +176,27 @@ insert into store_order_lines(company_id,order_id,product_id,product_name,sales_
  ('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d1','00000000-0000-0000-0000-0000000000a3','과세품','개',2,1100,'taxable',false),
  ('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d1','00000000-0000-0000-0000-0000000000a4','시가품','개',1,null,'exempt',true);
 
+-- Included-price order snapshots must reach the document and ledger without re-rounding drift.
+insert into store_orders values
+ ('00000000-0000-0000-0000-0000000000d9','00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1','2026-11-17','submitted',0,'포함가 주문',1);
+insert into store_order_lines(company_id,order_id,product_id,product_name,sales_unit,quantity,unit_price,tax_type,price_includes_tax,is_market_price) values
+ ('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d9','00000000-0000-0000-0000-0000000000a3','포함가 과세품','kg',0.5,100,'taxable',true,false);
+select confirm_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d9',null,'담당');
+do $$ declare d business_documents%rowtype; begin
+ select * into d from business_documents where source_key='order:00000000-0000-0000-0000-0000000000d9';
+ assert d.taxable_supply_amount=45 and d.tax_amount=5 and d.total_amount=50,'included order header snapshot';
+ assert (select price_includes_tax_snapshot and supply_amount=45 and tax_amount=5 and total_amount=50
+   from business_document_lines where document_id=d.id),'included order line snapshot';
+ assert (select sum(amount) from partner_ledger_entries where source_document_id=d.id)=50,'included order ledger snapshot';
+ perform cancel_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d9',null,'담당','취소');
+ assert (select sum(amount) from partner_ledger_entries where source_document_id=d.id)=0,'included order cancel ledger zero';
+end $$;
+
 select confirm_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d1',null,'담당');
 select confirm_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d1',null,'담당');
 do $$ begin
- assert (select count(*) from business_documents)=1,'confirm must be idempotent';
- assert (select count(*) from partner_ledger_entries)=1,'one confirm ledger';
+ assert (select count(*) from business_documents where source_key='order:00000000-0000-0000-0000-0000000000d1')=1,'confirm must be idempotent';
+ assert (select count(*) from partner_ledger_entries where source_document_id=(select id from business_documents where source_key='order:00000000-0000-0000-0000-0000000000d1'))=1,'one confirm ledger';
  assert (select unit_price from business_document_lines where product_name_snapshot='시가품')=2400,'market proposal';
  assert (select tax_type_snapshot from business_document_lines where product_name_snapshot='배송비')='taxable','fee taxable';
  begin perform confirm_order_sale_document('00000000-0000-0000-0000-0000000000c2','00000000-0000-0000-0000-0000000000d1',null,'담당');
@@ -191,7 +208,7 @@ update store_orders set revision=2 where id='00000000-0000-0000-0000-0000000000d
 select revise_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d1',2,null,'담당','수량 수정');
 select revise_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d1',2,null,'담당','수량 수정');
 do $$ declare d business_documents%rowtype; begin
- select * into d from business_documents limit 1;
+ select * into d from business_documents where source_key='order:00000000-0000-0000-0000-0000000000d1';
  assert d.revision=1,'retry must not create revision';
  assert (select sum(amount) from partner_ledger_entries where source_document_id=d.id)=d.total_amount,'ledger net equals revised total';
  update business_documents set tax_invoice_locked_at=now() where id=d.id;
@@ -254,6 +271,14 @@ do $$ declare d business_documents%rowtype; begin
  assert (select sum(amount) from partner_ledger_entries where source_document_id=d.id)=0,'cancel ledger net zero';
  assert (select sum(quantity_delta) from inventory_movements where source_document_id=d.id)=0,'cancel inventory net zero';
 end $$;
+
+\set ON_ERROR_STOP off
+\ir 2026-11-19-CX-38b-order-document-money-snapshot.down.sql
+\set ON_ERROR_STOP on
+do $$ begin assert exists(select 1 from information_schema.columns where table_name='business_document_lines' and column_name='price_includes_tax_snapshot'),'CX-38b down must refuse included-price evidence'; end $$;
+update business_document_lines set price_includes_tax_snapshot=false where price_includes_tax_snapshot;
+\ir 2026-11-19-CX-38b-order-document-money-snapshot.down.sql
+do $$ begin assert not exists(select 1 from information_schema.columns where table_name='business_document_lines' and column_name='price_includes_tax_snapshot'),'CX-38b empty down must succeed'; end $$;
 
 \set ON_ERROR_STOP off
 \ir 2026-11-16-CX-38-order-sale-documents.down.sql

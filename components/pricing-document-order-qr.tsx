@@ -4,7 +4,7 @@ import type { DocumentVersion } from "@/domains/pricing/document";
 import { documentLinkLastDay } from "@/domains/pricing/document-share";
 import type { PreparedDocumentShare } from "@/domains/pricing/document-share";
 import { documentRequest } from "@/lib/pricing/document-client";
-import { documentOrderQr } from "@/lib/pricing/document-order-qr";
+import { documentOrderQr, isPublicDocumentPath } from "@/lib/pricing/document-order-qr";
 import { Button } from "./ui/button";
 import { copyText } from "@/lib/copy-text";
 
@@ -31,7 +31,7 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
       }, true);
       stage = "address";
       const url = new URL(result.publicUrl, window.location.origin);
-      if (url.origin !== window.location.origin || url.pathname !== "/pricing-document" || url.search || !url.hash || !Number.isFinite(Date.parse(result.expiresAt)))
+      if (url.origin !== window.location.origin || !isPublicDocumentPath(url.pathname) || url.search || !url.hash || !Number.isFinite(Date.parse(result.expiresAt)))
         throw new Error("공개 링크를 확인하지 못했습니다. 다시 시도해 주세요.");
       setShared({ ...result, publicUrl: url.href });
       stage = "qr";

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { documentOrderQr } from "../lib/pricing/document-order-qr";
+import { documentOrderQr, isPublicDocumentPath } from "../lib/pricing/document-order-qr";
 import { documentOutput, lineFromCatalog, printPages, type DocumentVersion } from "../domains/pricing/document";
 it("generates a real PNG locally with the complete order fragment", async () => {
   const url = "https://store.example.test/store#synthetic-signed-token";
@@ -23,8 +23,11 @@ it("reserves print space for QR and larger text without losing or changing lines
 });
 
 it("renders public document QR locally, including loopback previews, without weakening store URL guards", async () => {
-  for (const url of ["https://docs.example.test/pricing-document#synthetic-public-token", "http://127.0.0.1:3100/pricing-document#synthetic-public-token"])
+  expect(isPublicDocumentPath("/q/10000000-0000-4000-8000-000000000001")).toBe(true);
+  expect(isPublicDocumentPath("/q/not-a-preview")).toBe(false);
+  expect(isPublicDocumentPath(`/q/${"-".repeat(36)}`)).toBe(false);
+  for (const url of ["https://docs.example.test/pricing-document#synthetic-public-token", "https://docs.example.test/q/10000000-0000-4000-8000-000000000001#synthetic-public-token", "http://127.0.0.1:3100/pricing-document#synthetic-public-token"])
     expect(await documentOrderQr(url)).toMatch(/^data:image\/png;base64,iVBOR/);
-  for (const invalid of ["http://docs.example.test/pricing-document#token", "https://docs.example.test/pricing-document?token=secret#x", "https://user:pass@docs.test/pricing-document#x"])
+  for (const invalid of ["http://docs.example.test/pricing-document#token", "https://docs.example.test/pricing-document?token=secret#x", "https://user:pass@docs.test/pricing-document#x", "https://docs.example.test/q/not-a-preview#x", "https://docs.example.test/q/10000000-0000-4000-8000-000000000001?token=secret#x"])
     await expect(documentOrderQr(invalid)).rejects.toThrow();
 });
