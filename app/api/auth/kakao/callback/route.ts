@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
       });
       if (!authUserId) return redirectStore(request.url, "store_invitation_required");
       await acceptStoreMemberInvitation({ authUserId, companyId: invitation.companyId,
-        storeAccountId: invitation.storeAccountId, token: proof.token });
+        profileId: invitation.profileId, storeAccountId: invitation.storeAccountId, token: proof.token });
       if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
       return redirectStoreScope(request.url, invitation.companyId, invitation.storeAccountId);
     }

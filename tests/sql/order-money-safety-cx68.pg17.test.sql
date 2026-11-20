@@ -51,4 +51,4 @@ do $$ declare c uuid:=md5('company-1')::uuid; o uuid:=(select id from store_orde
   update store_order_lines set total_amount=1099 where order_id=o and ctid=(select ctid from store_order_lines where order_id=o limit 1);
   begin perform cx68_assert_order_money(c,o); raise exception 'mismatch accepted'; exception when raise_exception then assert sqlerrm like 'order_money_mismatch%'; end;
 end $$;
-select 'CX-68 scenarios 6 and 15 PG17 passed; CX-62 scenarios 3-5 remain isolated' result;
+select 'CX-68 scenarios 6 and 15 PG17 passed; CX-62 scenarios 3-5 wait for draft-only receipt contract' result;

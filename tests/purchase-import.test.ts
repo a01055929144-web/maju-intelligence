@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
-import { buildPurchaseSheet, mergeDuplicateLines, parsePurchaseLines, purchaseSpecification, splitNameSpec, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
+import { buildPurchaseSheet, catalogTaxEvidence, mergeDuplicateLines, parsePurchaseLines, purchaseSpecification, splitNameSpec, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
 import { matchCostImportRow, supplierLinkTargets } from "../domains/pricing/purchase-cost";
 import { buildPurchaseReceiptRows } from "../domains/pricing/purchase-receipt";
 
@@ -36,6 +36,19 @@ describe("purchase import", () => {
     expect(lines[0]).toMatchObject({ name: "냉동오징어", spec: "", unit: "EA", cost: 4500, vatIncluded: false, quantity: 5 });
     const included = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "included").lines[0];
     expect(included.cost).toBeCloseTo(4090.91, 2);
+  });
+
+  it.each([0.3, 0.25, 1.5])("keeps the source unit price for decimal quantity %s", (quantity) => {
+    const unitPrice = 39000;
+    const sheet = buildPurchaseSheet([
+      ["품목명", "수량", "단가", "공급가액"],
+      ["합성 채소 [KG]", String(quantity), String(unitPrice), String(quantity * unitPrice)]
+    ]);
+    const lines = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "excluded").lines;
+    const rows = buildPurchaseReceiptRows({ actorName: "대표", companyId: "c", fileName: "decimal.xlsx", lines, receiptDate: "2026-11-18" });
+
+    expect(lines[0]).toMatchObject({ quantity, rawCost: unitPrice, cost: unitPrice });
+    expect(rows[0]).toMatchObject({ quantity, unit_price: unitPrice, unit_cost_ex_vat: unitPrice, supply_amount: quantity * unitPrice });
   });
 
   it("keeps brand-only parentheses but splits capacity parentheses and repeated bracket specs", () => {
@@ -151,6 +164,19 @@ describe("purchase import", () => {
     expect(parsed.lines[0]).toMatchObject({ rawName: "콘센트치킨스타 [1.2KG*6EA]", name: "콘센트치킨스타", spec: "1.2KG*6EA" });
   });
 
+  it("automatically maps ERP 일자-No. and 거래처명 headers", () => {
+    const sheet = buildPurchaseSheet([
+      ["회사명 : 제이에스리테일 / 2026/11/18 ~ 2026/11/20"],
+      ["일자-No.", "품목명(규격)", "수량", "단가", "공급가액", "부가세", "합계", "거래처명"],
+      ["2026/11/18 -1", "딜 [kg]", "1", "50000", "50000", "", "50000", "(유)로즈마리향기"]
+    ]);
+    const mapping = suggestPurchaseMapping(sheet);
+    expect(mapping).toMatchObject({ purchaseDate: 0, name: 1, cost: 3, supplier: 7 });
+    expect(parsePurchaseLines(sheet, mapping, "excluded").lines[0]).toMatchObject({
+      purchaseDate: "2026-11-18", supplier: "(유)로즈마리향기"
+    });
+  });
+
   it("matches existing products ignoring spaces and brackets so daily uploads do not create duplicates", () => {
     const products = [{ id: "p1", code: "", name: "냉동 오징어", spec: "EA", unit: "", cost: 4000 }];
     expect(matchCostImportRow({ code: "", name: "냉동오징어", spec: "[EA]", unit: "", supplier: "", cost: 4500 }, products)?.id).toBe("p1");
@@ -158,14 +184,21 @@ describe("purchase import", () => {
 });
 
 describe("purchase import vat column", () => {
+  it("preserves an explicit tax choice when a new catalog product is created", () => {
+    expect(catalogTaxEvidence("taxable")).toEqual({ supplyAmount: 100, vat: 10 });
+    expect(catalogTaxEvidence("exempt")).toEqual({ supplyAmount: 100, vat: 0 });
+  });
+
   it("treats prices as VAT-excluded and records taxable/exempt from a separate VAT column", () => {
     const sheet = buildPurchaseSheet([
       ["품목명", "수량", "단가", "공급가액", "부가세", "합계"],
       ["간장 [1.8L]", "2", "10000", "20000", "2000", "22000"],
-      ["양파 [10kg]", "1", "15000", "15000", "", "15000"]
+      ["양파 [10kg]", "1", "15000", "15000", "0", "15000"],
+      ["두부 [1kg]", "1", "3000", "3000", "", "3000"],
+      ["반품 조정 [1kg]", "1", "1000", "1000", "-100", "900"]
     ]);
     const { lines } = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "auto");
-    expect(lines.map((line) => [line.taxType, line.vatIncluded, line.cost])).toEqual([["taxable", false, 10000], ["exempt", false, 15000]]);
+    expect(lines.map((line) => [line.taxType, line.vatIncluded, line.cost])).toEqual([["taxable", false, 10000], ["exempt", false, 15000], [undefined, false, 3000], [undefined, false, 1000]]);
     expect(buildPurchaseReceiptRows({ actorName: "대표", companyId: "c", fileName: "a", lines, receiptDate: "2026-11-04" })[0]).toMatchObject({ tax_type: "taxable", vat_amount: 2000 });
   });
 });

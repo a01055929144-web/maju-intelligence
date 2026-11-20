@@ -301,6 +301,7 @@ it("exposes acceptance only for delivered, unexpired shares inside all company g
 
 it("creates a recipient-free public document without lead lookup, delivery or customer writes", async () => {
   vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  content.display!.info.push({ key: "settlement_account", label: "비공개 정보", value: "PRIVATE-SETTLEMENT-CANARY", place: "footer" });
   const input = { ...prepare, leadId: null };
   const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, input);
   expect(links[0].lead_id).toBeNull(); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);

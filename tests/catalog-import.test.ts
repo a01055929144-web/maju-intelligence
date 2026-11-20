@@ -229,10 +229,20 @@ describe("catalog import", () => {
       "d",
     ]);
   });
-  it("infers tax type from VAT and supply amount", () => {
-    expect(inferTaxType(0, 10_000)).toBe("exempt");
-    expect(inferTaxType(1_000, 10_000)).toBe("taxable");
-    expect(inferTaxType(300, 10_000)).toBeUndefined();
+  it("classifies explicit VAT amounts without guessing blank cells", () => {
+    expect(inferTaxType(0)).toBe("exempt");
+    expect(inferTaxType(1_000)).toBe("taxable");
+    expect(inferTaxType(300)).toBe("taxable");
+    expect(inferTaxType(-100)).toBeUndefined();
+    expect(inferTaxType(undefined)).toBeUndefined();
+  });
+  it("uses explicit VAT values and keeps a blank cell unclassified in product upload", () => {
+    const products = buildCatalogPreview([
+      { 상품명: "합성 과세", 매입가: 1000, 부가세: 30 },
+      { 상품명: "합성 면세", 매입가: 1000, 부가세: 0 },
+      { 상품명: "합성 미정", 매입가: 1000, 부가세: "" },
+    ], { productName: "상품명", cost: "매입가", vat: "부가세" }, "supplier").products;
+    expect(products.map((product) => product.parsedTaxType)).toEqual(["taxable", "exempt", undefined]);
   });
   it("uses converted cost only after the ratio is confirmed", () => {
     expect(convertedUnitCost(10_000, 10, true)).toBe(1_000);

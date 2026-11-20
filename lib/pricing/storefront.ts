@@ -13,7 +13,7 @@ import {
   type DeliveryPolicy,
   type HolidayRule,
 } from "@/domains/order/order-rules";
-import { documentDisplayPrice, parseDisplay, type DocumentContent } from "../../domains/pricing/document";
+import { FIXED_PROMOTION_PRICE_CONTRACT, documentDisplayPrice, parseDisplay, type DocumentContent } from "../../domains/pricing/document";
 
 type Link = {
   id: string;
@@ -341,7 +341,7 @@ export async function readStorefront(
           `${line.productId}:${line.unit}`,
         );
         const matchingContract =
-          agreement?.sales_unit === line.unit ? agreement : null;
+          agreement?.sales_unit === line.unit && !(version.content.priceContract === FIXED_PROMOTION_PRICE_CONTRACT && line.promotionId) ? agreement : null;
         const market = marketIds.has(line.productId);
         return {
           key: `${line.productId}:${line.promotionId ?? ""}`,
@@ -362,9 +362,9 @@ export async function readStorefront(
           taxType: matchingContract?.tax_type ?? line.taxType,
           unitPrice:
             priceAvailable && !market
-              ? (matchingContract?.unit_price ?? documentDisplayPrice(line.price, line.taxType, priceIncludesTax))
+              ? (matchingContract?.unit_price ?? documentDisplayPrice(line.price, line.taxType, priceIncludesTax, version.content.priceContract === FIXED_PROMOTION_PRICE_CONTRACT && line.priceIncludesTax === true))
               : null,
-          priceIncludesTax: matchingContract?.price_includes_tax ?? priceIncludesTax,
+          priceIncludesTax: matchingContract?.price_includes_tax ?? (priceIncludesTax || (version.content.priceContract === FIXED_PROMOTION_PRICE_CONTRACT && line.priceIncludesTax === true)),
           isMarketPrice: market,
           maximumQuantity: line.promotionId
             ? (livePromotions.get(line.promotionId)?.per_store_limit ?? null)

@@ -52,6 +52,18 @@ it("passes 3417 original transactions and amounts to one RPC with 745 price sele
   expect(mocks.db.mock.calls.filter(([path]) => path.startsWith("rpc/"))).toHaveLength(1);
   expect(mocks.db.mock.calls.at(-1)?.[0]).toBe("rpc/save_purchase_cost_date_batch_v2");
 });
+it.each([0.3, 0.25, 1.5])("forwards source unit price independently of decimal quantity %s", (quantity) => {
+  const unitPrice = 39000;
+  const sheet = buildPurchaseSheet([
+    ["ERP 코드", "품목", "단위", "구매일", "단가", "수량", "공급가액"],
+    ["ERP-1", "합성 채소", "KG", "2026-11-18", unitPrice, quantity, unitPrice * quantity]
+  ]);
+  const line = { ...parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "excluded").lines[0], productId: productId(0) };
+  const row = buildPurchaseDateRows([line], [line.rowNumber], [])[0];
+
+  expect(row).toMatchObject({ quantity, unitPrice, cost: unitPrice, supplyAmount: unitPrice * quantity, priceSelected: true });
+  expect(validPurchaseDateRows([row])).toBe(true);
+});
 it("requires explicit selection or hold for each of 188 conflicting groups", () => {
   const lines = fixture(376, 188).map((line, index) => ({ ...line, cost: index < 188 ? 150 : 220 }));
   expect(() => buildPurchaseDateRows(lines, [], [])).toThrow();

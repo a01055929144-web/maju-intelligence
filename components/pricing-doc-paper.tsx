@@ -4,12 +4,13 @@ import { MoneyInput } from "@/components/money-input";
 import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { CatalogChoice, DocumentContent, PrintLine } from "@/domains/pricing/document";
-import { DEFAULT_DISPLAY, documentDisplayPrice } from "@/domains/pricing/document";
+import { parseDisplay, documentDisplayPrice, documentFooterTypography } from "@/domains/pricing/document";
 import type { DocumentOutput } from "@/domains/pricing/document";
 import { FOLDER_DRAG, PROMO_DRAG } from "./pricing-product-picker";
 import { PageContent } from "./pricing-document-preview";
 import { formatWon } from "@/domains/shared/money";
 import { CompanyIndustryField } from "./company-industry-field";
+import { Button } from "./ui/button";
 
 // CC-30d: 편집 화면에서만 보이는 줄 가격 출처(인쇄·공개 문서에는 안 나옴).
 const SOURCE_LABEL: Record<NonNullable<PrintLine["priceSource"]>, string> = { store: "매장 가격", grade: "카탈로그가", base: "기본가", edited: "문서에서 고침" };
@@ -28,6 +29,7 @@ function EditablePricingDocPaper({
   baselines,
   content,
   editable,
+  footerFormattingEnabled = false,
   onContent,
   onDropProducts,
   onDropPromotions,
@@ -37,13 +39,14 @@ function EditablePricingDocPaper({
   readonly baselines: Record<string, number>;
   readonly content: DocumentContent;
   readonly editable: boolean;
+  readonly footerFormattingEnabled?: boolean;
   readonly onContent: (content: DocumentContent) => void;
   readonly onDropProducts?: (ids: string[]) => void;
   readonly onDropPromotions?: (ids: string[]) => void;
   readonly onQuickAdd?: (item: CatalogChoice) => void;
   readonly onQuickSearch?: (query: string) => Promise<CatalogChoice[]>;
 }) {
-  const display = content.display || DEFAULT_DISPLAY;
+  const display = parseDisplay(content.display);
   const accent = content.theme === "blue" ? "#1d4ed8" : content.theme === "green" ? "#047857" : "#1f2937";
   const indexed = content.lines.map((line, index) => ({ index, line }));
   const promos = indexed.filter(({ line }) => line.promotionId);
@@ -53,8 +56,9 @@ function EditablePricingDocPaper({
   const chunks = Array.from({ length: columns }, (_, i) => regular.slice(i * perColumn, (i + 1) * perColumn)).filter((chunk) => chunk.length);
   const headerInfo = display.info.filter((item) => item.place === "header");
   const footerInfo = display.info.filter((item) => item.place === "footer");
+  const footerType = documentFooterTypography(display);
   const draggedLine = useRef<number | null>(null);
-  const visiblePrice = (line: PrintLine) => documentDisplayPrice(line.price, line.taxType, display.priceIncludesTax);
+  const visiblePrice = (line: PrintLine) => documentDisplayPrice(line.price, line.taxType, display.priceIncludesTax, line.priceIncludesTax);
 
   function updateLine(index: number, patch: Partial<PrintLine>) {
     onContent({ ...content, lines: content.lines.map((line, i) => (i === index ? { ...line, ...patch } : line)) });
@@ -165,7 +169,8 @@ function EditablePricingDocPaper({
                   </td>
                   {content.showPrice ? (
                     <td className="border-l border-slate-100 pl-2 py-1">
-                      <MoneyInput ariaLabel={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} onCommit={(next) => { const value = next ?? 0; updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value, priceSource: "edited" }); }} value={visiblePrice(line)} />
+                      <MoneyInput ariaLabel={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable || line.priceIncludesTax} onCommit={(next) => { const value = next ?? 0; updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value, priceSource: "edited" }); }} value={visiblePrice(line)} />
+                      {line.priceIncludesTax ? <span className="block px-1 text-right text-xs">{line.taxType === "exempt" ? "면세 고정가" : "부가세 포함 고정가"}</span> : null}
                       {editable && line.priceSource ? <span className="block px-1 text-right text-xs text-slate-500 print:hidden" data-price-source={line.priceSource}>{SOURCE_LABEL[line.priceSource]}</span> : null}
                       {display.showTaxType ? <span className="block px-1 text-right text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}
                     </td>
@@ -184,7 +189,14 @@ function EditablePricingDocPaper({
       <style>{`@media screen and (max-width:640px){.pricing-edit-grid{grid-template-columns:minmax(0,1fr)!important}}`}</style>
       <footer className="space-y-1 border-t pt-3 text-xs text-slate-700">
         {footerInfo.length ? <div className="grid grid-cols-2 gap-x-6 gap-y-0.5">{footerInfo.map((item) => <p key={item.key || item.label}>{item.label} · {item.value}</p>)}</div> : null}
-        <textarea aria-label="하단 안내" className="w-full resize-y rounded border border-transparent px-1 py-0.5 hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={400} onChange={(e) => onContent({ ...content, footer: e.target.value })} placeholder="하단에 넣을 문구 (예: 시세 품목은 경매가에 따라 달라질 수 있습니다)" rows={2} value={content.footer} />
+        {footerFormattingEnabled && editable ? <div className="flex flex-wrap items-center gap-2">
+          <label>비고 글자 크기<select aria-label="비고 글자 크기" className="ml-2 min-h-[44px] rounded border border-slate-300 bg-white px-2" onChange={event => {
+            const size = Number(event.target.value);
+            onContent({ ...content, display: { ...display, footerFontSize: size === 12 || size === 14 || size === 16 ? size : undefined } });
+          }} value={display.footerFontSize ?? ""}><option value="">기본</option>{[12, 14, 16].map(size => <option key={size} value={size}>{size}px</option>)}</select></label>
+          <Button aria-pressed={display.footerBold === true} className="min-h-[44px]" onClick={() => onContent({ ...content, display: { ...display, footerBold: !display.footerBold || undefined } })} type="button" variant="outline">굵게</Button>
+        </div> : null}
+        <textarea aria-label="하단 안내" className="w-full resize-y rounded border border-transparent px-1 py-0.5 hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={400} onChange={(e) => onContent({ ...content, footer: e.target.value })} placeholder="하단에 넣을 문구 (예: 시세 품목은 경매가에 따라 달라질 수 있습니다)" rows={2} style={{ fontSize: footerType.fontSize ?? undefined, fontWeight: footerType.bold ? 700 : undefined, lineHeight: footerType.fontSize ? `${footerType.lineHeight}px` : undefined }} value={content.footer} />
       </footer>
     </article>
   );

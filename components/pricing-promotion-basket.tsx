@@ -11,7 +11,7 @@ import { formatWon } from "@/domains/shared/money";
 
 // CC-34-2: 견적서·단가표처럼 "고르고 담기". 왼쪽 상품 고르기(문서와 같은 부품) → 오른쪽 담은 품목 표 → 한 번에 등록.
 // 저장은 품목마다 행사 1건(기존 save-promotion 그대로). 실패한 줄만 남기고 이유를 보여 준다.
-type Line = { id: string; name: string; displayName: string; regular: number; cost: number; price: number; stock: string; taxType: "taxable" | "exempt"; error: string };
+type Line = { id: string; name: string; displayName: string; regular: number; cost: number; price: number; stock: string; taxType: CatalogChoice["taxType"]; error: string };
 const input = "h-9 rounded-md border border-slate-300 bg-white px-2 text-right text-sm";
 const NO_PROMOTIONS: never[] = [];
 
@@ -44,7 +44,7 @@ export function PricingPromotionBasket({ audienceEnabled = false, companyId, kin
     const have = new Set(current.map((l) => l.id));
     return [...current, ...items.filter((i) => !have.has(i.id)).map((i): Line => ({
       id: i.id, name: i.name, displayName: i.displayName || i.name, regular: i.price, cost: i.cost ?? 0, price: i.price, stock: "",
-      taxType: i.taxType === "exempt" ? "exempt" : "taxable", error: "",
+      taxType: i.taxType, error: "",
     }))];
   });
   const patch = (id: string, next: Partial<Line>) => setLines((current) => current.map((l) => (l.id === id ? { ...l, ...next, error: "" } : l)));
@@ -61,6 +61,7 @@ export function PricingPromotionBasket({ audienceEnabled = false, companyId, kin
       const problem = basketLineError({ productId: line.id, cost: line.cost, price: line.price, regular: line.regular });
       if (problem) { remaining.push({ ...line, error: problem }); continue; }
       try {
+        if (line.taxType !== "taxable" && line.taxType !== "exempt") throw new Error("상품관리에서 과세·면세를 확인한 뒤 이 품목을 빼고 다시 담아 주세요.");
         const stock = line.stock.trim() === "" ? null : Number(line.stock);
         if (stock !== null && (!Number.isFinite(stock) || stock < 0)) throw new Error("재고는 0 이상의 숫자로 입력해 주세요.");
         const promotionId = crypto.randomUUID();
@@ -115,7 +116,7 @@ export function PricingPromotionBasket({ audienceEnabled = false, companyId, kin
               <tbody>{lines.map((l) => {
                 const profit = l.cost > 0 ? l.price - l.cost : null;
                 return <tr className={l.error ? "bg-rose-50" : ""} key={l.id}>
-                  <td className="px-3 py-1.5"><span className="font-semibold">{l.displayName}</span>{l.error ? <span className="block text-xs font-bold text-rose-700" role="alert">{l.error}</span> : null}</td>
+                  <td className="px-3 py-1.5"><span className="font-semibold">{l.displayName}</span><span className="block text-xs">{l.taxType === "exempt" ? "면세" : l.taxType === "taxable" ? "과세" : "과세·면세 확인 필요"}</span>{l.error ? <span className="block text-xs font-bold text-rose-700" role="alert">{l.error}</span> : null}</td>
                   <td className="px-2 text-right tabular-nums">{formatWon(l.regular)}</td>
                   <td className="px-2 text-right"><MoneyInput ariaLabel={`${l.displayName} ${kind === "임박" ? "처분가" : "행사가"}`} className={`${input} w-28`} onCommit={(v) => patch(l.id, { price: v ?? 0 })} value={l.price} /></td>
                   <td className="px-2 text-right"><input aria-label={`${l.displayName} 할인 %`} className={`${input} w-20`} inputMode="decimal" key={`d-${l.id}-${l.price}`} defaultValue={discountFromPrice(l.regular, l.price) ?? ""}

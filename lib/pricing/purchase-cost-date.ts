@@ -1,7 +1,7 @@
 import { supabaseRequest } from "../store";
 import type { PurchaseDateRow } from "../../domains/pricing/purchase-cost-date";
 
-export type PurchaseDateBatch = { id: string; status: "completed" | "restored" | "processing"; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number };
+export type PurchaseDateBatch = { id: string; status: "completed" | "restored" | "processing"; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number; sourceFileName?: string; receiptDate?: string };
 export function purchaseDateEnabled(companyId: string) {
   return (process.env.FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
 }
@@ -9,9 +9,9 @@ export function purchaseHistoryOnlyDefaultEnabled(companyId: string) {
   return (process.env.FEATURE_PURCHASE_HISTORY_ONLY_DEFAULT_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
 }
 export async function getPurchaseDateBatch(companyId: string, batchId?: string): Promise<PurchaseDateBatch | null> {
-  const rows = await supabaseRequest<Array<{ id: string; status: PurchaseDateBatch["status"]; recalc_run_id: string | null; row_count: number; history_only_product_count: number }>>(
-    `purchase_cost_date_batches_v2?select=id,status,recalc_run_id,row_count,history_only_product_count&company_id=eq.${encodeURIComponent(companyId)}${batchId ? `&id=eq.${batchId}` : ""}&order=created_at.desc,id.desc&limit=1`);
-  return rows[0] ? { id: rows[0].id, status: rows[0].status, recalcRunId: rows[0].recalc_run_id, rowCount: rows[0].row_count, historyOnlyProductCount: rows[0].history_only_product_count } : null;
+  const rows = await supabaseRequest<Array<{ id: string; status: PurchaseDateBatch["status"]; recalc_run_id: string | null; row_count: number; history_only_product_count: number; source_file_name: string; default_receipt_date: string }>>(
+    `purchase_cost_date_batches_v2?select=id,status,recalc_run_id,row_count,history_only_product_count,source_file_name,default_receipt_date&company_id=eq.${encodeURIComponent(companyId)}${batchId ? `&id=eq.${batchId}` : ""}&order=created_at.desc,id.desc&limit=1`);
+  return rows[0] ? { id: rows[0].id, status: rows[0].status, recalcRunId: rows[0].recalc_run_id, rowCount: rows[0].row_count, historyOnlyProductCount: rows[0].history_only_product_count, sourceFileName: rows[0].source_file_name, receiptDate: rows[0].default_receipt_date } : null;
 }
 export async function undatedPurchasePrices(companyId: string) {
   const result: Array<{ productId: string; cost: number }> = [];
@@ -51,6 +51,7 @@ export function restorePurchaseDateBatch(companyId: string, batchId: string, act
 export function purchaseDateError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("purchase_date_unit_conversion_pending")) return "매입처 단위와 판매 단위의 환산을 먼저 확인해 주세요. 확인 전에는 해당 상품의 가격을 반영하지 않았습니다.";
+  if (message.includes("purchase_receipt_lines_amounts")) return "단가·수량이 음수인 행(반품 등)이 있어 저장하지 못했습니다. 반품 행을 빼고 다시 올려 주세요.";
   if (message.includes("purchase_cost_date_batch_conflict")) return "같은 요청 번호의 내용이 달라졌습니다. 목록과 원본 파일을 다시 확인해 주세요.";
   if (message.includes("changed") || message.includes("latest") || message.includes("restored_separately")) return "기존 가격이나 이후 변경 내역이 달라 처리하지 못했습니다. 화면 전체를 새로고침하고 원본 파일을 다시 올려 현재 가격과 적용일을 확인해 주세요.";
   return "날짜별 매입가 처리가 완료되지 않았습니다. 같은 요청으로 다시 시도하거나 목록을 새로고침해 결과를 확인해 주세요.";

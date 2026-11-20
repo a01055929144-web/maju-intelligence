@@ -40,6 +40,35 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
 const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
 
 for (const width of [1440, 390]) {
+  test(`admin store directory sends signed-out users to login at ${width}px`, async ({ browser }) => {
+    const context = await browser.newContext({ baseURL: "http://127.0.0.1:3100", viewport: { width, height: 844 } });
+    try {
+      const page = await context.newPage();
+      await page.goto("/admin/stores", { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(/\/admin\/login/);
+      expect(await collectLayoutProblems(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test(`admin store directory fits at ${width}px`, async ({ browser }, testInfo) => {
+    const context = await authenticatedContext(browser, "admin", width, 844);
+    try {
+      const page = await context.newPage();
+      const response = await page.goto("/admin/stores", { waitUntil: "domcontentloaded" });
+      expect(response?.ok()).toBeTruthy();
+      await expect(page.getByRole("heading", { name: "매장 관리" })).toBeVisible();
+      await expect(page.getByText("합성 중앙식당", { exact: true }).first()).toBeVisible();
+      expect(await collectLayoutProblems(page)).toEqual([]);
+      await page.screenshot({ path: testInfo.outputPath(`admin-stores-${width}.png`), fullPage: true });
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+for (const width of [1440, 390]) {
   test(`pricing catalog tabs preserve the selected view at ${width}px`, async ({ browser }, testInfo) => {
     const context = await authenticatedContext(browser, "customer", width, 844);
     try {
@@ -141,7 +170,7 @@ for (const width of [1440, 390]) {
       const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
       await expect(review.getByRole("button", { name: "확인한 날짜로 저장", exact: true })).toBeDisabled();
       expect(saved).toHaveLength(0);
-      await review.getByRole("checkbox").check();
+      await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
       await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
       await expect(page.getByText(/매입가 1건 저장/)).toBeVisible();
       expect(saved).toHaveLength(1);
