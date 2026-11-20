@@ -40,7 +40,7 @@ insert into price_fixture values
  ('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',1200,'catalog'),
  ('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000002',1500,'base');
 insert into pricing_documents values ('40000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',repeat('a',64),'sheet',1,
- '{"kind":"sheet","title":"11월 단가표","companyName":"합성 유통","contact":"","recipient":"합성 매장","footer":"","validUntil":"2026-11-20","theme":"blue","layout":"table","showPrice":true,"showBrand":true,"showSpec":true,"lines":[{"productId":"30000000-0000-4000-8000-000000000001","displayName":"양파","brand":"","spec":"1망","unit":"망","price":1000,"taxType":"exempt","visible":true,"promotionId":null,"startsOn":null,"endsOn":null,"remaining":null,"badge":""}]}'::jsonb,now());
+ '{"kind":"sheet","title":"11월 단가표","companyName":"합성 유통","contact":"","recipient":"합성 매장","footer":"","validUntil":"2026-11-20","theme":"blue","layout":"table","showPrice":true,"showBrand":true,"showSpec":true,"lines":[{"productId":"30000000-0000-4000-8000-000000000001","displayName":"양파","brand":"","spec":"1망","unit":"망","price":1000,"taxType":"exempt","visible":true,"promotionId":null,"startsOn":null,"endsOn":null,"remaining":null,"badge":""},{"productId":"30000000-0000-4000-8000-000000000002","displayName":"감자","brand":"","spec":"1박스","unit":"박스","price":1400,"taxType":"taxable","visible":false,"promotionId":null,"startsOn":null,"endsOn":null,"remaining":null,"badge":""}]}'::jsonb,now());
 insert into pricing_document_versions(id,company_id,document_id,version,revision,content) select '50000000-0000-4000-8000-000000000001',company_id,id,1,1,content from pricing_documents;
 insert into pricing_document_share_links values ('60000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001');
 insert into customer_pricing_document_links values ('61000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',true,now());
@@ -49,13 +49,17 @@ insert into store_orders values ('70000000-0000-4000-8000-000000000001','1000000
 do $$ declare r jsonb; saved jsonb; published jsonb; token text:=repeat('b',64); content jsonb;
 begin
   r:=pricing_document_extension_review_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',1,'latest','2026-12-31','start',null,token);
-  if r#>>'{content,lines,0,price}'<>'1200' or r#>>'{lines,0,source}'<>'catalog' or r#>>'{summary,changed}'<>'1' then raise exception 'latest review failed: %',r; end if;
+  if r#>>'{content,lines,0,price}'<>'1200' or r#>>'{lines,0,source}'<>'catalog' or r#>>'{summary,changed}'<>'1'
+    or jsonb_array_length(r#>'{content,lines}')<>2 or r#>>'{content,lines,1,visible}'<>'false' then raise exception 'latest review failed: %',r; end if;
   content:=r->'content';
   saved:=pricing_document_extension_save_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',1,'latest',content);
-  if saved->>'revision'<>'2' then raise exception 'extension save failed'; end if;
+  if saved->>'revision'<>'2' or jsonb_array_length(saved#>'{content,lines}')<>2 then raise exception 'extension save failed'; end if;
   r:=pricing_document_extension_review_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',2,'latest','2026-12-31','review',content,repeat('c',64));
+  if jsonb_array_length(r#>'{content,lines}')<>2 or r#>>'{content,lines,1,visible}'<>'false' then raise exception 'hidden line review failed: %',r; end if;
   published:=pricing_document_extension_publish_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',2,'latest',repeat('c',64),'80000000-0000-4000-8000-000000000001');
-  if published->>'version'<>'2' or resolve_pricing_document_link_head_v1('60000000-0000-4000-8000-000000000001')=(select document_version_id from pricing_document_share_links limit 1) then raise exception 'publish/head failed'; end if;
+  if published->>'version'<>'2' or jsonb_array_length(published#>'{content,lines}')<>2
+    or published#>>'{content,lines,1,visible}'<>'false'
+    or resolve_pricing_document_link_head_v1('60000000-0000-4000-8000-000000000001')=(select document_version_id from pricing_document_share_links limit 1) then raise exception 'publish/head failed'; end if;
   if (select document_version_id from store_orders where id='70000000-0000-4000-8000-000000000001')<>'50000000-0000-4000-8000-000000000001' then raise exception 'past order changed'; end if;
   if (select v.content#>>'{lines,0,price}' from pricing_document_versions v where v.id='50000000-0000-4000-8000-000000000001')<>'1000' then raise exception 'past version changed'; end if;
   if pricing_document_extension_publish_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',2,'latest',repeat('c',64),'80000000-0000-4000-8000-000000000001')->>'id'<>published->>'id' then raise exception 'idempotent replay failed'; end if;

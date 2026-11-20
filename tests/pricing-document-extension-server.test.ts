@@ -8,7 +8,9 @@ const content = {
   validUntil: "2026-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
   customerId: "20000000-0000-4000-8000-000000000001",
   lines: [{ productId: "30000000-0000-4000-8000-000000000001", displayName: "양파", brand: "", spec: "1망", unit: "망",
-    price: 1200, taxType: "exempt", visible: true, promotionId: null, startsOn: null, endsOn: null, remaining: null, badge: "" }],
+    price: 1200, taxType: "exempt", visible: true, promotionId: null, startsOn: null, endsOn: null, remaining: null, badge: "" },
+  { productId: "30000000-0000-4000-8000-000000000002", displayName: "감자", brand: "", spec: "1박스", unit: "박스",
+    price: 1400, taxType: "taxable", visible: false, promotionId: null, startsOn: null, endsOn: null, remaining: null, badge: "" }],
 };
 
 afterEach(() => vi.unstubAllEnvs());
@@ -32,6 +34,8 @@ it("normalizes all four extension actions before the repository boundary", async
     mode: "latest", token: "A".repeat(43), idempotencyKey: "80000000-0000-4000-8000-000000000001" });
   expect(request.mock.calls.map(call => call[1])).toEqual(["extension-review", "extension-catalog", "extension-save", "extension-publish"]);
   expect(request.mock.calls[0][2]).toMatchObject({ stage: "review", mode: "latest", content: { customerId: content.customerId } });
+  expect((request.mock.calls[0][2] as { content: typeof content }).content.lines).toHaveLength(2);
+  expect((request.mock.calls[2][2] as { content: typeof content }).content.lines[1].visible).toBe(false);
 });
 
 it("rejects a missing mode, malformed token and non-UUID retry key before storage", async () => {

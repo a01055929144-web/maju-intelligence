@@ -151,7 +151,10 @@ begin
   select coalesce(default_margin_bp/100.0,0) into threshold from public.pricing_settings where company_id=p_company;
   threshold:=coalesce(threshold,0);
   for line in select value from jsonb_array_elements(candidate->'lines') loop
-    if not coalesce((line->>'visible')::boolean,false) then continue; end if;
+    if not coalesce((line->>'visible')::boolean,false) then
+      new_lines:=new_lines||jsonb_build_array(line);
+      continue;
+    end if;
     key:=line->>'productId'||':'||coalesce(line->>'promotionId','')||':'||coalesce(line->>'unit',''); new_keys:=array_append(new_keys,key);
     select * into product from public.product_catalog where company_id=p_company and id=(line->>'productId')::uuid and is_active;
     if not found then raise exception 'extension_product_unavailable'; end if;
@@ -174,7 +177,7 @@ begin
       line:=jsonb_set(line,'{price}',to_jsonb(candidate_price));
       price_source:=priced.source; promise_until:=(base.content->>'validUntil')::date;
     end if;
-    if p_stage='start' then new_lines:=new_lines||jsonb_build_array(line); else new_lines:=new_lines||jsonb_build_array(line); end if;
+    new_lines:=new_lines||jsonb_build_array(line);
     profit:=case when candidate_price>0 and product.purchase_price is not null then round((candidate_price-product.purchase_price)*100.0/candidate_price,2) end;
     before_profit:=case when before_price>0 and product.purchase_price is not null then round((before_price-product.purchase_price)*100.0/before_price,2) end;
     if profit is not null then minimum_profit:=least(coalesce(minimum_profit,profit),profit); end if;
