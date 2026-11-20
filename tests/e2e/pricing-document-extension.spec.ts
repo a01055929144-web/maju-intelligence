@@ -12,7 +12,7 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
     taxType: "exempt" as const, visible: true, promotionId: null, startsOn: null, endsOn: null, remaining: null, badge: "" as const });
   const original: DocumentContent = { kind: "sheet", title: "합성 연장 문서", companyName: "합성 유통", contact: "", recipient: "", footer: "",
     validUntil: "2099-01-01", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true, lines: [line(1), line(2)] };
-  let content = structuredClone(original), revision = 1, published = false, writes = 0, failReview = true, losePublish = true;
+  let content = structuredClone(original), revision = 1, published = false, writes = 0, failReview = true, losePublish = true, dropHiddenReview = true;
   let lastPublish: unknown;
   const actions: string[] = [];
   const draft = () => ({ id, revision, content, updatedAt: "2026-11-18T00:00:00Z", recalculation: { publishedAt: "2026-11-18T00:00:00Z", needsRecalculation: false, changedProductCount: 0 } });
@@ -38,7 +38,10 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
       const next: DocumentContent = body.stage === "start" ? { ...structuredClone(original), validUntil: body.validUntil,
         lines: original.lines.map(l => ({ ...l, price: mode === "latest" ? 130 : l.price })) } : body.content;
       const old = new Map(original.lines.map(l => [l.productId, l]));
-      result = { documentId: id, revision: body.expected, mode, token: "q".repeat(43), content: { ...next, lines: next.lines.filter(l => l.visible) },
+      // Inject one malformed response to verify fail-closed behavior; the fixed server preserves hidden lines.
+      const reviewContent = body.stage === "review" && dropHiddenReview ? { ...next, lines: next.lines.filter(l => l.visible) } : next;
+      if (body.stage === "review") dropHiddenReview = false;
+      result = { documentId: id, revision: body.expected, mode, token: "q".repeat(43), content: reviewContent,
         summary: { unchanged: next.lines.filter(l => l.visible).filter(l => old.get(l.productId)?.price === l.price).length,
           changed: next.lines.filter(l => l.visible).filter(l => old.has(l.productId) && old.get(l.productId)!.price !== l.price).length,
           added: next.lines.filter(l => l.visible).filter(l => !old.has(l.productId)).length, removed: original.lines.filter(l => !next.lines.some(n => n.visible && n.productId === l.productId)).length },
@@ -94,14 +97,10 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
   await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "문서 변경과 가격 확인 결과가 일치하지 않습니다" })).toBeVisible();
   expect(writes).toBe(0);
-  // The pinned server drops hidden lines during review. Keep the editor content intact and fail closed.
-  await page.getByRole("row").filter({ has: page.getByLabel("품목 1 선택", { exact: true }) }).getByRole("checkbox").last().check();
-  if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }
-  else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
-  await expect(page.getByText("초안을 저장했습니다.", { exact: true })).toBeVisible();
+  // Retry without changing or silently deleting the hidden editor line.
   await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
   const review = page.getByRole("dialog", { name: "연장 게시 확인", exact: true });
-  await expect(review.getByText("그대로 0 · 가격 바뀜 1 · 추가 1 · 삭제 1", { exact: true })).toBeVisible();
+  await expect(review.getByText("그대로 0 · 가격 바뀜 1 · 추가 0 · 삭제 1", { exact: true })).toBeVisible();
   await expect(review.getByText(/직접 수정/)).toBeVisible();
   await expect(review.getByText("가격 출처 기준 판매가 · 기존 약속 종료일 2099-01-01", { exact: true }).first()).toBeVisible();
   await expect(review.getByText(/계산가와 차이 -40원/)).toBeVisible();
@@ -116,6 +115,7 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
   await publish.click();
   await expect(page.getByText(/버전 2 연장 게시 완료/)).toBeVisible();
   expect(writes).toBe(1);
+  expect(content.lines[0].visible).toBe(false);
   expect(actions).toContain("extension-catalog");
   expect(original.lines.map(l => l.price)).toEqual([100, 100]);
 });
