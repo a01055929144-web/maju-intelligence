@@ -5,7 +5,7 @@ const company = "00000000-0000-4000-8000-000000000001";
 for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves server amounts and clears revoked documents at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   const id = "70000000-0000-4000-8000-000000000067";
-  let detailReads = 0, writes = 0, mode = "error";
+  let detailReads = 0, writes = 0, mode = "error", detailsEnabled = true;
   const lines = [
     { id: "line", product_id: "product", promotion_id: null, product_name: "합성 긴 상품명 주문 당시 스냅샷", specification: "2.5kg", sales_unit: "BOX", tax_type: "exempt", quantity: 2.5, unit_price: 1000, total_amount: 1234 },
     { id: "zero", product_id: "free", promotion_id: null, product_name: "합성 무상 품목", specification: "", sales_unit: "EA", quantity: 1, unit_price: 0, total_amount: 0 },
@@ -25,7 +25,7 @@ for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves se
           lines: [{ id: "document-line", name: "합성 실제 출고 품목", quantity: 1.5, unit: "BOX", unitPrice: 1000, lineAmount: 1499 }] } }) } } });
     }
     const expired = body.token === "synthetic-cx67-expired";
-    return route.fulfill({ json: { mobileCommon: true, orderDetailsEnabled: !expired,
+    return route.fulfill({ json: { mobileCommon: true, orderDetailsEnabled: !expired && detailsEnabled,
       store: { title: "합성 CX67", companyName: expired ? "합성 만료 유통" : "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 배송지", version: 1,
         validUntil: "2099-12-31", priceAvailable: !expired, canOrder: !expired, selectedDeliveryDate: "2099-01-05", nextDeliveryDate: "2099-01-05",
         notice: "", marketPriceNotice: "", lines: [], policy: { weekdays: [0,1,2,3,4,5,6], holidays: [], cutoffDaysBefore: 1, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 } },
@@ -58,6 +58,11 @@ for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves se
   mode = "empty"; await detail.getByRole("button", { name: "전표 다시 확인", exact: true }).click();
   await expect(detail).toContainText("주문 품목 정보가 없습니다"); await expect(detail).toContainText("출고 확인 전");
   await expect(detail).toContainText("확인 가능한 확정 전표가 없습니다");
+  detailsEnabled = false;
+  await page.reload();
+  await storeTab(page, "내역").click();
+  await expect(page.locator(`[data-store-order-id="${id}"]`)).toContainText("7,777원");
+  await expect(detail).toHaveCount(0);
   await page.evaluate(() => { window.location.hash = "synthetic-cx67-expired"; });
   await expect(page.getByText("합성 만료 유통 · 합성 매장", { exact: true })).toBeVisible();
   await storeTab(page, "내역").click();

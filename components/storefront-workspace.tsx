@@ -593,10 +593,10 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
           {order.status === "submitted" && order.deliveryDate && store.priceAvailable && store.policy.weekdays.length > 0 &&
             canOrderForDelivery(order.deliveryDate, store.policy) &&
             <button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, true)}>마감 전 수정</button>}</div></td>
-      </tr><tr className="block md:table-row"><td colSpan={5} className="block min-w-0 py-2 md:table-cell">
+      </tr>{data.orderDetailsEnabled === true && <tr className="block md:table-row"><td colSpan={5} className="block min-w-0 py-2 md:table-cell">
         <StorefrontOrderDetail key={`${token}:${order.id}:${order.revision}:${data.orderDetailsEnabled === true}`}
           token={token} order={order} documentReadEnabled={data.orderDetailsEnabled === true} />
-      </td></tr></Fragment>)}</tbody></table>}
+      </td></tr>}</Fragment>)}</tbody></table>}
       {pricesReady && store.priceAvailable && <div className="flex items-center justify-between gap-2 text-sm">
         <button disabled={data?.historyPage === 1 || busy} className="min-h-[44px] rounded border px-3 disabled:opacity-50"
           onClick={() => void load(deliveryDate, (data?.historyPage ?? 1) - 1).catch(() => setMessage("이전 내역을 불러오지 못했습니다."))}>이전</button>
