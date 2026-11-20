@@ -22,6 +22,19 @@ create function pricing_p1_clean(p_company uuid,p_content jsonb) returns jsonb l
 end $$;
 create function pricing_p1_version(p_company uuid,p_version pricing_document_versions) returns jsonb language sql stable set search_path=public,pg_temp as $$
  select jsonb_build_object('id',p_version.id,'documentId',p_version.document_id,'version',p_version.version,'revision',p_version.revision,'content',p_version.content,'publishedAt',p_version.published_at) where p_version.company_id=p_company $$;
+create function pricing_p1(p_company uuid,p_actor text,p_manager boolean,p_action text,p_payload jsonb)
+returns jsonb language plpgsql set search_path=public,pg_temp as $$
+declare d pricing_documents; v pricing_document_versions; next_version integer;
+begin
+  if p_action<>'publish' then raise exception 'unsupported fixture action'; end if;
+  select * into d from pricing_documents where company_id=p_company and id=(p_payload->>'id')::uuid for update;
+  if not found or d.revision<>(p_payload->>'expected')::integer then raise exception 'Stale document'; end if;
+  select coalesce(max(version),0)+1 into next_version from pricing_document_versions
+    where company_id=p_company and document_id=d.id;
+  insert into pricing_document_versions(company_id,document_id,version,revision,content)
+    values(d.company_id,d.id,next_version,d.revision,d.content) returning * into v;
+  return pricing_p1_version(p_company,v);
+end $$;
 create function self_order_price_v2(p_company uuid,p_customer uuid,p_product uuid,p_date date,p_include_promise boolean default true)
 returns table(price bigint,tax_type text,includes_tax boolean,market boolean,source text,promise_until date)
 language sql stable set search_path=public,pg_temp as $$ select f.price,c.tax_type,false,c.order_pricing_mode='market',case when c.order_pricing_mode='market' then 'market' else f.source end,null::date
@@ -54,6 +67,17 @@ begin
   content:=r->'content';
   saved:=pricing_document_extension_save_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',1,'latest',content);
   if saved->>'revision'<>'2' or jsonb_array_length(saved#>'{content,lines}')<>2 then raise exception 'extension save failed'; end if;
+  begin
+    perform pricing_p1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'publish',
+      jsonb_build_object('id','40000000-0000-4000-8000-000000000001','expected',2));
+    raise exception 'ordinary publish bypass accepted';
+  exception when others then
+    if sqlerrm not like '%extension_review_required%' then raise; end if;
+  end;
+  if (select count(*) from pricing_document_versions)<>1
+    or exists(select from pricing_document_extension_publishes) then
+    raise exception 'ordinary publish bypass left records';
+  end if;
   r:=pricing_document_extension_review_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',2,'latest','2026-12-31','review',content,repeat('c',64));
   if jsonb_array_length(r#>'{content,lines}')<>2 or r#>>'{content,lines,1,visible}'<>'false' then raise exception 'hidden line review failed: %',r; end if;
   published:=pricing_document_extension_publish_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',2,'latest',repeat('c',64),'80000000-0000-4000-8000-000000000001');

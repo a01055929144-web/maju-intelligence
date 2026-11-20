@@ -94,6 +94,22 @@ grant select,insert,update,delete on public.pricing_document_extension_states, p
 grant select,insert on public.pricing_document_extension_publishes to service_role;
 grant select,insert,update on public.pricing_document_link_heads, public.pricing_document_share_link_heads to service_role;
 
+-- A saved extension draft must never escape through the ordinary pricing_p1 publish action.
+-- Only the reviewed extension publisher sets the transaction-local, document-scoped bypass.
+create function public.guard_pricing_document_extension_publish_v1()
+returns trigger language plpgsql security definer set search_path='' as $$
+begin
+  if exists(select 1 from public.pricing_document_extension_states state
+      where state.company_id=new.company_id and state.document_id=new.document_id)
+    and current_setting('app.cx121_extension_publish',true) is distinct from
+      new.company_id::text||':'||new.document_id::text
+  then raise exception 'extension_review_required'; end if;
+  return new;
+end $$;
+create trigger guard_pricing_document_extension_publish
+before insert on public.pricing_document_versions
+for each row execute function public.guard_pricing_document_extension_publish_v1();
+
 create function public.pricing_document_extension_price_fingerprint_v1(p_company uuid,p_customer uuid,p_content jsonb)
 returns text language sql stable security definer set search_path='' as $$
   select md5(coalesce(jsonb_agg(jsonb_build_object(
@@ -257,8 +273,10 @@ begin
     or review.price_fingerprint<>public.pricing_document_extension_price_fingerprint_v1(p_company,state.customer_id,d.content)
     then raise exception 'extension_review_stale'; end if;
   select coalesce(max(version),0)+1 into next_version from public.pricing_document_versions where company_id=p_company and document_id=p_document;
+  perform set_config('app.cx121_extension_publish',p_company::text||':'||p_document::text,true);
   insert into public.pricing_document_versions(company_id,document_id,version,revision,content)
     values(p_company,p_document,next_version,p_expected,d.content) returning * into v;
+  perform set_config('app.cx121_extension_publish','',true);
   insert into public.pricing_document_link_heads(company_id,document_id,current_version_id) values(p_company,p_document,v.id)
     on conflict(company_id,document_id) do update set current_version_id=excluded.current_version_id,updated_at=clock_timestamp();
   insert into public.pricing_document_share_link_heads(company_id,share_link_id,document_id)
@@ -281,6 +299,7 @@ returns uuid language sql stable security definer set search_path='' as $$
 $$;
 
 revoke all on function public.pricing_document_extension_price_fingerprint_v1(uuid,uuid,jsonb),
+  public.guard_pricing_document_extension_publish_v1(),
   public.pricing_document_extension_review_v1(uuid,text,boolean,uuid,integer,text,date,text,jsonb,text),
   public.pricing_document_extension_catalog_v1(uuid,text,boolean,uuid,integer,text,uuid[]),
   public.pricing_document_extension_save_v1(uuid,text,boolean,uuid,integer,text,jsonb),
