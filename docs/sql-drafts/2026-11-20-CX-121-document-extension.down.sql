@@ -9,6 +9,8 @@ do $$ begin
     raise exception 'cx121_down_refuses_existing_data';
   end if;
 end $$;
+drop trigger guard_pricing_document_extension_publish on public.pricing_document_versions;
+drop function public.guard_pricing_document_extension_publish_v1();
 drop function public.resolve_pricing_document_link_head_v1(uuid);
 drop function public.pricing_document_extension_publish_v1(uuid,text,boolean,uuid,integer,text,text,uuid);
 drop function public.pricing_document_extension_save_v1(uuid,text,boolean,uuid,integer,text,jsonb);
