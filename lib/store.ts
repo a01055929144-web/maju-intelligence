@@ -52,7 +52,8 @@ import {
   normalizeEmailInput,
   normalizeFaxNumberInput,
   normalizeNaverTalktalkInput,
-  type LeadContactChannel
+  type LeadContactChannel,
+  type LeadContactFilterChannel
 } from "../domains/lead/contact-channels";
 import { displayLeadNextAction, recommendLeadNextAction } from "../domains/lead/next-action";
 export { classifyPermitLeadIndustry } from "../domains/lead/industry-classification";
@@ -10587,8 +10588,10 @@ export type PermitLeadFilters = {
   targetType?: "restaurant" | "distributor";
   grade?: string;
   hasPhone?: boolean;
+  contactChannel?: LeadContactFilterChannel;
   industry?: string;
   limit?: number;
+  offset?: number;
   /** 전체 건수(count=exact) 조회를 건너뛴다. 건수를 안 쓰는 호출(액션 큐)용. */
   skipTotal?: boolean;
   period?: PermitLeadPeriod | "all";
@@ -10599,6 +10602,15 @@ export type PermitLeadFilters = {
   leadId?: string;
   storeAreaRange?: StoreAreaRange;
 };
+
+export function permitLeadContactChannelParams(channel?: PermitLeadFilters["contactChannel"]): string[] {
+  if (channel === "sms") return ["phone=like.010*"];
+  if (channel === "instagram") return ["instagram_url=not.is.null", "instagram_url=neq."];
+  if (channel === "talktalk") return ["naver_talktalk_url=not.is.null", "naver_talktalk_url=neq."];
+  if (channel === "email") return ["email=not.is.null", "email=neq."];
+  if (channel === "fax") return ["fax=not.is.null", "fax=neq."];
+  return [];
+}
 
 type LeadBusinessHourRow = {
   lead_id: string;
@@ -10670,6 +10682,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.grade) params.push(`grade=eq.${encodeURIComponent(filters.grade)}`);
   if (filters.targetType) params.push(`target_type=eq.${filters.targetType}`);
   if (filters.hasPhone) params.push("phone=not.is.null");
+  params.push(...permitLeadContactChannelParams(filters.contactChannel));
   if (process.env.LEAD_STORE_AREA_ENABLED === "true" && filters.storeAreaRange) {
     const bounds = getStoreAreaSqmFilterBounds(filters.storeAreaRange);
     if (bounds.min !== undefined) params.push(`store_area_sqm=gte.${bounds.min}`);
@@ -10690,9 +10703,10 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   // 않았습니다. 데이터 양이 많아져도 화면(테이블 페이지네이션·지도)이 감당하도록 상한을 대폭
   // 올립니다 -- 실제 병목은 이 조회 상한이지, 목록/지도 렌더링 쪽이 아니었습니다.
   const limit = Math.min(5000, filters.limit || 3000);
+  const offset = Math.max(0, filters.offset || 0);
 
   const rows = await supabaseRequest<PermitLeadRow[]>(
-    `business_permit_leads?select=*&${params.join("&")}&order=score_total.desc,permit_date.desc.nullslast&limit=${limit}`
+    `business_permit_leads?select=*&${params.join("&")}&order=score_total.desc,permit_date.desc.nullslast&limit=${limit}&offset=${offset}`
   ).catch(() => []);
 
   let leads = await attachLatestLeadEnrichmentMetadata(companyId, rows.map(toPermitLeadItem));
