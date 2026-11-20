@@ -56,7 +56,6 @@ export default async function DocumentsPage({
           companyId={companyId}
           extensionEnabled={documentExtensionEnabled(companyId)}
           footerFormattingEnabled={documentFooterFormattingEnabled(companyId)}
-
           initialStartKind={entry.initialStartKind}
           leadContext={entry.leadContext}
           sharingEnabled={documentSharingEnabled(companyId)}

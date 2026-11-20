@@ -40,5 +40,8 @@ export async function reviewDocumentExtension(companyId: string, input: {
 export async function publishDocumentExtension(companyId: string, input: {
   id: string; expected: number; mode: ExtensionMode; token: string; idempotencyKey: string;
 }) {
-  return (await documentRequest<DocumentVersion>(companyId, "extension-publish", input, true)).result;
+  const { result } = await documentRequest<DocumentVersion>(companyId, "extension-publish", input, true);
+  if (!result || result.documentId !== input.id || !Number.isSafeInteger(result.version) || result.version < 1)
+    throw new Error("연장 게시본을 확인하지 못했습니다. 같은 요청으로 다시 확인해 주세요.");
+  return result;
 }

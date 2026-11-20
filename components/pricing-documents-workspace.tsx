@@ -67,7 +67,6 @@ export function PricingDocumentsWorkspace({
   extensionEnabled = false,
   footerFormattingEnabled = false,
   vatEnabled = false,
-
 }: {
   companyId: string;
   manager: boolean;
@@ -79,7 +78,6 @@ export function PricingDocumentsWorkspace({
   extensionEnabled?: boolean;
   footerFormattingEnabled?: boolean;
   vatEnabled?: boolean;
-
 }) {
   const { confirm, confirmDialog } = useConfirm();
   const [docs, setDocs] = useState<DocumentDraft[]>([]),
@@ -114,7 +112,6 @@ export function PricingDocumentsWorkspace({
   const [extensionReview, setExtensionReview] = useState<ExtensionReview | null>(null);
   const extensionRetry = useRef<string | null>(null);
   const [taxMismatchCount, setTaxMismatchCount] = useState(0);
-
   /* 11/4: 같은 데이터를 문서(A4 종이)로 보거나 표로 봅니다. 기본은 문서 보기. */
   const [docView, setDocView] = useState<"doc" | "table">("doc"),
     [autoPrint, setAutoPrint] = useState(false),

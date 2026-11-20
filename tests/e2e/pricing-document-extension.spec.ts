@@ -3,7 +3,7 @@ import type { DocumentContent } from "../../domains/pricing/document";
 
 test.use({ actionTimeout: 10000 });
 
-for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const) test(`CX-121 extension journey ${mode} at ${width}px`, async ({ page }, info) => {
+for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const) test(`CX-121 extension journey ${mode} at ${width}px`, async ({ page }) => {
   test.setTimeout(60000);
   await page.setViewportSize({ width, height: 900 });
   const id = "10000000-0000-4000-8000-000000000001";
@@ -33,13 +33,13 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
         lines: original.lines.map(l => ({ ...l, price: mode === "latest" ? 130 : l.price })) } : body.content;
       const old = new Map(original.lines.map(l => [l.productId, l]));
       result = { documentId: id, revision: body.expected, mode, token: "synthetic-server-bound-quote", content: next,
-        summary: { unchanged: next.lines.filter(l => old.get(l.productId)?.price === l.price).length,
+        summary: { unchanged: next.lines.filter(l => l.visible).filter(l => l.visible).filter(l => old.get(l.productId)?.price === l.price).length,
           changed: next.lines.filter(l => old.has(l.productId) && old.get(l.productId)!.price !== l.price).length,
-          added: next.lines.filter(l => !old.has(l.productId)).length, removed: original.lines.filter(l => !next.lines.some(n => n.productId === l.productId)).length },
+          added: next.lines.filter(l => l.visible).filter(l => !old.has(l.productId)).length, removed: original.lines.filter(l => !next.lines.some(n => n.visible && n.productId === l.productId)).length },
         loweredProfitCount: 1, minimumProfitRate: -10,
-        lines: next.lines.map(l => ({ key: `${l.productId}:${l.promotionId}`, name: l.displayName, source: "base", promiseUntil: null,
+        lines: next.lines.filter(l => l.visible).map(l => ({ key: `${l.productId}:${l.promotionId}`, name: l.displayName, source: "base", promiseUntil: original.validUntil,
           before: old.get(l.productId)?.price ?? null, calculated: 130, price: l.price, difference: l.price - 130,
-          profitRate: l.price === 90 ? -10 : 15, belowThreshold: l.price < 130, manual: l.price === 90 })) };
+          profitRate: l.price === 90 ? -10 : 15, belowThreshold: l.price < 130, manual: l.price !== 130 })) };
     }
     if (action === "extension-save") { revision++; content = body.content; result = draft(); }
     if (action === "save" || action === "publish") throw new Error("ordinary write bypassed extension server");
@@ -86,15 +86,16 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
   expect(content.validUntil).toBe("2099-03-01");
   await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
   const review = page.getByRole("dialog", { name: "연장 게시 확인", exact: true });
-  await expect(review.getByText("그대로 0 · 가격 바뀜 1 · 추가 1 · 삭제 1", { exact: true })).toBeVisible();
+  await expect(review.getByText("그대로 0 · 가격 바뀜 1 · 추가 0 · 삭제 1", { exact: true })).toBeVisible();
   await expect(review.getByText(/직접 수정/)).toBeVisible();
+  await expect(review.getByText("가격 출처 기준 판매가 · 기존 약속 종료일 2099-01-01", { exact: true })).toBeVisible();
   await expect(review.getByText(/계산가와 차이 -40원/)).toBeVisible();
   await expect(review.getByText(/기준 미만 경고/)).toBeVisible();
   const publish = review.getByRole("button", { name: "새 약속가로 게시", exact: true });
   await expect(publish).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   expect((await publish.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  await page.screenshot({ path: info.outputPath(`extension-${mode}-${width}.png`), fullPage: true });
+  await page.screenshot({ path: `test-results/readonly-pg17/cx121-ui/extension-${mode}-${width}.png`, fullPage: true });
   await publish.click();
   await expect(publish).toBeEnabled();
   await publish.click();

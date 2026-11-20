@@ -28,10 +28,15 @@ it("rejects another document's server quote before using any price", async () =>
 
 it("retries a failed extension publication with the identical token, revision and key", async () => {
   const fetch = vi.fn().mockResolvedValueOnce(new Response("gateway", { status: 502 }))
-    .mockResolvedValueOnce(Response.json({ result: { version: 2 } }));
+    .mockResolvedValueOnce(Response.json({ result: { documentId: "document", version: 2 } }));
   vi.stubGlobal("fetch", fetch);
   const input = { id: "document", expected: 2, mode: "keep" as const, token: "server-bound-token", idempotencyKey: "same-key" };
   await expect(publishDocumentExtension("company", input)).rejects.toThrow("같은 요청");
   await expect(publishDocumentExtension("company", input)).resolves.toMatchObject({ version: 2 });
   expect(fetch.mock.calls[0]).toEqual(fetch.mock.calls[1]);
+});
+
+it("rejects a publication result for another document", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ result: { documentId: "other", version: 2 } })));
+  await expect(publishDocumentExtension("company", { id: "document", expected: 2, mode: "keep", token: "token", idempotencyKey: "same-key" })).rejects.toThrow("게시본");
 });

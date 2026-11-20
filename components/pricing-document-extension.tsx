@@ -35,6 +35,7 @@ export function PricingDocumentExtensionReport({ review }: { review: ExtensionRe
     <p role="status">이익 낮아진 품목 {review.loweredProfitCount}개 · 최저 이익률 {review.minimumProfitRate === null ? "확인 필요" : `${review.minimumProfitRate}%`}. 경고는 게시를 막지 않습니다.</p>
     <ul className="space-y-2">{review.lines.map(line => <li key={line.key} className="break-words rounded border p-3 text-sm">
       <p>{line.name} · {line.manual ? "직접 수정" : "계산가"}</p>
+      <p>가격 출처 {{ catalog: "카탈로그 가격", base: "기준 판매가", promotion: "행사가" }[line.source]} · 기존 약속 종료일 {line.promiseUntil ?? "확인 필요"}</p>
       <p>기존 {line.before ?? "추가"} → 단가 {line.price}원 · 계산가 {line.calculated}원 · 계산가와 차이 {line.difference}원</p>
       <p>이익률 {line.profitRate === null ? "확인 필요" : `${line.profitRate}%`}{line.belowThreshold ? " · 기준 미만 경고" : ""}</p>
     </li>)}</ul>
