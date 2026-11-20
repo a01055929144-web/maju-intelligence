@@ -26,6 +26,9 @@ AGENTS.md 0-0-2에 따라 개발을 멈추지 않으려고 임시로 넣은 항�
 
 | `DATA_GO_KR_SERVICE_KEY` · `NAVER_SEARCHAD_API_KEY` · `NAVER_SEARCHAD_SECRET` · `NAVER_SEARCHAD_CUSTOMER_ID` | Vercel Production (Sensitive) | 2026-11-02 22:46 · 대표 직접 | 공공데이터포털 마이페이지 · 네이버 검색광고 › 도구 › API 사용 관리에서 재발급 → Vercel 값 수정 | 재배포 |
 
+| `FEATURE_ADMIN_STORE_MANAGEMENT_COMPANY_IDS` · `FEATURE_STORE_PRICE_SEARCH_COMPANY_IDS` · `FEATURE_PRICE_EXPLANATION_COMPANY_IDS` · `STORE_ORDER_CUTOFF_GUIDANCE_COMPANY_IDS` | Vercel Production | 2026-11-18 21:01 KST · Codex, 대표 회사만 지정 | Vercel › Settings › Environment Variables에서 허용 회사 목록 수정 | Production 재배포 후 관리자 매장 읽기·매장 단가 검색·가격 우선순위 설명·주문 마감 안내 확인 |
+| `STORE_ORDER_CUTOFF_GUIDANCE_ENABLED` | Vercel Production | 2026-11-18 21:01 KST · Codex | 같은 곳에서 전역 안내 스위치 수정 | Production 재배포 후 대표 회사의 주문 마감 안내 확인 |
+
 ## 대표 확인 (개발은 기본값으로 진행 중)
 
 | 항목 | 지금 쓰는 기본값 | 상태 |
