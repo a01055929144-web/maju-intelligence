@@ -323,10 +323,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     !historicalPrice(id)).length;
   const unitConversionHolds = useMemo(() => {
     const salesUnits = new Map(unique.map(product => [product.id, product.unit]));
-    return importedLines.filter(line => line.productId && dateSelectedRows.includes(line.rowNumber) && line.unit.trim() && salesUnits.get(line.productId)?.trim()
+    return importedLines.filter(line => updateCurrentPrices && line.productId && selected.includes(line.productId) && dateSelectedRows.includes(line.rowNumber) && line.unit.trim() && salesUnits.get(line.productId)?.trim()
       && line.unit.trim().toLocaleLowerCase("ko") !== salesUnits.get(line.productId)!.trim().toLocaleLowerCase("ko"))
       .map(line => ({ rowNumber: line.rowNumber, productId: line.productId!, name: line.rawName, purchaseUnit: line.unit, salesUnit: salesUnits.get(line.productId!)! }));
-  }, [dateSelectedRows, importedLines, unique]);
+  }, [dateSelectedRows, importedLines, selected, unique, updateCurrentPrices]);
   const unitConversionHoldProducts = new Set(unitConversionHolds.map(row => row.productId));
   const effectivePriceChangeCount = selected.filter(id => !unitConversionHoldProducts.has(id) && candidates[id]
     && candidates[id].cost !== unique.find(product => product.id === id)?.cost && !historicalPrice(id)).length;

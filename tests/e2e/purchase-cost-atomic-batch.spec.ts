@@ -798,6 +798,7 @@ for (const mode of ["이력만 저장", "현재 매입가 변경"] as const) tes
   await expect(review.getByRole("cell", { name: "합성 상품", exact: true }).first()).toBeVisible();
   await review.getByLabel("2행 단위", { exact: true }).fill("BOX");
   await expect(review.getByLabel("2행 단위", { exact: true })).toHaveValue("BOX");
+  if (mode === "이력만 저장") await expect(review.getByText(/환산 검증 대기/)).toHaveCount(0);
   await page.getByRole("button", { name: /^③ 저장/ }).click();
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
