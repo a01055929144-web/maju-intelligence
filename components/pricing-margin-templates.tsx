@@ -19,6 +19,7 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
   const searchParams = useSearchParams();
   const { confirm, confirmDialog } = useConfirm();
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [defaultStoreCount, setDefaultStoreCount] = useState(0);
   const [selected, setSelected] = useState<string>(""); // "" = 기본(회사 마진 규칙 그대로), "new" = 만드는 중
   const [draft, setDraft] = useState<Template | null>(null);
   const [busy, setBusy] = useState(false);
@@ -31,9 +32,10 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
     const response = await fetch(payload ? "/api/margin-templates" : `/api/margin-templates?${new URLSearchParams({ companyId })}`, payload ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, ...payload }) } : { cache: "no-store" });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.message || "처리하지 못했습니다.");
-    return body as { id?: string; templates: Template[] };
+    return body as { id?: string; defaultStoreCount: number; templates: Template[] };
   }, [companyId]);
-  useEffect(() => { void call().then((b) => setTemplates(b.templates)).catch((e) => setError(e instanceof Error ? e.message : "불러오지 못했습니다.")); }, [call]);
+  const applyList = useCallback((result: { defaultStoreCount: number; templates: Template[] }) => { setTemplates(result.templates); setDefaultStoreCount(result.defaultStoreCount ?? 0); }, []);
+  useEffect(() => { void call().then(applyList).catch((e) => setError(e instanceof Error ? e.message : "불러오지 못했습니다.")); }, [applyList, call]);
 
   const current = templates.find((t) => t.id === selected) ?? null;
   useEffect(() => { setDraft(current ? { ...current, categories: current.categories.map((c) => ({ ...c })) } : null); }, [current]);
@@ -45,7 +47,7 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
     try {
       const categories = state.categories.flatMap((link) => { const group = state.groups.find((g) => g.id === link.groupId); return group ? [{ category: link.category, margin: group.margin }] : []; });
       const result = await call({ action: "save", name: newName.trim(), margin: state.defaultMargin, rounding: state.defaultRounding, categories });
-      setTemplates(result.templates); setSelected(result.id || ""); setAdding(false); setNewName(""); setMessage("카탈로그를 만들었습니다. 아래에서 분류 마진을 고쳐 보세요.");
+      applyList(result); setSelected(result.id || ""); setAdding(false); setNewName(""); setMessage("카탈로그를 만들었습니다. 아래에서 분류 마진을 고쳐 보세요.");
     } catch (e) { setError(e instanceof Error ? e.message : "만들지 못했습니다."); }
     finally { setBusy(false); }
   }
@@ -54,14 +56,14 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
     setBusy(true); setError(""); setMessage("");
     try {
       const result = await call({ action: "save", ...(draft.id ? { id: draft.id } : {}), name: draft.name, margin: draft.margin, rounding: draft.rounding, categories: draft.categories });
-      setTemplates(result.templates); setSelected(result.id || ""); setMessage("카탈로그를 저장했습니다.");
+      applyList(result); setSelected(result.id || ""); setMessage("카탈로그를 저장했습니다.");
     } catch (e) { setError(e instanceof Error ? e.message : "저장하지 못했습니다."); }
     finally { setBusy(false); }
   }
   async function archive() {
     if (!current || !(await confirm({ title: "카탈로그 보관", body: `"${current.name}" 카탈로그를 보관할까요? 이 카탈로그를 쓰는 매장가 있으면 보관되지 않습니다.`, confirmLabel: "보관", tone: "default" }))) return;
     setBusy(true); setError(""); setMessage("");
-    try { const result = await call({ action: "archive", id: current.id }); setTemplates(result.templates); setSelected(""); setMessage("카탈로그를 보관했습니다."); }
+    try { const result = await call({ action: "archive", id: current.id }); applyList(result); setSelected(""); setMessage("카탈로그를 보관했습니다."); }
     catch (e) { setError(e instanceof Error ? e.message : "보관하지 못했습니다."); }
     finally { setBusy(false); }
   }
@@ -87,13 +89,14 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
     {view === "table" ? <div className="overflow-x-auto rounded-lg border border-slate-200"><table className="w-full text-sm">
       <thead className="bg-slate-50 text-xs font-black text-slate-600"><tr><th className="px-3 py-2 text-left">카탈로그</th><th className="px-2 py-2 text-right">기본 마진</th><th className="px-2 py-2 text-right">품목</th><th className="px-2 py-2 text-right">매장</th><th className="px-2 py-2 text-right">기본 대비</th></tr></thead>
       <tbody>
-        <tr className={`cursor-pointer border-t ${selected === "" ? "bg-teal-50" : ""}`} onClick={() => setSelected("")}><td className="px-3 py-2 font-bold">기본 카탈로그 <span className="ml-1 rounded bg-teal-700 px-1.5 py-0.5 text-[11px] text-white">기본</span></td><td className="px-2 text-right">{state.defaultMargin}%</td><td className="px-2 text-right">{state.items.length.toLocaleString("ko-KR")}</td><td className="px-2 text-right">-</td><td className="px-2 text-right">-</td></tr>
+        <tr className={`cursor-pointer border-t ${selected === "" ? "bg-teal-50" : ""}`} onClick={() => setSelected("")}><td className="px-3 py-2 font-bold">기본 카탈로그 <span className="ml-1 rounded bg-teal-700 px-1.5 py-0.5 text-[11px] text-white">기본</span></td><td className="px-2 text-right">{state.defaultMargin}%</td><td className="px-2 text-right">{state.items.length.toLocaleString("ko-KR")}</td><td className="px-2 text-right">{defaultStoreCount.toLocaleString("ko-KR")}</td><td className="px-2 text-right">-</td></tr>
         {shown.map((tp) => <tr aria-selected={selected === tp.id} className={`cursor-pointer border-t ${selected === tp.id ? "bg-teal-50" : ""}`} key={tp.id} onClick={() => setSelected(tp.id)}><td className="px-3 py-2 font-bold">{tp.name}</td><td className="px-2 text-right">{tp.margin}%</td><td className="px-2 text-right">{state.items.length.toLocaleString("ko-KR")}</td><td className="px-2 text-right">{(tp.storeCount ?? 0).toLocaleString("ko-KR")}</td><td className="px-2 text-right tabular-nums">{avgLabel(tp.id)}</td></tr>)}
       </tbody></table></div> : null}
     <div className={`grid gap-2 sm:grid-cols-2 xl:grid-cols-4 ${view === "table" ? "hidden" : ""}`} role="group" aria-label="카탈로그 선택">
       <button aria-pressed={selected === ""} className={`rounded-xl border p-3 text-left ${selected === "" ? "border-teal-700 bg-teal-50 ring-1 ring-teal-700" : "border-slate-200 hover:bg-slate-50"}`} onClick={() => setSelected("")} type="button">
         <span className="flex items-center gap-2"><b className="text-sm">기본 카탈로그</b><span className="rounded bg-teal-700 px-1.5 py-0.5 text-[11px] font-bold text-white">기본</span></span>
-        <span className="mt-1 block text-xs text-slate-500">품목 {state.items.length.toLocaleString("ko-KR")}개 · 지정하지 않은 매장이 씁니다</span>
+        <span className="mt-1 block text-xs text-slate-500">품목 {state.items.length.toLocaleString("ko-KR")}개 · 매장 {defaultStoreCount.toLocaleString("ko-KR")}곳</span>
+        <span className="mt-1 block text-xs font-semibold text-teal-800">새 매장은 항상 기본 카탈로그로 시작합니다.</span>
       </button>
       {shown.map((t) => <div className={`rounded-xl border p-3 ${selected === t.id ? "border-teal-700 bg-teal-50 ring-1 ring-teal-700" : "border-slate-200"}`} key={t.id}>
         <button aria-pressed={selected === t.id} className="w-full text-left" onClick={() => setSelected(t.id)} type="button">
