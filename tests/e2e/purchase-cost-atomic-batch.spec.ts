@@ -827,6 +827,22 @@ test("현재가 충돌 선택 뒤 같은 상품으로 다시 매칭되는 단위
   expect(dateWrites[0].rows.find(row => row.selectedSourceRowNumber === 3)).toMatchObject({ priceSelected: true, unitPrice: 220 });
 });
 
+for (const width of [1440, 390]) test(`단위 환산 검증 대기 행은 현재가만 보류하고 원본 이력을 저장한다 at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const { dateWrites } = await purchaseUpload(page, { historyOnlyDefault: true });
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,BOX,2026-11-01,150\n");
+  await page.getByRole("radio", { name: "현재 매입가 변경", exact: true }).check();
+  await page.getByRole("button", { name: /^② 열 정렬/ }).click();
+  const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+  await expect(review.getByRole("status")).toContainText("원본 2행 · 합성 상품 · 매입 BOX → 판매 봉 · 환산 검증 대기(현재가 보류)");
+  await page.getByRole("button", { name: /^③ 저장/ }).click();
+  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
+  await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
+  await expect.poll(() => dateWrites.length).toBe(1);
+  expect(dateWrites[0].rows).toMatchObject([{ selectedSourceRowNumber: 2, unit: "BOX", priceSelected: false, priceHeld: true }]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("이번 업로드 초기화 뒤 같은 파일을 다시 골라도 단위 선택이 남지 않는다 at 390px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await purchaseUpload(page, { blankUnit: true, historyOnlyDefault: true });

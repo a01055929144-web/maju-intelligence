@@ -43,6 +43,15 @@ export function buildPurchaseDateRows(lines: readonly DatedPurchaseLine[], selec
   return rows;
 }
 
+/** Keeps every receipt row but prevents a purchase-unit price from becoming a sales-unit current price. */
+export function holdUnitMismatchedPrices(rows: readonly PurchaseDateRow[], salesUnits: ReadonlyMap<string, string>) {
+  return rows.map(row => {
+    const salesUnit = (salesUnits.get(row.productId) || "").trim().toLocaleLowerCase("ko");
+    if (!row.priceSelected || !row.unit.trim() || !salesUnit || row.unit.trim().toLocaleLowerCase("ko") === salesUnit) return row;
+    return { ...row, priceSelected: false, priceHeld: true, replaceUndatedCurrent: undefined, expectedPurchasePrice: undefined };
+  });
+}
+
 export function validPurchaseDateRows(value: unknown): value is PurchaseDateRow[] {
   if (!Array.isArray(value) || !value.length || value.length > 5000) return false;
   const sourceRows = new Set<number>();
