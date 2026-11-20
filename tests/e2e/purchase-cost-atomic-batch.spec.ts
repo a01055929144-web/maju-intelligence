@@ -63,8 +63,8 @@ for (const width of [1280, 390]) test(`atomic purchase cost save and restore rem
 // Date UI contracts use only synthetic catalog/receipt/batch responses, never an operating DB.
 async function purchaseUpload(page: Page, options: { count?: number; currentDate?: string; supported?: boolean; multipleSuppliers?: boolean; linkedSupplierConflict?: boolean; newProducts?: boolean; failFirstSave?: boolean; failFirstLink?: boolean; unresolvedMapping?: boolean; undatedCurrent?: boolean; loseFirstResponse?: boolean; failFirstSaveThenReload?: boolean; newerLatestBatch?: boolean; mixed?: boolean; historyOnlyDefault?: boolean; blankUnit?: boolean } = {}) {
   const companyId = "00000000-0000-4000-8000-000000000001";
-  const products = Array.from({ length: options.mixed ? 5 : options.count || 1 }, (_, index) => ({ id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-    code: `ERP-${index + 1}`, name: index ? `합성 상품 ${index + 1}` : "합성 상품", spec: options.mixed ? ["1kg", "500g", "2kg", "1kg", "750ml"][index] : "1kg", unit: options.blankUnit ? "" : options.mixed ? ["봉", "EA", "BOX", "봉", "병"][index] : "봉", cost: 100, priceDate: options.undatedCurrent ? undefined : options.currentDate || "2026-11-05" })).flatMap(product => options.multipleSuppliers ? [
+  const products = Array.from({ length: options.mixed ? 5 : options.linkedSupplierConflict ? 2 : options.count || 1 }, (_, index) => ({ id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    code: options.linkedSupplierConflict ? `ERP-${index ? "B" : "A"}` : `ERP-${index + 1}`, name: options.linkedSupplierConflict ? "합성 상품" : index ? `합성 상품 ${index + 1}` : "합성 상품", spec: options.mixed ? ["1kg", "500g", "2kg", "1kg", "750ml"][index] : "1kg", unit: options.blankUnit ? "" : options.mixed ? ["봉", "EA", "BOX", "봉", "병"][index] : "봉", cost: 100, priceDate: options.undatedCurrent ? undefined : options.currentDate || "2026-11-05" })).flatMap(product => options.multipleSuppliers ? [
       { ...product, supplierName: "A매입처", supplierProductId: "40000000-0000-4000-8000-000000000001", supplierRawCost: 100 },
       { ...product, supplierName: "B매입처", supplierProductId: "40000000-0000-4000-8000-000000000002", supplierRawCost: 100 }
     ] : [product]);
@@ -84,10 +84,9 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
       return route.fulfill({ json: { status: "applied", batchId: "30000000-0000-4000-8000-000000000001" } });
     }
     const visibleProducts = !registration.standards && options.newProducts ? [] : !registration.standards && options.mixed ? products.slice(0, 4) : products;
-    const linkedProducts = options.linkedSupplierConflict ? visibleProducts.flatMap(product => [
-      { ...product, supplierName: "A매입처", supplierProductId: "40000000-0000-4000-8000-000000000001", supplierRawCost: 100 },
-      { ...product, supplierName: "B매입처", supplierProductId: "40000000-0000-4000-8000-000000000002", supplierRawCost: 100 }
-    ]) : visibleProducts.map(product => ({ ...product, supplierName: "합성 매입처", supplierProductId: "40000000-0000-4000-8000-000000000001" }));
+    const linkedProducts = options.linkedSupplierConflict ? visibleProducts.map((product, index) => ({ ...product, id: visibleProducts[0].id,
+      supplierName: index ? "B매입처" : "A매입처", supplierProductId: `40000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`, supplierRawCost: 100
+    })) : visibleProducts.map(product => ({ ...product, supplierName: "합성 매입처", supplierProductId: "40000000-0000-4000-8000-000000000001" }));
     return route.fulfill({ json: { products: linkSaved ? linkedProducts : visibleProducts, changes: [], suppliers: [], batchEnabled: true, purchaseDateEnabled: options.supported !== false, latestBatch: null } });
   });
   let dateBatch: { id: string; status: string; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number; sourceFileName?: string; receiptDate?: string } | null = null;
@@ -175,7 +174,7 @@ async function selectPurchaseCsv(page: Page, text: string) {
 for (const width of [1440, 390]) test(`supplier links reveal current-price choices without dropping purchase history at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   const { writes, receipts, dateWrites } = await purchaseUpload(page, { historyOnlyDefault: true, linkedSupplierConflict: true });
-  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,매입처,구매일,단가\nERP-1,합성 상품,1kg,봉,A매입처,2026-11-19,6000\nERP-1,합성 상품,1kg,봉,B매입처,2026-11-19,5800\n");
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,매입처,구매일,단가\nERP-A,합성 상품,1kg,봉,A매입처,2026-11-19,6000\nERP-B,합성 상품,1kg,봉,B매입처,2026-11-19,5800\n");
   const align = page.getByRole("button", { name: /^② 열 정렬/ });
   await expect(align).toBeEnabled();
   await align.click();
@@ -620,7 +619,7 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   await expect(productRow("합성 상품 5").getByRole("cell", { name: "90원", exact: true })).toBeVisible();
   await nav.getByRole("button", { name: "매입 이력", exact: true }).click();
   const history = page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]");
-  await expect(history).toContainText("직전 업로드 묶음 · 2026-11-18 · 합성-구매일.csv · 원본 6행 · 저장 완료");
+  await expect(history).toContainText(`직전 업로드 묶음 · ${dateWrites[1].receiptDate} · 합성-구매일.csv · 원본 6행 · 저장 완료`);
   await expect(history.getByRole("button", { name: "합성 상품 2", exact: true })).toBeVisible();
   await expect(history).toContainText("500g · EA"); await expect(history).toContainText("2kg · BOX");
   await page.reload();
