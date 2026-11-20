@@ -823,7 +823,8 @@ test("현재가 충돌 선택 뒤 같은 상품으로 다시 매칭되는 단위
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows).toHaveLength(2);
-  expect(dateWrites[0].rows.find(row => row.selectedSourceRowNumber === 2)).toMatchObject({ unit: "BOX", priceSelected: true, unitPrice: 150 });
+  expect(dateWrites[0].rows.find(row => row.selectedSourceRowNumber === 2)).toMatchObject({ unit: "BOX", priceSelected: false, unitPrice: 150 });
+  expect(dateWrites[0].rows.find(row => row.selectedSourceRowNumber === 3)).toMatchObject({ priceSelected: true, unitPrice: 220 });
 });
 
 test("이번 업로드 초기화 뒤 같은 파일을 다시 골라도 단위 선택이 남지 않는다 at 390px", async ({ page }) => {
