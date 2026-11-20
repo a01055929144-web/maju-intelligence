@@ -1,5 +1,5 @@
 import { supabaseRequest } from "../store";
-import { holdUnitMismatchedPrices, type PurchaseDateRow } from "../../domains/pricing/purchase-cost-date";
+import { holdFuturePrices, holdUnitMismatchedPrices, type PurchaseDateRow } from "../../domains/pricing/purchase-cost-date";
 
 export type PurchaseDateBatch = { id: string; status: "completed" | "restored" | "processing"; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number; sourceFileName?: string; receiptDate?: string };
 export function purchaseDateEnabled(companyId: string) {
@@ -36,7 +36,8 @@ export async function savePurchaseDateBatch(companyId: string, batchId: string, 
       if (!product.sales_unit && Number(product.purchase_to_sales_ratio) > 1) unconfirmedPacks.add(product.id);
     });
   }
-  const safeRows = holdUnitMismatchedPrices(rows, units).map(row => unconfirmedPacks.has(row.productId) && row.priceSelected
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+  const safeRows = holdFuturePrices(holdUnitMismatchedPrices(rows, units), today).map(row => unconfirmedPacks.has(row.productId) && row.priceSelected
     ? { ...row, priceSelected: false, priceHeld: true, replaceUndatedCurrent: undefined, expectedPurchasePrice: undefined }
     : row);
   const result = await supabaseRequest<{ batchId: string; recalcRunId: string | null; status: "completed" | "restored"; rowCount: number; historyOnlyProductCount: number }>("rpc/save_purchase_cost_date_batch_v2", {

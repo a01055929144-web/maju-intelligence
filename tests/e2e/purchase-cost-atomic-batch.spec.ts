@@ -102,7 +102,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
         const chosen = group.find(row => row.priceDate === latest && row.priceSelected);
         return !chosen || (options.currentDate && latest < options.currentDate) || (options.undatedCurrent && !chosen.replaceUndatedCurrent);
       }).length;
-      if (options.mixed || options.blankUnit) {
+      if (options.mixed || options.blankUnit || options.newProducts) {
         if (body.action === "save") {
           beforePrices = structuredClone(products);
           for (const [id, group] of Array.from(groups)) {
@@ -131,7 +131,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
   });
   await page.route("**/api/price-sheets/receipts*", route => {
     if (route.request().method() === "POST") receipts.push(route.request().postDataJSON());
-    if ((options.mixed || options.blankUnit) && route.request().method() === "GET") {
+    if ((options.mixed || options.blankUnit || options.newProducts) && route.request().method() === "GET") {
       const params = new URL(route.request().url()).searchParams;
       const rows = params.has("productId") ? historyRows.filter(row => row.product_catalog_id === params.get("productId")) : historyRows;
       return route.fulfill({ json: params.has("summary") ? { summary: summarizePurchaseHistory(rows) } : { rows, hasMore: false, canCorrect: true } });
@@ -225,6 +225,45 @@ for (const width of [1440, 390]) test(`supplier links reveal current-price choic
   expect(dateWrites[0].rows.filter(row => row.priceSelected)).toMatchObject([{ unitPrice: 5800, supplierName: "B매입처" }]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(writes).toHaveLength(0); expect(receipts).toHaveLength(0);
+});
+
+for (const width of [1440, 390]) test(`new-product price choice stays visible through registration and preserves every source row at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const { dateWrites, registration } = await purchaseUpload(page, { historyOnlyDefault: true, newProducts: true, failFirstSave: width === 390 });
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,매입처,구매일,단가\nNEW-1,신규 합성 상품,1kg,봉,합성 매입처,2099-11-20,150\nNEW-1,신규 합성 상품,1kg,봉,합성 매입처,2099-11-20,220\n");
+  const choice = page.getByLabel("신규 합성 상품 2099-11-20 적용 단가", { exact: true });
+  await choice.selectOption(width === 390 ? "hold" : "3");
+  await page.getByRole("button", { name: /^② 열 정렬/ }).click();
+
+  const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+  const result = review.getByRole("region", { name: "현재 매입가 선택 결과" });
+  await expect(result).toContainText("원본 행은 모두 이력에 저장");
+  await expect(result).toContainText(width === 390 ? "이번 현재가 반영 보류" : "현재가로 선택: 원본 3행");
+  await expect(result).toContainText("원본 2행 150원 · 원본 3행 220원");
+  const futureHold = review.getByRole("status").filter({ hasText: "미래 적용일 현재가 보류" });
+  if (width === 1440) await expect(futureHold).toContainText("원본 이력은 저장하지만 적용일이 오기 전에는 현재 매입가를 바꾸지 않습니다");
+  else await expect(futureHold).toHaveCount(0);
+  if (width === 1440) await page.getByLabel("1행 과세", { exact: true }).selectOption("taxable");
+  await page.getByRole("button", { name: /^③ 저장/ }).click();
+  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
+  await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
+
+  if (width === 390) {
+    await expect(page.getByRole("alert").filter({ hasText: "이 표시는 상품 연결 상태이며 매입 이력 저장 완료를 뜻하지 않습니다" })).toBeVisible();
+    expect(registration.standards).toBe(1);
+    expect(dateWrites).toHaveLength(1);
+    await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
+    await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
+  }
+  await expect.poll(() => dateWrites.length).toBe(width === 390 ? 2 : 1);
+  expect(registration.standards).toBe(1);
+  const savedRows = dateWrites.at(-1)!.rows;
+  expect(savedRows.map(row => [row.selectedSourceRowNumber, row.unitPrice])).toEqual([[2, 150], [3, 220]]);
+  expect(savedRows.filter(row => row.priceSelected)).toHaveLength(0);
+  expect(savedRows.filter(row => row.priceHeld).map(row => row.selectedSourceRowNumber)).toEqual([width === 390 ? 2 : 3]);
+  await page.getByRole("button", { name: "매입 이력", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]")).toContainText("신규 합성 상품");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 for (const width of [1440, 390]) test(`ERP 353-row headers preserve dates and suppliers before current-price choice at ${width}px`, async ({ page }) => {

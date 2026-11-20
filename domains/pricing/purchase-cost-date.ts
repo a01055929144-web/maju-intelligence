@@ -52,6 +52,14 @@ export function holdUnitMismatchedPrices(rows: readonly PurchaseDateRow[], sales
   });
 }
 
+/** Future receipt rows remain history, but cannot become the current price before their effective day. */
+export function holdFuturePrices(rows: readonly PurchaseDateRow[], today: string) {
+  if (!validDate(today)) throw new Error("현재 날짜를 확인해 주세요.");
+  return rows.map(row => row.priceSelected && row.priceDate > today
+    ? { ...row, priceSelected: false, priceHeld: true, replaceUndatedCurrent: undefined, expectedPurchasePrice: undefined }
+    : row);
+}
+
 export function validPurchaseDateRows(value: unknown): value is PurchaseDateRow[] {
   if (!Array.isArray(value) || !value.length || value.length > 5000) return false;
   const sourceRows = new Set<number>();
