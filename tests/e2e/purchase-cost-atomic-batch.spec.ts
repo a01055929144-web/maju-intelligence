@@ -831,7 +831,7 @@ test("현재가 충돌 선택 뒤 같은 상품으로 다시 매칭되는 단위
 for (const width of [1440, 390]) test(`단위 환산 검증 대기 행은 현재가만 보류하고 원본 이력을 저장한다 at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   const { dateWrites } = await purchaseUpload(page, { historyOnlyDefault: true });
-  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,BOX,2026-11-01,150\n");
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,BOX,2026-11-07,150\n");
   await page.getByRole("radio", { name: "현재 매입가 변경", exact: true }).check();
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
