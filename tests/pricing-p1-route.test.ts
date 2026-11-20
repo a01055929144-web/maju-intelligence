@@ -42,6 +42,7 @@ it.each([
   ["Promotion not enabled for sheets", "P0001", 400, "promotion_sheet_disabled", "단가표 표시"],
   ["Product not found in company", "P0001", 400, "product_unavailable", "비활성"],
   ["Invalid printable line", "P0001", 400, "invalid_document_line", "과세"],
+  ["extension_review_required", "P0001", 409, "extension_review_required", "최신 가격"],
   ["column does not exist", "42703", 503, "document_storage_failed", "서버 저장 오류"],
   ["Stale document", "23505", 503, "document_storage_failed", "서버 저장 오류"],
   ["toString", "P0001", 503, "document_storage_failed", "서버 저장 오류"],

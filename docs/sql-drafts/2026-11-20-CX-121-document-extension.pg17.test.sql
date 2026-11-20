@@ -54,6 +54,20 @@ begin
   content:=r->'content';
   saved:=pricing_document_extension_save_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',1,'latest',content);
   if saved->>'revision'<>'2' or jsonb_array_length(saved#>'{content,lines}')<>2 then raise exception 'extension save failed'; end if;
+  begin
+    insert into pricing_document_versions(company_id,document_id,version,revision,content)
+      select document.company_id,document.id,2,document.revision,document.content
+      from pricing_documents document
+      where document.company_id='10000000-0000-4000-8000-000000000001'
+        and document.id='40000000-0000-4000-8000-000000000001';
+    raise exception 'ordinary publish bypass accepted';
+  exception when others then
+    if sqlerrm not like '%extension_review_required%' then raise; end if;
+  end;
+  if (select count(*) from pricing_document_versions)<>1
+    or exists(select from pricing_document_extension_publishes) then
+    raise exception 'ordinary publish bypass left records';
+  end if;
   r:=pricing_document_extension_review_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',2,'latest','2026-12-31','review',content,repeat('c',64));
   if jsonb_array_length(r#>'{content,lines}')<>2 or r#>>'{content,lines,1,visible}'<>'false' then raise exception 'hidden line review failed: %',r; end if;
   published:=pricing_document_extension_publish_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,'40000000-0000-4000-8000-000000000001',2,'latest',repeat('c',64),'80000000-0000-4000-8000-000000000001');

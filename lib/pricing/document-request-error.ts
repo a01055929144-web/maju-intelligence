@@ -36,6 +36,7 @@ export function documentRequestError(error: unknown, write: boolean) {
     "extension_stale": [409, "extension_conflict", "다른 화면에서 문서가 변경됐습니다. 문서를 다시 열고 연장을 처음부터 확인해 주세요."],
     "extension_state_stale": [409, "extension_conflict", "연장 기준이 변경됐습니다. 문서를 다시 열고 연장을 처음부터 확인해 주세요."],
     "extension_review_stale": [409, "extension_review_stale", "게시 전 확인 결과가 오래됐습니다. 최신 가격과 문서를 다시 확인해 주세요."],
+    "extension_review_required": [409, "extension_review_required", "연장 초안은 게시 전 최신 가격과 문서를 다시 확인해 주세요."],
     "extension_idempotency_conflict": [409, "extension_idempotency_conflict", "같은 재시도 키에 다른 게시 내용이 있습니다. 기존 게시 결과를 확인해 주세요."],
     "extension_not_found": [404, "document_not_found", "문서를 찾을 수 없거나 접근할 수 없습니다. 문서 목록을 확인해 주세요."],
     "extension_expiry_invalid": [400, "extension_expiry_invalid", "새 유효기간은 최신 게시본보다 뒤로 선택해 주세요."],
