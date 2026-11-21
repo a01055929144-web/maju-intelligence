@@ -1,4 +1,5 @@
 import { supabaseRequest as request } from "./store";
+import { categoryPaths, UNMAPPED_COMMON_CATEGORY } from "@/domains/product/common-category-mapping";
 
 type Row = Record<string, unknown>;
 const enc = encodeURIComponent;
@@ -23,14 +24,18 @@ export function scoreCategoryMatch(
 
 export async function listCategoryMatches(companyId: string) {
   const [categories, majuCategories, companies] = await Promise.all([
-    request<Row[]>(`product_categories?select=id,name,level,maju_category_id&company_id=eq.${enc(companyId)}&is_active=eq.true&order=sort_order,name`),
-    request<Row[]>("maju_categories?select=id,name,industry_keys&is_active=eq.true&order=sort_order,name"),
+    request<Row[]>(`product_categories?select=id,parent_id,name,level,maju_category_id&company_id=eq.${enc(companyId)}&is_active=eq.true&order=level,sort_order,name`),
+    request<Row[]>("maju_categories?select=id,parent_id,name,industry_keys&is_active=eq.true&order=sort_order,name"),
     request<Row[]>(`companies?select=business_type&id=eq.${enc(companyId)}&limit=1`),
   ]);
   const businessType = String(companies[0]?.business_type || "");
+  const companyNodes = categories.map((row) => ({ id: String(row.id), name: String(row.name), parentId: String(row.parent_id || ""), level: Number(row.level) }));
+  const commonNodes = majuCategories.map((row) => ({ id: String(row.id), name: String(row.name), parentId: String(row.parent_id || ""), level: 0 }));
+  const companyPaths = categoryPaths(companyNodes);
+  const commonPaths = categoryPaths(commonNodes);
   const options = majuCategories.map((row) => ({
     id: String(row.id),
-    name: String(row.name),
+    name: commonPaths.get(String(row.id)) || String(row.name),
     industryKeys: Array.isArray(row.industry_keys) ? row.industry_keys.map(String) : [],
   }));
   return {
@@ -44,18 +49,20 @@ export async function listCategoryMatches(companyId: string) {
         id: String(row.id),
         level: Number(row.level),
         name: String(row.name),
+        path: companyPaths.get(String(row.id)) || String(row.name),
         majuCategoryId: row.maju_category_id ? String(row.maju_category_id) : "",
+        commonCategoryName: row.maju_category_id ? commonPaths.get(String(row.maju_category_id)) || UNMAPPED_COMMON_CATEGORY : UNMAPPED_COMMON_CATEGORY,
         suggestion: ranked[0] || null,
       };
     }),
   };
 }
 
-export async function saveCategoryMatch(companyId: string, categoryId: string, majuCategoryId: string) {
+export async function saveCategoryMatch(companyId: string, categoryId: string, majuCategoryId: string | null) {
   const rows = await request<Row[]>(
     `product_categories?select=id,maju_category_id&company_id=eq.${enc(companyId)}&id=eq.${enc(categoryId)}`,
     { method: "PATCH", body: JSON.stringify({ maju_category_id: majuCategoryId }) },
   );
   if (!rows[0]) throw new Error("회사 구분을 찾을 수 없습니다.");
-  return { id: String(rows[0].id), majuCategoryId: String(rows[0].maju_category_id) };
+  return { id: String(rows[0].id), majuCategoryId: rows[0].maju_category_id ? String(rows[0].maju_category_id) : "" };
 }
