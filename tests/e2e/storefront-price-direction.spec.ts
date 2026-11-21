@@ -63,7 +63,11 @@ for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves se
   await storeTab(page, "내역").click();
   await expect(page.locator(`[data-store-order-id="${id}"]`)).toContainText("7,777원");
   await expect(detail).toHaveCount(0);
-  await page.evaluate(() => { window.location.hash = "synthetic-cx67-expired"; });
+  await Promise.all([
+    page.waitForResponse(response => response.url().endsWith("/api/storefront") &&
+      response.request().postDataJSON()?.token === "synthetic-cx67-expired"),
+    page.evaluate(() => { window.location.hash = "synthetic-cx67-expired"; }),
+  ]);
   await expect(page.getByText("합성 만료 유통 · 합성 매장", { exact: true })).toBeVisible();
   await storeTab(page, "내역").click();
   await expect(page.getByText("문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다.", { exact: false })).toBeVisible();

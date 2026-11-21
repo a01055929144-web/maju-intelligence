@@ -79,6 +79,7 @@ export function ProductCatalogWorkspace({
   companyId = "",
   importAuditV2Enabled = false,
   importTargetsEnabled = false,
+  inventoryHistoryEnabled = false,
   customerItemsEnabled = false,
   rowEditorEnabled = false,
   initialTab = "catalog",
@@ -89,6 +90,7 @@ export function ProductCatalogWorkspace({
   companyId?: string;
   importAuditV2Enabled?: boolean;
   importTargetsEnabled?: boolean;
+  inventoryHistoryEnabled?: boolean;
   customerItemsEnabled?: boolean;
   rowEditorEnabled?: boolean;
   initialTab?: Tab;
@@ -286,6 +288,7 @@ export function ProductCatalogWorkspace({
           categoriesEnabled={categoriesEnabled}
           canManageCategories={canManageCategories}
           companyId={companyId}
+          inventoryHistoryEnabled={inventoryHistoryEnabled}
           settingsKey={tableSettingsKey}
         />
       ) : tab === "categories" ? (

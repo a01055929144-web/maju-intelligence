@@ -5,7 +5,7 @@ import { StoreSettlementAccountCard } from "./store-settlement-account-card";
 
 type Document = StorePortalAccount["documents"][number];
 
-export function StoreReceivedDocuments({ account, industry, today, cutoff, cartHref, industryHref, documentHref }: {
+export function StoreReceivedDocuments({ account, industry, today, cutoff, cartHref, industryHref, documentHref, orderHref }: {
   account: StorePortalAccount;
   industry?: string;
   today: string;
@@ -13,6 +13,7 @@ export function StoreReceivedDocuments({ account, industry, today, cutoff, cartH
   cartHref?: string;
   industryHref: (industry?: string) => string;
   documentHref: (document: Document) => string;
+  orderHref: (document: Document) => string;
 }) {
   const industryOf = (document: Document) => document.industry || account.businessType;
   const industries = Array.from(new Set(account.documents.map(industryOf).filter((value): value is string => Boolean(value))));
@@ -46,10 +47,12 @@ export function StoreReceivedDocuments({ account, industry, today, cutoff, cartH
                         {document.itemCount === undefined ? "" : ` · ${document.itemCount}개 품목`}
                       </p>
                     </div>
-                    <Link className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm font-medium text-teal-800"
-                      href={documentHref(document)}>
-                      {expired ? "품목 보기" : document.canOrder ? "보고 주문" : "문서 보기"}
-                    </Link>
+                    <div className="flex flex-wrap gap-2">
+                      <Link className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm font-medium text-teal-800"
+                        href={documentHref(document)}>문서 보기</Link>
+                      {!expired && document.canOrder && <Link className="maju-button-primary inline-flex min-h-11 items-center px-3 text-sm"
+                        href={orderHref(document)}>보고 주문</Link>}
+                    </div>
                   </div>
                 </li>
               );
@@ -61,6 +64,7 @@ export function StoreReceivedDocuments({ account, industry, today, cutoff, cartH
         <StoreSettlementAccountCard account={account.settlementAccount} compact />
         <div className="space-y-1">
           <h3 className="font-semibold">다음 주문 마감</h3>
+          {account.companyName && <p className="text-sm font-medium text-slate-900">{account.companyName}</p>}
           <p className="text-sm tabular-nums text-slate-700">{cutoff ?? "확인 가능한 마감이 없습니다."}</p>
         </div>
         {cartHref && <Link className="flex min-h-11 items-center rounded-lg border px-3 text-sm font-medium" href={cartHref}>장바구니 열기</Link>}

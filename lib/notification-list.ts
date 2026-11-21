@@ -37,7 +37,12 @@ export const STORE_PROFILE_FIELD_LABELS: Readonly<Record<string, string>> = {
   addressDetail: "상세 주소",
   accessNote: "출입 안내",
   deliveryContactPhone: "배송 연락처",
-  preferredDeliveryTime: "희망 배송 시간"
+  preferredDeliveryTime: "희망 배송 시간",
+  businessName: "사업자 상호",
+  subBusinessNumber: "종사업장 번호",
+  businessEntityType: "사업자 유형",
+  taxInvoiceEmail: "계산서 이메일",
+  receiveMethod: "받는 방법"
 };
 
 export type NotificationDiffRow = { readonly key: string; readonly label: string; readonly before: string; readonly after: string };
