@@ -11,6 +11,7 @@ import { StoreOrderReceiptAction } from "./store-order-receipt-action";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { StoreOrderHistory } from "./store-order-history";
 import { EmptyState, ErrorState } from "./ui/state";
+import { StoreSettlementAccountCard } from "./store-settlement-account-card";
 
 const date = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium" });
 const dateTime = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
@@ -63,8 +64,9 @@ export function StoreMemberViews({ account, deliveryPhotosEnabled = false, docum
             <Card>
               <CardHeader><CardTitle>최근 주문</CardTitle></CardHeader>
               <CardContent>
+                {!historyDetails ? <StoreSettlementAccountCard account={account.settlementAccount} compact /> : null}
                 {historyError ? <ErrorState bare message="주문 내역을 불러오지 못했습니다." /> : orders.length ? historyDetails ? (
-                  <StoreOrderHistory companyId={account.companyId} deliveryPhotosEnabled={deliveryPhotosEnabled} orders={orders} reorderHref={orderDocuments[0]?.href.replace("/store#", "/store?view=history#")} storeAccountId={account.storeAccountId} />
+                  <StoreOrderHistory companyId={account.companyId} deliveryPhotosEnabled={deliveryPhotosEnabled} orders={orders} reorderHref={orderDocuments[0]?.href.replace("/store#", "/store?view=history#")} settlementAccount={account.settlementAccount} storeAccountId={account.storeAccountId} />
                 ) : (
                   <ul className="divide-y">
                     {orders.map(order => (

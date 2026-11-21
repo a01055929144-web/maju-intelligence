@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { storeDirectSignupEnabled } from "@/lib/store/11-store-direct-signup";
 import { StoreDirectSignup } from "./store-direct-signup";
 import { StoreInformationPanel } from "./store-information-panel";
+import { StoreSettlementAccountCard } from "./store-settlement-account-card";
 
 export function StorePortal({ accounts, error = false, fixture, loginEnabled, view = "home", memberView = false, documentHref }: { accounts: StorePortalAccount[] | null; error?: boolean; fixture?: string; loginEnabled: boolean; view?: string; memberView?: boolean; documentHref?: (document: StorePortalAccount["documents"][number]) => string }) {
   const directSignup = storeDirectSignupEnabled() || Boolean(fixture); // fixture는 CI 전용(page.tsx가 CI 픽스처 모드에서만 넘긴다)
@@ -20,6 +21,7 @@ export function StorePortal({ accounts, error = false, fixture, loginEnabled, vi
       const scope = new URLSearchParams({ companyId: account.companyId, storeAccountId: account.storeAccountId });
       if (view === "info") return <StoreInformationPanel key={`${account.companyId}:${account.storeAccountId}`} {...account} />;
       return <Card key={`${account.companyId}:${account.storeAccountId}`}><CardHeader><CardTitle>{account.customerName}</CardTitle></CardHeader><CardContent className="space-y-4">
+        <StoreSettlementAccountCard account={account.settlementAccount} />
         <div className="flex flex-wrap gap-2">
           {account.hasCostAccess && <Link className="maju-button-primary inline-flex min-h-[44px] items-center justify-center px-4" href={memberView ? `/store?view=data&${scope}` : `/store?${scope}`}>원가관리</Link>}
           {account.canManageAddress && <Link className="inline-flex min-h-[44px] items-center rounded-lg border px-4" href={memberView ? `/store?view=info&${scope}#store-address-management` : `/store?${scope}#store-address-management`}>배송지 주소</Link>}

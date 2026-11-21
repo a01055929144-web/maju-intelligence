@@ -89,6 +89,7 @@ export default async function StorePage({ searchParams }: {
     storeAccountId: `20000000-0000-4000-8000-00000000000${index + 1}`,
     ...(fixture === "s4-documents" ? { businessType: "농산", companyName: "합성 유통", catalogHref: "/store?view=order#synthetic-catalog" } : {}),
     customerName: index === 0 ? "합성 가 매장" : "합성 나 매장",
+    settlementAccount: { bank: "합성은행", number: "123-456-7890", holder: "합성 유통" },
     hasCostAccess: index === 0, canManageMembers: index === 0,
     canManageAddress: false,
     documents: fixture === "cx63-price-search" ? [
