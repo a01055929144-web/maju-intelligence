@@ -3,6 +3,57 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { publicDocumentOutput } from "../../domains/pricing/document-share";
 import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
 
+for (const width of [1440, 390]) test(`saved consent uses real API contract snapshots on public documents at ${width}px`, async ({ page }, info) => {
+  const flow = JSON.parse(await readFile("test-results/readonly-pg17/public-inquiry-api/flow.json", "utf8")) as {
+    publicUrl: string; savedOff: { kit: Record<string, unknown> }; savedOn: { kit: Record<string, unknown> };
+    savedWithdrawal: { kit: Record<string, unknown> }; defaultOff: unknown; enabled: unknown; withdrawn: unknown;
+    priceExpired: unknown; expired: unknown; revoked: unknown;
+  };
+  await page.setViewportSize({ width, height: 900 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  let saved = flow.savedOff, publicBody = flow.defaultOff, publicStatus = 200, saves = 0;
+  await page.route(/\/api\/sales-kit(?:\?|$)/, route => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON();
+      expect(body.contactPhone).toBe("01000000000"); expect(body.contactLabel).toBe("합성 공개 문의");
+      expect(body.publicContactEnabled).toBe(saves === 0);
+      saved = body.publicContactEnabled ? flow.savedOn : flow.savedWithdrawal;
+      publicBody = body.publicContactEnabled ? flow.enabled : flow.withdrawn; saves++;
+      return route.fulfill({ json: saved });
+    }
+    return route.fulfill({ json: { canEdit: true, fallbackPhone: "01099999999", kit: saved.kit } });
+  });
+  await page.route("**/api/pricing-documents/public", route => {
+    expect(route.request().postDataJSON()).toEqual({ token: flow.publicUrl.split("#")[1] });
+    return route.fulfill({ status: publicStatus, json: publicBody });
+  });
+  await page.goto(flow.publicUrl);
+  const call = page.getByRole("link", { name: "발행 회사에 전화 문의", exact: true });
+  await expect(page.getByRole("region", { name: "발행 회사 문의" })).toContainText("공개 문의 연락처가 등록되지 않았습니다");
+  await expect(call).toHaveCount(0);
+  await page.goto("/dashboard/settings/sales");
+  const consent = page.getByRole("checkbox", { name: "공개 문서에 문의 연락처 표시" });
+  await expect(consent).not.toBeChecked(); await consent.check();
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(page.getByText("저장했습니다. 리드 상세의 보낼 문구 아래에 바로 반영됩니다.")).toBeVisible();
+  await page.goto(flow.publicUrl); await expect(call).toHaveAttribute("href", "tel:01000000000");
+  await expect(page.locator("body")).not.toContainText("01099999999");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+  await page.screenshot({ path: info.outputPath(`saved-public-inquiry-${width}.png`), fullPage: true });
+  publicBody = flow.priceExpired; await page.reload(); await expect(call).toBeVisible();
+  await expect(page.getByRole("button", { name: "주문 기간 종료" })).toBeDisabled();
+  await page.goto("/dashboard/settings/sales"); await expect(consent).toBeChecked(); await consent.uncheck();
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(page.getByText("저장했습니다. 리드 상세의 보낼 문구 아래에 바로 반영됩니다.")).toBeVisible();
+  await page.goto(flow.publicUrl); await expect(call).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "발행 회사 문의" })).toContainText("공개 문의 연락처가 등록되지 않았습니다");
+  publicStatus = 404; publicBody = flow.expired; await page.reload();
+  await expect(page.getByRole("region", { name: "발행 회사 문의" })).toHaveCount(0);
+  publicBody = flow.revoked; await page.reload();
+  await expect(page.getByRole("status")).toContainText("공유 문서를 사용할 수 없습니다"); await expect(call).toHaveCount(0);
+  expect(saves).toBe(2);
+});
+
 for (const width of [1440, 390]) test(`public inquiry requires explicit contact and survives only a readable link at ${width}px`, async ({ page }, info) => {
   await page.setViewportSize({ width, height: 900 });
   await page.clock.install({ time: new Date("2026-11-21T00:00:00Z") });
