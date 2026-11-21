@@ -28,6 +28,8 @@ export async function savePurchaseDateBatch(companyId: string, batchId: string, 
   const ids = Array.from(new Set(rows.map(row => row.productId)));
   const units = new Map<string, string>();
   const unconfirmedPacks = new Set<string>();
+  const confirmedSupplierProducts = new Set<string>();
+  const confirmedProductUnits = new Set<string>();
   for (let offset = 0; offset < ids.length; offset += 100) {
     const products = await supabaseRequest<Array<{ id: string; sales_unit: string | null; purchase_to_sales_ratio?: number | null }>>(
       `product_catalog?select=id,sales_unit,purchase_to_sales_ratio&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${ids.slice(offset, offset + 100).join(",")})`);
@@ -36,8 +38,27 @@ export async function savePurchaseDateBatch(companyId: string, batchId: string, 
       if (!product.sales_unit && Number(product.purchase_to_sales_ratio) > 1) unconfirmedPacks.add(product.id);
     });
   }
+  const unitReviewRows = rows.filter(row => row.priceSelected && (!row.unit.trim() || !units.get(row.productId)
+    || row.unit.trim().toLocaleLowerCase("ko") !== units.get(row.productId)));
+  const supplierProductIds = Array.from(new Set(unitReviewRows.flatMap(row => row.supplierProductId ? [row.supplierProductId] : [])));
+  for (let offset = 0; offset < supplierProductIds.length; offset += 100) {
+    const matches = await supabaseRequest<Array<{ product_catalog_id: string; supplier_product_id: string; purchase_to_sales_ratio: number | null; conversion_confirmed: boolean }>>(
+      `supplier_product_matches?select=product_catalog_id,supplier_product_id,purchase_to_sales_ratio,conversion_confirmed&company_id=eq.${encodeURIComponent(companyId)}&supplier_product_id=in.(${supplierProductIds.slice(offset, offset + 100).join(",")})&match_status=eq.confirmed`);
+    matches.forEach(match => {
+      if (match.conversion_confirmed && Number(match.purchase_to_sales_ratio) > 0) confirmedSupplierProducts.add(`${match.product_catalog_id}|${match.supplier_product_id}`);
+    });
+  }
+  const conversionProductIds = Array.from(new Set(unitReviewRows.filter(row => row.unit.trim()).map(row => row.productId)));
+  for (let offset = 0; offset < conversionProductIds.length; offset += 100) {
+    const conversions = await supabaseRequest<Array<{ product_catalog_id: string; unit_name: string; base_quantity: number; is_confirmed: boolean }>>(
+      `product_unit_conversions?select=product_catalog_id,unit_name,base_quantity,is_confirmed&company_id=eq.${encodeURIComponent(companyId)}&product_catalog_id=in.(${conversionProductIds.slice(offset, offset + 100).join(",")})&is_confirmed=eq.true`);
+    conversions.forEach(conversion => {
+      const unit = conversion.unit_name.trim().toLocaleLowerCase("ko");
+      if (unit && Number(conversion.base_quantity) > 0) confirmedProductUnits.add(`${conversion.product_catalog_id}|${unit}`);
+    });
+  }
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-  const safeRows = holdFuturePrices(holdUnitMismatchedPrices(rows, units), today).map(row => unconfirmedPacks.has(row.productId) && row.priceSelected
+  const safeRows = holdFuturePrices(holdUnitMismatchedPrices(rows, units, confirmedSupplierProducts, confirmedProductUnits), today).map(row => unconfirmedPacks.has(row.productId) && row.priceSelected
     ? { ...row, priceSelected: false, priceHeld: true, replaceUndatedCurrent: undefined, expectedPurchasePrice: undefined }
     : row);
   const result = await supabaseRequest<{ batchId: string; recalcRunId: string | null; status: "completed" | "restored"; rowCount: number; historyOnlyProductCount: number }>("rpc/save_purchase_cost_date_batch_v2", {

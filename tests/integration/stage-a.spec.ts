@@ -130,18 +130,18 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
     const started=Date.now();
     await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
-    await expect(page.getByRole('region',{name:'매입가 저장 결과',exact:true})).toContainText(`현재 매입가 변경 ${745-scenario.held}품목 / 이력만 ${scenario.held}품목`);
+    await expect(page.getByRole('region',{name:'매입가 저장 결과',exact:true})).toContainText('현재 매입가 변경 557품목 / 이력만 188품목');
     expect(writes).toHaveLength(2); expect(writes[1]).toEqual(writes[0]);
     const saved=state();
     expect(saved.products_count).toBe(745); expect(saved.receipts).toBe(3417); expect(saved.batches).toBe(1);
-    expect(saved.batch).toMatchObject({id:writes[0].id,status:'completed',row_count:3417,history_only_product_count:scenario.held});
+    expect(saved.batch).toMatchObject({id:writes[0].id,status:'completed',row_count:3417,history_only_product_count:188});
     expect(saved.batch!.recalc_run_id).toBeTruthy();
     expect(JSON.parse(db('verify-source',undefined,file.rows))).toMatchObject({verifiedOriginalRows:3417,allRawValuesAndAmountsPreserved:true});
     expect(saved.items).toHaveLength(745);
     expect(new Set(saved.items.map(item=>item.code)).size).toBe(745);
     for(let i=0;i<745;i++) {
       const product=saved.items.find(item=>item.code===code(i))!; expect(product).toBeTruthy();
-      const held=i<scenario.held, cost=held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing);
+      const held=i<188, cost=held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing);
       expect(Number(product.cost)).toBe(cost); expect(Number(product.price)).toBe(Math.ceil(cost*1.2/10)*10);
       expect(product.date).toBe(held?(i<scenario.existing?priorDate:null):date);
       // A known source unit must survive standard-product creation and be visible after reload.
@@ -162,7 +162,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
         const label=name(i,scenario.existing);
         await page.getByRole('searchbox',{name:'품목 검색',exact:true}).fill(saved.items.find(item=>item.code===code(i))!.catalog_code);
         const row=page.getByRole('textbox',{name:`${label} 품목명`,exact:true}).locator('xpath=ancestor::tr[1]');
-        const cost=restored?(i<scenario.existing?100:0):(i<scenario.held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing));
+        const cost=restored?(i<scenario.existing?100:0):(i<188?(i<scenario.existing?100:0):chosenCost(i,scenario.existing));
         await expect(row.getByRole('cell',{name:`${cost}원`,exact:true}).first()).toBeVisible();
         const effectiveDate=restored?(i<scenario.existing?priorDate:null):saved.items.find(item=>item.code===code(i))!.date;
         const headers=await row.locator('xpath=ancestor::table[1]').getByRole('columnheader').allTextContents();
@@ -284,4 +284,16 @@ test('real dated multipack receipt saves while current price stays held until co
   expect(result.status()).toBe(200);
   const current=state(); expect(current.products_count).toBe(1); expect(current.unpriced).toBe(1);
   expect(current.items[0].sales_unit).toBeNull(); expect(current.receipts).toBe(1); expect(current.batches).toBe(1);
+});
+
+test('confirmed product unit conversion allows the selected current price on PG17', async ({page})=>{
+  db('seed',1); db('confirm-unit');
+  expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:process.env.STAGE_A_OWNER_PASSWORD!}})).status()).toBe(200);
+  const result=await page.request.post('/api/price-sheets/costs/date-batches',{data:{action:'save',companyId:company,batchId:randomUUID(),receiptDate:date,fileName:'confirmed-unit.xlsx',rows:[{
+    productId:'20000000-0000-4000-8000-000000000001',priceDate:date,cost:250,selectedSourceRowNumber:2,priceSelected:true,priceHeld:false,
+    lineKey:'confirmed-unit',productName:'합성 기존 품목 1',spec:'1kg',unit:'BOX',supplierName:'',erpCode:'ERP-0001',unitPrice:250,priceIncludesVat:false,rawValues:['synthetic']
+  }]}});
+  expect(result.status()).toBe(200);
+  const current=state(); expect(current.receipts).toBe(1); expect(current.batch).toMatchObject({history_only_product_count:0});
+  expect(Number(current.items[0].cost)).toBe(250);
 });

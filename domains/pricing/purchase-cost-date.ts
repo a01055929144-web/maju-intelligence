@@ -43,11 +43,19 @@ export function buildPurchaseDateRows(lines: readonly DatedPurchaseLine[], selec
   return rows;
 }
 
-/** Keeps every receipt row but prevents a purchase-unit price from becoming a sales-unit current price. */
-export function holdUnitMismatchedPrices(rows: readonly PurchaseDateRow[], salesUnits: ReadonlyMap<string, string>) {
+/** Keeps every receipt row but holds current price until units match or a conversion contract is confirmed. */
+export function holdUnitMismatchedPrices(
+  rows: readonly PurchaseDateRow[],
+  salesUnits: ReadonlyMap<string, string>,
+  confirmedSupplierProducts: ReadonlySet<string> = new Set(),
+  confirmedProductUnits: ReadonlySet<string> = new Set()
+) {
   return rows.map(row => {
     const salesUnit = (salesUnits.get(row.productId) || "").trim().toLocaleLowerCase("ko");
-    if (!row.priceSelected || !row.unit.trim() || !salesUnit || row.unit.trim().toLocaleLowerCase("ko") === salesUnit) return row;
+    const purchaseUnit = row.unit.trim().toLocaleLowerCase("ko");
+    const conversionConfirmed = Boolean(row.supplierProductId && confirmedSupplierProducts.has(`${row.productId}|${row.supplierProductId}`))
+      || Boolean(purchaseUnit && confirmedProductUnits.has(`${row.productId}|${purchaseUnit}`));
+    if (!row.priceSelected || purchaseUnit && salesUnit && (purchaseUnit === salesUnit || conversionConfirmed)) return row;
     return { ...row, priceSelected: false, priceHeld: true, replaceUndatedCurrent: undefined, expectedPurchasePrice: undefined };
   });
 }

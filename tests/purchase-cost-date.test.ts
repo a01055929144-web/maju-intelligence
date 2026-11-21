@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { buildPurchaseSheet, parsePurchaseLines, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
-import { buildPurchaseDateRows, holdFuturePrices, validPurchaseDateRows } from "../domains/pricing/purchase-cost-date";
+import { buildPurchaseDateRows, holdFuturePrices, holdUnitMismatchedPrices, validPurchaseDateRows } from "../domains/pricing/purchase-cost-date";
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), db: vi.fn(), manage: vi.fn(), feature: vi.fn(), legacy: vi.fn(), legacySave: vi.fn(), legacyRestore: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getRequestAuthScope: mocks.auth }));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
@@ -68,6 +68,14 @@ it("keeps future effective rows as history without promoting the selected price 
   const rows = buildPurchaseDateRows(fixture(1, 1).map(line => ({ ...line, purchaseDate: "2099-11-20" })), [2], []);
   expect(holdFuturePrices(rows, "2026-11-21")).toMatchObject([{ priceDate: "2099-11-20", priceSelected: false, priceHeld: true }]);
 });
+it("holds blank and unverified units but accepts confirmed conversion contracts", () => {
+  const [row] = buildPurchaseDateRows(fixture(1, 1), [2], []);
+  const salesUnits = new Map([[row.productId, "BOX"]]);
+  expect(holdUnitMismatchedPrices([{ ...row, unit: "" }], salesUnits)[0]).toMatchObject({ priceSelected: false, priceHeld: true });
+  expect(holdUnitMismatchedPrices([row], salesUnits)[0]).toMatchObject({ priceSelected: false, priceHeld: true });
+  expect(holdUnitMismatchedPrices([{ ...row, supplierProductId: "supplier" }], salesUnits, new Set([`${row.productId}|supplier`]))[0]).toMatchObject({ priceSelected: true, priceHeld: false });
+  expect(holdUnitMismatchedPrices([row], salesUnits, new Set(), new Set([`${row.productId}|봉`]))[0]).toMatchObject({ priceSelected: true, priceHeld: false });
+});
 it("requires explicit selection or hold for each of 188 conflicting groups", () => {
   const lines = fixture(376, 188).map((line, index) => ({ ...line, cost: index < 188 ? 150 : 220 }));
   expect(() => buildPurchaseDateRows(lines, [], [])).toThrow();
@@ -111,10 +119,39 @@ it("rejects wrong company, staff, cross-origin and malformed rows before DB acce
 });
 it("holds only the mismatched-unit current price and preserves the receipt in the atomic write", async () => {
   vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
-  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: "BOX" }]).mockResolvedValueOnce({ batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 1 });
+  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: "BOX" }]).mockResolvedValueOnce([]).mockResolvedValueOnce({ batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 1 });
   expect((await post(payload())).status).toBe(200);
   const write = mocks.db.mock.calls.find(([path]) => path.startsWith("rpc/"));
   expect(JSON.parse(write?.[1].body).p_rows[0]).toMatchObject({ selectedSourceRowNumber: 2, unit: "봉", priceSelected: false, priceHeld: true });
+});
+it("holds a blank-unit current price at the API boundary while preserving the receipt", async () => {
+  vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
+  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: "봉" }]).mockResolvedValueOnce({ batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 1 });
+  const input = payload();
+  const response = await post({ ...input, rows: [{ ...input.rows[0], unit: "" }] });
+  expect(response.status).toBe(200);
+  const write = mocks.db.mock.calls.find(([path]) => path.startsWith("rpc/"));
+  expect(JSON.parse(write?.[1].body).p_rows[0]).toMatchObject({ unit: "", priceSelected: false, priceHeld: true });
+});
+it("keeps a different-unit current price when its supplier conversion is confirmed", async () => {
+  vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
+  const input = payload(), supplierProductId = "40000000-0000-4000-8000-000000000001";
+  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: "BOX" }])
+    .mockResolvedValueOnce([{ product_catalog_id: productId(0), supplier_product_id: supplierProductId, purchase_to_sales_ratio: 10, conversion_confirmed: true }])
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce({ batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 0 });
+  expect((await post({ ...input, rows: [{ ...input.rows[0], supplierProductId, supplierCost: input.rows[0].cost }] })).status).toBe(200);
+  const write = mocks.db.mock.calls.find(([path]) => path.startsWith("rpc/"));
+  expect(JSON.parse(write?.[1].body).p_rows[0]).toMatchObject({ priceSelected: true, priceHeld: false });
+});
+it("keeps a different-unit current price when its product unit conversion is confirmed", async () => {
+  vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
+  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: "BOX" }])
+    .mockResolvedValueOnce([{ product_catalog_id: productId(0), unit_name: "봉", base_quantity: 10, is_confirmed: true }])
+    .mockResolvedValueOnce({ batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 0 });
+  expect((await post(payload())).status).toBe(200);
+  const write = mocks.db.mock.calls.find(([path]) => path.startsWith("rpc/"));
+  expect(JSON.parse(write?.[1].body).p_rows[0]).toMatchObject({ priceSelected: true, priceHeld: false });
 });
 it("holds a future selected price at the API boundary while preserving its receipt row", async () => {
   vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
@@ -183,7 +220,7 @@ it("recovers the exact pending batch in company scope even if a newer batch exis
 
 it("automatically holds an unconfirmed multipack price while preserving receipt history", async () => {
   vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
-  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: null, purchase_to_sales_ratio: 10 }]).mockResolvedValueOnce({ batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 1 });
+  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: null, purchase_to_sales_ratio: 10 }]).mockResolvedValueOnce([]).mockResolvedValueOnce({ batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 1 });
   const response = await post(payload());
   expect(response.status).toBe(200);
   expect(JSON.parse(mocks.db.mock.calls.at(-1)?.[1].body).p_rows[0]).toMatchObject({ priceSelected: false, priceHeld: true });
