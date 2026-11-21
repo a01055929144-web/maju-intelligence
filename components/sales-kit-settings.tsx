@@ -143,11 +143,21 @@ export function SalesKitSettingsPanel() {
           </label>
           <label className="text-xs font-black text-slate-600">
             문의 연락처
-            <input className={`${input} mt-1`} disabled={!canEdit} inputMode="numeric" onChange={(event) => setKit({ ...kit, contactPhone: formatKoreanPhoneNumber(digitsOnly(event.target.value).slice(0, 11)) })} placeholder={formatKoreanPhoneNumber(fallbackPhone) || "대표 휴대폰"} value={kit.contactPhone} />
+            <input className={`${input} mt-1`} disabled={!canEdit} inputMode="numeric" onChange={(event) => { const contactPhone = formatKoreanPhoneNumber(digitsOnly(event.target.value).slice(0, 11)); setKit({ ...kit, contactPhone, publicContactEnabled: contactPhone ? kit.publicContactEnabled : false }); }} placeholder="직접 입력한 연락처" value={kit.contactPhone} />
           </label>
         </div>
       </div>
-      <p className="mt-1 text-[11px] font-semibold text-slate-400">문의 연락처를 비우면 회사 정보의 대표 휴대폰이 들어갑니다.</p>
+      <p className="mt-1 text-[11px] font-semibold text-slate-400">비우면 보내는 문구에는 {formatKoreanPhoneNumber(fallbackPhone) || "회사 대표 연락처"}가 쓰일 수 있지만 공개 문서에는 표시되지 않습니다.</p>
+      <label className="mt-3 flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700">
+        <input
+          checked={kit.publicContactEnabled}
+          disabled={!canEdit || !digitsOnly(kit.contactPhone)}
+          onChange={(event) => setKit({ ...kit, publicContactEnabled: event.target.checked })}
+          type="checkbox"
+        />
+        공개 문서에 문의 연락처 표시
+      </label>
+      <p className="mt-1 text-[11px] font-semibold text-slate-400">직접 입력한 문의 이름과 연락처만 공개 단가표·견적서에 표시합니다. 기본값은 꺼짐입니다.</p>
 
       <fieldset className="mt-4">
         <legend className="text-xs font-black text-slate-600">문구 아래에 기본으로 붙일 항목</legend>

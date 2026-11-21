@@ -31,15 +31,17 @@ export async function PUT(request: NextRequest) {
   const known = new Set(current.materials.map((item) => item.code));
   const incoming = parseSalesKit(JSON.stringify({ ...current, ...body }));
   const defaults = Object.fromEntries(Object.entries(incoming.defaults).filter(([, code]) => typeof code === "string" && known.has(code)));
+  const contactPhone = incoming.contactPhone.replace(/[^0-9-]/g, "");
   try {
     const saved = await saveSalesKit(scope.companyId, {
       ...current,
       contactLabel: incoming.contactLabel.trim(),
-      contactPhone: incoming.contactPhone.replace(/[^0-9-]/g, ""),
+      contactPhone,
       defaults,
       fields: incoming.fields.filter((field) => (SALES_KIT_FIELDS as readonly string[]).includes(field)),
       orderUrl: incoming.orderUrl.trim(),
-      priceSheetUrl: incoming.priceSheetUrl.trim()
+      priceSheetUrl: incoming.priceSheetUrl.trim(),
+      publicContactEnabled: incoming.publicContactEnabled && Boolean(contactPhone)
     });
     return NextResponse.json({ ok: true, kit: saved });
   } catch {

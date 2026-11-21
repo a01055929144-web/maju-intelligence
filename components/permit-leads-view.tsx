@@ -44,7 +44,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getDefaultVisitFollowUpDate, needsVisitFollowUp, STANDARD_VISIT_RESULTS, VISIT_RESULT_ACTION_TYPE } from "@/domains/lead/visit-results";
 import { formatLeadBusinessHours, getLeadVisitAvailability } from "@/domains/lead/business-hours";
-import { formatKoreanPhoneNumber, getSafeNaverTalktalkUrl, isMobilePhoneNumber } from "@/domains/lead/contact-channels";
+import { formatKoreanPhoneNumber, getSafeNaverTalktalkUrl, isMobilePhoneNumber, type LeadContactFilterChannel } from "@/domains/lead/contact-channels";
 import { compareLeadListDefault, formatLeadOpenDateAge, leadPriorityBadge } from "@/domains/lead/lead-list";
 import { displayLeadNextAction, isLeadUncontacted } from "@/domains/lead/next-action";
 import { leadDocumentEntryHref, type LeadDocumentEntryAccess } from "@/domains/lead/document-entry";
@@ -466,8 +466,44 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     if (initialLeadId) params.set("leadId", initialLeadId);
     if (targetType === "distributor") params.set("targetType", "distributor");
 
-    fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" }, 12000)
-      .then((response) => (response.ok ? response.json() : null))
+    const contactChannel: LeadContactFilterChannel | undefined = hasPhoneOnly
+      ? "sms"
+      : hasInstagramOnly
+        ? "instagram"
+        : hasTalktalkOnly
+          ? "talktalk"
+          : hasEmailOnly
+            ? "email"
+            : hasFaxOnly
+              ? "fax"
+              : undefined;
+    if (contactChannel) {
+      params.set("contactChannel", contactChannel);
+      params.set("pageSize", "50");
+    }
+
+    const fetchLeadPage = async (page: number) => {
+      const pageParams = new URLSearchParams(params);
+      if (contactChannel) pageParams.set("page", String(page));
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits?${pageParams.toString()}`), { cache: "no-store" }, 12000);
+      if (!response.ok) throw new Error("리드를 불러오지 못했습니다.");
+      return response.json();
+    };
+
+    const fetchCompanyWideLeads = async () => {
+      const first = await fetchLeadPage(1);
+      if (!contactChannel) return first;
+      const total = Number(first?.total) || 0;
+      const allLeads = Array.isArray(first?.leads) ? [...first.leads] : [];
+      const totalPages = Math.ceil(total / 50);
+      for (let page = 2; page <= totalPages; page += 1) {
+        const payload = await fetchLeadPage(page);
+        if (Array.isArray(payload?.leads)) allLeads.push(...payload.leads);
+      }
+      return { ...first, leads: allLeads, page: 1, pageSize: 50, total };
+    };
+
+    void fetchCompanyWideLeads()
       .then((payload) => {
         if (!payload) {
           setLoadState("error");
@@ -484,7 +520,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
       })
       .catch(() => setLoadState("error"))
       .finally(() => setRefreshingLeads(false));
-  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, initialLeadId, showExistingCustomers, showOutsideSalesArea, showTemporaryOperations, targetType]);
+  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, excludeExcluded, initialLeadId, showExistingCustomers, showOutsideSalesArea, showTemporaryOperations, targetType]);
 
   useEffect(() => {
     loadLeads();
@@ -2270,15 +2306,15 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             </div>
           ) : !filteredLeads.length ? (
             <div className="rounded-md border border-dashed border-slate-200 bg-white p-8 text-center">
-              <p className="text-sm font-bold text-slate-600">{favoriteOnly ? "즐겨찾기한 리드가 없습니다." : leads.length ? "현재 조건에 맞는 리드가 없습니다." : "아직 등록된 신규 리드가 없습니다."}</p>
+              <p className="text-sm font-bold text-slate-600">{favoriteOnly ? "즐겨찾기한 리드가 없습니다." : hasActiveLeadFilters ? "현재 조건에 맞는 리드가 없습니다." : "아직 등록된 신규 리드가 없습니다."}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">
-                {leads.length && hasActiveLeadFilters
+                {hasActiveLeadFilters
                   ? openDateFilterMode !== "all"
                     ? `${openDateFilterLabel} 기준에 맞는 리드가 없습니다. 기간을 넓히거나 필터를 초기화하세요.`
                     : "검색어, 업종, 액션, 상태 조건을 줄이면 리드를 다시 확인할 수 있습니다."
                   : "사업자 인허가 데이터를 업로드하면 여기에 표시됩니다."}
               </p>
-              {leads.length && hasActiveLeadFilters ? (
+              {hasActiveLeadFilters ? (
                 <button className="maju-button-secondary mx-auto mt-4 h-9 justify-center px-3 text-xs" onClick={clearLeadFilters} type="button">
                   필터 초기화
                 </button>

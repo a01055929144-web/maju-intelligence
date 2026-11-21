@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSalesKitLines, composeDmWithKit, createShortCode, parseSalesKit, SHORT_CODE_PATTERN, validateOrderUrl, validatePriceSheetUrl } from "../domains/lead/sales-kit";
+import { buildSalesKitLines, composeDmWithKit, createShortCode, getPublicSalesKitContact, parseSalesKit, SHORT_CODE_PATTERN, validateOrderUrl, validatePriceSheetUrl } from "../domains/lead/sales-kit";
 
 describe("sales kit", () => {
   it("creates 7-character short codes", () => {
@@ -34,5 +34,12 @@ describe("sales kit", () => {
     expect(validateOrderUrl("https://example.com")).toBe("");
     expect(validatePriceSheetUrl("javascript:alert(1)")).not.toBe("");
     expect(validatePriceSheetUrl("https://example.com/pricing-document#fake")).toBe("");
+  });
+
+  it("keeps public contact off by default and never falls back to a representative phone", () => {
+    const direct = parseSalesKit(JSON.stringify({ contactLabel: "영업팀", contactPhone: "010-1234-5678", publicContactEnabled: true }));
+    expect(getPublicSalesKitContact(direct)).toEqual({ label: "영업팀", phone: "01012345678" });
+    expect(getPublicSalesKitContact(parseSalesKit(JSON.stringify({ contactPhone: "010-1234-5678" })))).toBeNull();
+    expect(getPublicSalesKitContact(parseSalesKit(JSON.stringify({ publicContactEnabled: true })))).toBeNull();
   });
 });
