@@ -10,6 +10,7 @@ drop function if exists public.admin_set_company_distributor_industries(uuid, uu
 drop function if exists public.admin_save_distributor_industry_category(uuid, text, text, text, text);
 drop function if exists public.preview_distributor_industry_category_impact(uuid);
 drop function if exists public.preview_company_distributor_industries(uuid, uuid[]);
+drop function if exists public.admin_list_distributor_industries(uuid);
 drop table if exists public.company_distributor_industries;
 drop table if exists public.distributor_industry_categories;
 notify pgrst, 'reload schema';
