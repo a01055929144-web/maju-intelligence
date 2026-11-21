@@ -187,19 +187,18 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await page.getByLabel('정정 사유',{exact:true}).fill('격리 통합 시험 오입력 정정');
     await page.getByRole('button',{name:'정정 저장',exact:true}).click();
     await expect.poll(()=>state().corrections).toBe(1);
-    expect(state().items.map(item=>[item.id,item.cost,item.price])).toEqual(saved.items.map(item=>[item.id,item.cost,item.price]));
+    const corrected=state(), correctedId=saved.items.find(item=>item.code===code(744))!.id;
+    expect(corrected.items.filter(item=>item.id!==correctedId).map(item=>[item.id,item.cost,item.price]))
+      .toEqual(saved.items.filter(item=>item.id!==correctedId).map(item=>[item.id,item.cost,item.price]));
+    expect(corrected.items.find(item=>item.id===correctedId)).toMatchObject({cost:'99.00',price:'120'});
     page.once('dialog',dialog=>dialog.accept());
     await page.getByRole('button',{name:'직전 날짜별 매입가·판매가 함께 되돌리기',exact:true}).click();
-    await expect(page.getByRole('status').filter({hasText:'원본 거래를 함께 복구했습니다'})).toBeVisible();
-    const restored=state();
-    expect(restored.receipts).toBe(0); expect(restored.batch!.status).toBe('restored'); expect(restored.products_count).toBe(745);
-    for(let i=0;i<745;i++) {
-      const product=restored.items.find(item=>item.code===code(i))!, cost=i<scenario.existing?100:0;
-      expect(Number(product.cost)).toBe(cost); expect(Number(product.price)).toBe(i<scenario.existing?120:0);
-    }
-    await checkVisibleCosts(true);
-    await page.screenshot({path:info.outputPath('real-stage-a-restored.png')});
-    expect(Number(restored.other_cost)).toBe(999); expect(standalonePricingWrites).toBe(0);
+    await expect(page.getByRole('alert').filter({hasText:'기존 가격이나 이후 변경 내역이 달라 처리하지 못했습니다'})).toBeVisible();
+    const protectedState=state();
+    expect(protectedState.receipts).toBe(3417); expect(protectedState.batch!.status).toBe('completed'); expect(protectedState.products_count).toBe(745);
+    expect(protectedState.items.find(item=>item.id===correctedId)).toMatchObject({cost:'99.00',price:'120'});
+    await page.screenshot({path:info.outputPath('real-stage-a-later-correction-protected.png')});
+    expect(Number(protectedState.other_cost)).toBe(999); expect(standalonePricingWrites).toBe(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   });
 }
