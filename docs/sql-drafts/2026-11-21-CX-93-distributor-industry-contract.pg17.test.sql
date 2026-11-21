@@ -26,6 +26,7 @@ begin
     or has_table_privilege('authenticated', 'public.company_distributor_industries', 'select')
     or has_table_privilege('service_role', 'public.company_distributor_industries', 'insert')
     or has_function_privilege('authenticated', 'public.preview_company_distributor_industries(uuid,uuid[])', 'execute')
+    or has_function_privilege('authenticated', 'public.admin_list_distributor_industries(uuid)', 'execute')
     then raise exception 'industry_permission_boundary_failed'; end if;
   perform public.admin_save_distributor_industry_category(category_a, '농산 유통', 'active', '합성 관리자', 'category-a-create');
   perform public.admin_save_distributor_industry_category(category_b, '주류 유통', 'active', '합성 관리자', 'category-b-create');
@@ -35,6 +36,9 @@ begin
     or (select count(*) from public.company_distributor_industries) <> 2
     or (result->>'activeConnectionCount')::integer <> 1 or (result->>'affectedStoreCount')::integer <> 1
     then raise exception 'multi_assignment_or_preview_failed'; end if;
+  result := public.admin_list_distributor_industries('10000000-0000-4000-8000-000000000001');
+  if jsonb_array_length(result->'categories') <> 2 or jsonb_array_length(result->'assignedCategoryIds') <> 2
+    then raise exception 'admin_list_failed'; end if;
   if (select business_type from public.companies limit 1) <> '기존 리드 기본값' then raise exception 'legacy_business_type_changed'; end if;
   perform public.admin_save_distributor_industry_category(category_a, '신선 농산', 'active', '합성 관리자', 'category-a-rename');
   if not exists(select 1 from public.company_distributor_industries where industry_category_id = category_a)
