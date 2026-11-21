@@ -65,6 +65,7 @@ export function PageContent({
   const perColumn = Math.ceil(regular.length / columns) || 0;
   const chunks = Array.from({ length: columns }, (_, i) => regular.slice(i * perColumn, (i + 1) * perColumn)).filter((chunk) => chunk.length);
   const price = (l: OutputLine) => (l.price !== null ? formatWon(l.price) : "—");
+  const flyer = data.layout === "flyer";
   return (
     <div
       className="pricing-output-content"
@@ -102,7 +103,7 @@ export function PageContent({
       {promos.length ? (
         <section className="my-3 rounded border border-amber-300 bg-amber-50 p-2">
           <p className="mb-1.5 text-xs font-bold text-amber-900">행사·임박 상품{promos.some(line => line.priceIncludesTax) ? " · 고정가(과세 품목 부가세 포함)" : ""}</p>
-          {display.promoLayout === "table" ? (
+          {display.promoLayout === "table" && !flyer ? (
             <table className="pricing-output-table w-full table-fixed border-collapse text-left">
               <tbody>
                 {promos.map((l, i) => (
@@ -115,12 +116,12 @@ export function PageContent({
               </tbody>
             </table>
           ) : (
-            <div className="pricing-promo-cards grid grid-cols-3 gap-2">
+            <div className={`pricing-promo-cards grid gap-2 ${flyer ? "grid-cols-2" : "grid-cols-3"}`}>
               {promos.map((l, i) => (
-                <article key={i} className="rounded bg-white p-2">
-                  <p className="font-bold"><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{l.badge}</span>{l.displayName}</p>
+                <article key={i} className={`rounded bg-white p-2 ${flyer ? "pricing-flyer-promo border-2 border-amber-300 p-3" : ""}`}>
+                  <p className={flyer ? "text-lg font-black leading-tight" : "font-bold"}><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{l.badge}</span>{l.displayName}</p>
                   <p data-document-spec className="text-xs">{l.spec} {l.unit}</p>
-                  <p data-document-price className="font-bold">{price(l)}</p>
+                  <p data-document-price className={flyer ? "mt-2 text-2xl font-black tabular-nums" : "font-bold"}>{price(l)}</p>
                   {display.showTaxType ? <p data-document-tax className="text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</p> : null}
                   <p className="text-xs">{l.endsOn ? `${l.endsOn}까지` : ""}{l.remaining !== null ? ` · 남은 ${l.remaining}` : ""}</p>
                 </article>
@@ -332,7 +333,7 @@ export function PricingDocumentPreview({
           </div>
         </div>
       </div>
-      <style>{`${pricingPaperStyle(fontScale)}.pricing-online .pricing-output-content{min-height:0}.pricing-online .pricing-output-grid,.pricing-online .pricing-promo-cards{grid-template-columns:minmax(0,1fr)!important}.pricing-online table{table-layout:auto}.pricing-online col{width:auto!important}.pricing-online [data-document-price]{white-space:nowrap;overflow-wrap:normal;text-align:right;width:1%}.pricing-online article [data-document-price]{width:auto}.pricing-online [data-document-spec]{overflow-wrap:anywhere}.pricing-preview-modal:has(.pricing-document-preview){margin:0!important;isolation:isolate;z-index:100}.pricing-preview-modal:has(.pricing-document-preview)>div:first-child{position:sticky;top:0;z-index:20;background:#fff;isolation:isolate}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}#pricing-print-root>div:last-child .pricing-paper{break-after:auto;page-break-after:auto}.pricing-output-content th{position:static}}`}</style>
+      <style>{`${pricingPaperStyle(fontScale)}.pricing-flyer-promo{break-inside:avoid;page-break-inside:avoid}.pricing-online .pricing-output-content{min-height:0}.pricing-online .pricing-output-grid,.pricing-online .pricing-promo-cards{grid-template-columns:minmax(0,1fr)!important}.pricing-online table{table-layout:auto}.pricing-online col{width:auto!important}.pricing-online [data-document-price]{white-space:nowrap;overflow-wrap:normal;text-align:right;width:1%}.pricing-online article [data-document-price]{width:auto}.pricing-online [data-document-spec]{overflow-wrap:anywhere}.pricing-preview-modal:has(.pricing-document-preview){margin:0!important;isolation:isolate;z-index:100}.pricing-preview-modal:has(.pricing-document-preview)>div:first-child{position:sticky;top:0;z-index:20;background:#fff;isolation:isolate}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}#pricing-print-root>div:last-child .pricing-paper{break-after:auto;page-break-after:auto}.pricing-output-content th{position:static}}`}</style>
     </section>
   );
 }

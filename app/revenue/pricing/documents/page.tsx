@@ -18,6 +18,7 @@ import { publicDocumentOrderEntryEnabled } from "@/lib/pricing/public-document-o
 import { documentExtensionEnabled } from "@/lib/pricing/document-extension-feature";
 import { documentVatEnabled } from "@/lib/pricing/document-vat-feature";
 import { documentFooterFormattingEnabled } from "@/lib/pricing/document-footer-format";
+import { documentOfflineFlyerEnabled } from "@/lib/pricing/document-offline-flyer-feature";
 
 export const dynamic = "force-dynamic";
 export default async function DocumentsPage({
@@ -56,6 +57,7 @@ export default async function DocumentsPage({
           companyId={companyId}
           extensionEnabled={documentExtensionEnabled(companyId)}
           footerFormattingEnabled={documentFooterFormattingEnabled(companyId)}
+          offlineFlyerEnabled={documentOfflineFlyerEnabled(companyId)}
           initialStartKind={entry.initialStartKind}
           leadContext={entry.leadContext}
           sharingEnabled={documentSharingEnabled(companyId)}

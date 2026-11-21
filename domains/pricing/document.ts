@@ -75,7 +75,7 @@ export type DocumentContent = {
   footer: string;
   validUntil: string;
   theme: "blue" | "green" | "mono";
-  layout: "auto" | "table" | "cards";
+  layout: "auto" | "table" | "cards" | "flyer";
   showPrice: boolean;
   showBrand: boolean;
   showSpec: boolean;
@@ -274,7 +274,7 @@ export function parseDocument(value: unknown): DocumentContent {
     throw new PricingInputError("중복 품목을 제거하고 표시할 품목을 선택해 주세요.");
   if (
     !["blue", "green", "mono"].includes(String(d.theme)) ||
-    !["auto", "table", "cards"].includes(String(d.layout)) ||
+    !["auto", "table", "cards", "flyer"].includes(String(d.layout)) ||
     [d.showPrice, d.showBrand, d.showSpec].some((v) => typeof v !== "boolean")
   )
     throw new PricingInputError("표시 설정을 확인해 주세요.");
@@ -410,7 +410,9 @@ export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = f
     if (output.layout === "cards") return lines.length <= Math.max(columns, Math.floor(4 * columns / scale) - (hasOrderQr ? columns : 0));
     const promos = lines.filter(line => line.badge), regular = lines.filter(line => !line.badge);
     let promoHeight = promos.length ? 44 : 0;
-    if (output.display.promoLayout === "cards") {
+    if (output.layout === "flyer") {
+      for (let i = 0; i < promos.length; i += 2) promoHeight += Math.max(...promos.slice(i, i + 2).map(line => rowHeight(line, 2) + 74));
+    } else if (output.display.promoLayout === "cards") {
       for (let i = 0; i < promos.length; i += 3) promoHeight += Math.max(...promos.slice(i, i + 3).map(line => rowHeight(line, 3) + 40));
     } else promoHeight += promos.reduce((height, line) => height + rowHeight(line, 3), 0);
     const perColumn = Math.ceil(regular.length / columns);
