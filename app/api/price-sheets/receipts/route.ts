@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
   const sortHistory = (a: PurchaseHistoryRow, b: PurchaseHistoryRow) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id));
   const combined = mergePurchaseHistoryRows(receiptHistoryRows, supplierHistoryRows).sort(sortHistory);
   let period = mergePurchaseHistoryRows(resolvePurchaseHistoryRows(rows as PurchaseHistoryRow[], supplierHistory.context).filter(matchesReceiptFilter).map((row) => ({ ...row, correctable: correctionEnabled })), supplierHistoryRows.filter((row) => (!from || String(row.receipt_date) >= from) && (!to || String(row.receipt_date) <= to))).sort(sortHistory);
-  if (params.get("summary") === "1") return NextResponse.json({ summary: summarizePurchaseHistory(period), count: period.length }, { headers: { "Cache-Control": "no-store" } });
+  if (params.get("summary") === "1") return NextResponse.json({ canCorrect: correctionEnabled, summary: summarizePurchaseHistory(period), count: period.length }, { headers: { "Cache-Control": "no-store" } });
   if (params.get("changed") === "1") {
     const changed = new Set(summarizePurchaseHistory(attachPurchaseHistoryPreviousCosts(combined, period)).filter((item) => item.changeAmount).map((item) => item.key));
     period = period.filter((row) => changed.has(`${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}`));
