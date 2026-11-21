@@ -20,4 +20,23 @@ describe("A4 2단 인쇄 페이지 나누기", () => {
     expect(pages.flatMap((page) => page.lines)).toEqual(output.lines);
     expect(printPages({ ...output, display: { ...output.display, showTaxType: true } }, scale)[0].lines.length).toBeLessThan(firstPageLines);
   });
+
+  it("전단지 형식도 행사 가격을 바꾸지 않고 모든 품목을 페이지에 한 번씩 담는다", () => {
+    const promotionLines = content.lines.slice(0, 8).map((line, index) => ({
+      ...line,
+      promotionId: `30000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      badge: "행사" as const,
+      startsOn: "2026-11-01",
+      endsOn: "2026-11-30",
+      remaining: 100,
+    }));
+    const flyerVersion = { ...version, content: { ...content, layout: "flyer" as const, lines: [...promotionLines, ...content.lines.slice(8)] } };
+    const output = documentOutput(flyerVersion, "2026-11-10");
+    const tableOutput = documentOutput({ ...flyerVersion, content: { ...flyerVersion.content, layout: "table" } }, "2026-11-10");
+    const pages = printPages(output);
+
+    expect(pages.length).toBeGreaterThan(1);
+    expect(pages.flatMap(page => page.lines)).toEqual(output.lines);
+    expect(output.lines.map(line => line.price)).toEqual(tableOutput.lines.map(line => line.price));
+  });
 });

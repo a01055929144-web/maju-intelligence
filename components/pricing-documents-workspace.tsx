@@ -66,6 +66,7 @@ export function PricingDocumentsWorkspace({
   publicSharingAvailable = false,
   extensionEnabled = false,
   footerFormattingEnabled = false,
+  offlineFlyerEnabled = false,
   vatEnabled = false,
 }: {
   companyId: string;
@@ -77,6 +78,7 @@ export function PricingDocumentsWorkspace({
   publicSharingAvailable?: boolean;
   extensionEnabled?: boolean;
   footerFormattingEnabled?: boolean;
+  offlineFlyerEnabled?: boolean;
   vatEnabled?: boolean;
 }) {
   const { confirm, confirmDialog } = useConfirm();
@@ -1289,6 +1291,7 @@ export function PricingDocumentsWorkspace({
                       <option value="auto">자동(20개 초과 표)</option>
                       <option value="table">표형</option>
                       <option value="cards">카드형</option>
+                      {offlineFlyerEnabled || draft.content.layout === "flyer" ? <option value="flyer">전단지(A4 · 행사 품목 크게)</option> : null}
                     </select>
                   </label>
                   {(
