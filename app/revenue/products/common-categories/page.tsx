@@ -3,7 +3,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { CommonCategoryMappingWorkspace } from "@/components/common-category-mapping-workspace";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { getAdminSession, getCustomerSession, customerHasCapability, resolvePageCompanyId } from "@/lib/auth";
-import { isFeatureEnabled } from "@/lib/feature-flags";
+import { commonCategoryMappingEnabled } from "@/lib/common-category-mapping-feature";
 
 export default async function CommonCategoriesPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
   const params = await searchParams;
@@ -13,7 +13,7 @@ export default async function CommonCategoriesPage({ searchParams }: { searchPar
   if (!customerSession && adminSession && !params?.companyId) redirect("/admin/companies");
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId) || "";
   const adminPreview = Boolean(adminSession && !customerSession);
-  if (!isFeatureEnabled("COMMON_CATEGORY_MAPPING", companyId)) notFound();
+  if (!commonCategoryMappingEnabled(companyId)) notFound();
   if (!adminPreview && (!customerSession || !customerHasCapability(customerSession, "manage_sales") || !canManagePriceSheets(customerSession))) notFound();
 
   return <CustomerAppShell

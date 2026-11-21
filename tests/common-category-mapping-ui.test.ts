@@ -7,8 +7,8 @@ const route = readFileSync(new URL("../app/api/product-categories/matches/route.
 
 describe("CX-95 common category mapping", () => {
   it("keeps the page and API behind the company allowlist", () => {
-    expect(page).toContain('isFeatureEnabled("COMMON_CATEGORY_MAPPING", companyId)');
-    expect(route).toContain('isFeatureEnabled("COMMON_CATEGORY_MAPPING", auth.companyId)');
+    expect(page).toContain("commonCategoryMappingEnabled(companyId)");
+    expect(route).toContain("commonCategoryMappingEnabled(auth.companyId)");
   });
 
   it("shows loading, empty, error, mobile-safe controls and the 기타 contract", () => {

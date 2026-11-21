@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { canManagePriceSheets } from "@/domains/pricing/access";
-import { isFeatureEnabled } from "@/lib/feature-flags";
+import { commonCategoryMappingEnabled } from "@/lib/common-category-mapping-feature";
 import { listCategoryMatches, saveCategoryMatch } from "@/lib/product-category-match";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ async function scope(request: NextRequest, companyId?: string) {
   if (!auth.ok) return { error: NextResponse.json({ message: "Unauthorized" }, { status: 401 }) };
   if (!scopeHasCapability(auth, "manage_sales") || (auth.customerSession && !canManagePriceSheets(auth.customerSession)))
     return { error: NextResponse.json({ message: "대표·관리자만 공통 카테고리를 관리할 수 있습니다." }, { status: 403 }) };
-  if (!isFeatureEnabled("COMMON_CATEGORY_MAPPING", auth.companyId)) return { error: NextResponse.json({ message: "공통 카테고리 매핑 기능이 꺼져 있습니다." }, { status: 404 }) };
+  if (!commonCategoryMappingEnabled(auth.companyId)) return { error: NextResponse.json({ message: "공통 카테고리 매핑 기능이 꺼져 있습니다." }, { status: 404 }) };
   return { auth };
 }
 
