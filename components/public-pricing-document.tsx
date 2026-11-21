@@ -243,8 +243,8 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     </div>)}
     {safeDocument && inquiry && !embedded && <section aria-label="발행 회사 문의" className="space-y-2 print:hidden">
       {inquiry.status === "available" ? <>
-        <p className="break-words">{safeDocument.companyName} · {inquiry.label || "발행 회사"}<span className={expiredGuidance ? "block text-2xl font-semibold" : ""}>{expiredGuidance ? "" : " · "}{formatKoreanPhoneNumber(inquiry.phone)}</span></p>
-        <a className={`maju-button-secondary inline-flex min-h-[44px] items-center justify-center ${expiredGuidance ? "min-h-[48px] w-full" : ""}`} href={`tel:${inquiry.phone}`}>{expiredGuidance ? "담당자에게 전화" : "발행 회사에 전화 문의"}</a>
+        <p className="break-words">{safeDocument.companyName} · {inquiry.label || "발행 회사"}<span className={expiredGuidance ? "block text-[24px] font-semibold" : ""}>{expiredGuidance ? "" : " · "}{formatKoreanPhoneNumber(inquiry.phone)}</span></p>
+        <a className={`maju-button-secondary inline-flex items-center justify-center ${expiredGuidance ? "!min-h-[48px] w-full" : "min-h-[44px]"}`} href={`tel:${inquiry.phone}`}>{expiredGuidance ? "담당자에게 전화" : "발행 회사에 전화 문의"}</a>
       </> : inquiry.status === "not_configured" ? <p>이 문서에 공개 문의 연락처가 등록되지 않았습니다. 전달받은 안내문의 연락처를 확인해 주세요.</p> : <>
         <p role="status">문의 연락처를 확인하지 못했습니다. 잠시 후 다시 확인해 주세요.</p>
         <Button variant="outline" className="min-h-[44px]" onClick={() => void load()}>문의 연락처 다시 확인</Button>
