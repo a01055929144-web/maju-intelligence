@@ -39,7 +39,7 @@ for (const width of [1440, 390]) test(`CX-95 common category mapping works at ${
     expect(saved).toEqual([{ categoryId: successCategory, majuCategoryId: commonVegetable }]);
 
     await page.getByLabel("공산 > 소스 > 간장 공통 분류").selectOption(commonVegetable);
-    await expect(page.getByRole("alert")).toContainText("합성 저장 오류입니다.");
+    await expect(page.getByRole("alert").filter({ hasText: "합성 저장 오류입니다." })).toContainText("합성 저장 오류입니다.");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`cx95-common-categories-${width}.png`), fullPage: true });
   } finally { await context.close(); }
