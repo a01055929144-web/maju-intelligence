@@ -22,6 +22,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const [message, setMessage] = useState("문서를 확인하고 있습니다.");
   const [expiresAt, setExpiresAt] = useState("");
   const [inquiry, setInquiry] = useState<Inquiry | null>(null);
+  const [orderGuidanceAvailable, setOrderGuidanceAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [acceptance, setAcceptance] = useState<{ token: string; available: boolean } | null>(null);
   const [orderEntry, setOrderEntry] = useState<OrderEntry | null>(null);
@@ -71,13 +72,13 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   }, [acceptance, draftStorageKey, member, orderEntry, orderBusy, quantities, shopping]);
   const load = useCallback(async () => {
     const current = ++sequence.current;
-    setDocument(null); setInquiry(null); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setQuantities({}); setQuery(""); setView("table"); setBusy(true); setMessage("문서를 확인하고 있습니다.");
+    setDocument(null); setInquiry(null); setOrderGuidanceAvailable(false); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setQuantities({}); setQuery(""); setView("table"); setBusy(true); setMessage("문서를 확인하고 있습니다.");
     try {
       const token = embeddedToken ?? window.location.hash.slice(1);
       if (!token || token.length > 200) throw new Error("공유 링크를 확인해 주세요. 담당자에게 새 링크를 요청해 주세요.");
       const response = await fetch("/api/pricing-documents/public", { method: "POST", cache: "no-store",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-      const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean; orderEntry?: OrderEntry; inquiry?: Inquiry };
+      const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean; orderEntry?: OrderEntry; inquiry?: Inquiry; orderGuidanceAvailable?: boolean };
       if (!response.ok || !result.document) throw new Error(result.message || "문서를 확인하지 못했습니다. 다시 시도해 주세요.");
       if (!result.expiresAt || !Number.isFinite(Date.parse(result.expiresAt))) throw new Error("링크 유효기간을 확인하지 못했습니다. 다시 시도해 주세요.");
       if (sequence.current === current && result.orderEntry?.shopping && result.orderEntry.cartScope) {
@@ -91,6 +92,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
       if (sequence.current === current && result.orderEntry?.shopping && result.orderEntry.member &&
         new URLSearchParams(window.location.search).get("view") === "cart") setView("cart");
       if (sequence.current === current) {
+        setOrderGuidanceAvailable(result.orderGuidanceAvailable === true);
         const contact = result.inquiry;
         setInquiry(contact?.status === "available" && typeof contact.phone === "string" &&
           (/^0\d{8,10}$/.test(contact.phone) || /^1[568]\d{6}$/.test(contact.phone)) && typeof contact.label === "string"
@@ -139,6 +141,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     };
   }, [document, expiresAt]);
   const safeDocument = document && koreaDay() > document.validUntil ? { ...document, expired: true, lines: document.lines.map(l => ({ ...l, price: null })) } : document;
+  const expiredGuidance = Boolean(safeDocument?.expired && orderGuidanceAvailable);
   const Container = embedded ? "section" : "main";
   const orderHref = embedded?.orderHref ?? "/store?view=order";
   const showOrder = Boolean(safeDocument && (orderEntry || member)) && view !== "cart";
@@ -177,7 +180,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     {embedded && <h1 className="text-lg font-semibold">공유 문서</h1>}
     {message && <p role="status">{message}</p>}
     {!safeDocument && !busy && message && <Button variant="outline" className="min-h-[44px]" onClick={() => void load()}>다시 확인</Button>}
-    {safeDocument?.expired && shopping && <section aria-label="기간 지난 단가표" className="space-y-2 rounded border bg-white p-4 print:hidden">
+    {safeDocument?.expired && (shopping || orderGuidanceAvailable) && <section aria-label="기간 지난 단가표" className="space-y-2 rounded border bg-white p-4 print:hidden">
       <h2 className="font-bold">새 단가표를 받으세요</h2>
       <p>기간이 지나 이 단가표로는 주문할 수 없습니다. 발행 회사 담당자에게 새 단가표를 요청해 주세요.</p>
       {member && <Link className="maju-button-primary inline-flex min-h-[44px] items-center" href="/store?view=home">받은 단가표로 돌아가기</Link>}
@@ -192,7 +195,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     </nav>}
     {safeDocument && shopping && member && view === "cart" && acceptance &&
       <PublicSavedCart token={acceptance.token} rows={shoppingRows} />}
-    {safeDocument && shopping && view === "image" && <div className="print:hidden"><PublicDocumentPaperImages document={safeDocument} /></div>}
+    {safeDocument && shopping && view === "image" && <div className={`print:hidden ${expiredGuidance ? "opacity-50" : ""}`}><PublicDocumentPaperImages document={safeDocument} /></div>}
     {safeDocument && shopping && view === "catalog" && <section aria-label="전체 상품" className="space-y-4 rounded border bg-white p-4 print:hidden">
       <h2 className="text-base font-bold">전체 상품</h2>
       <p>{member ? "주문 화면에서 연결된 유통사의 상품과 내 단가를 확인할 수 있습니다." : "가입하면 이 유통사의 전체 상품을 볼 수 있습니다."}</p>
@@ -203,7 +206,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
         </div>)}
       </div>}
     </section>}
-    {safeDocument && (embedded ? <PricingDocPaper output={safeDocument} /> : <div className={tableVisible ? "space-y-4" : "hidden print:block"}>
+    {safeDocument && (embedded ? <PricingDocPaper output={safeDocument} /> : <div className={`${tableVisible ? "space-y-4" : "hidden print:block"} ${expiredGuidance ? "opacity-50 print:opacity-100" : ""}`}>
       <header className={shopping ? "space-y-1 print:hidden" : "space-y-1 md:hidden print:hidden"}>
         <p className={`text-[15px] font-bold ${companyColor}`}>{safeDocument.companyName}</p>
         <h1 className="break-keep text-xl font-bold">{safeDocument.title}</h1>
@@ -240,8 +243,8 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     </div>)}
     {safeDocument && inquiry && !embedded && <section aria-label="발행 회사 문의" className="space-y-2 print:hidden">
       {inquiry.status === "available" ? <>
-        <p className="break-words">{safeDocument.companyName} · {inquiry.label || "발행 회사"} · {formatKoreanPhoneNumber(inquiry.phone)}</p>
-        <a className="maju-button-secondary inline-flex min-h-[44px] items-center justify-center" href={`tel:${inquiry.phone}`}>발행 회사에 전화 문의</a>
+        <p className="break-words">{safeDocument.companyName} · {inquiry.label || "발행 회사"}<span className={expiredGuidance ? "block text-[24px] font-semibold" : ""}>{expiredGuidance ? "" : " · "}{formatKoreanPhoneNumber(inquiry.phone)}</span></p>
+        <a className={`maju-button-secondary inline-flex items-center justify-center ${expiredGuidance ? "!min-h-[48px] w-full" : "min-h-[44px]"}`} href={`tel:${inquiry.phone}`}>{expiredGuidance ? "담당자에게 전화" : "발행 회사에 전화 문의"}</a>
       </> : inquiry.status === "not_configured" ? <p>이 문서에 공개 문의 연락처가 등록되지 않았습니다. 전달받은 안내문의 연락처를 확인해 주세요.</p> : <>
         <p role="status">문의 연락처를 확인하지 못했습니다. 잠시 후 다시 확인해 주세요.</p>
         <Button variant="outline" className="min-h-[44px]" onClick={() => void load()}>문의 연락처 다시 확인</Button>

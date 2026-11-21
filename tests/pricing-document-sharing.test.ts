@@ -18,6 +18,7 @@ import { POST as privatePost } from "../app/api/pricing-documents/route";
 import { getPublicDocumentOrderContext } from "../lib/pricing/document-share";
 import { issueDocumentShareToken, verifyDocumentShareToken } from "../lib/pricing/document-share-token";
 import { issueStoreLinkToken } from "../lib/pricing/store-link-token";
+import { publicDocumentOrderGuidanceEnabled } from "../lib/pricing/public-document-order-feature";
 
 const company = "00000000-0000-4000-8000-000000000001", other = "00000000-0000-4000-8000-000000000002";
 const doc = "10000000-0000-4000-8000-000000000001", version = "20000000-0000-4000-8000-000000000001";
@@ -383,6 +384,32 @@ it.each(["revoked", "expired", "tampered", "company-override", "targeted"])("doe
   const body = await response.json(); expect(body).not.toHaveProperty("inquiry");
   expect(JSON.stringify(body)).not.toContain("01000000000");
   expect(seen.some(url => url.startsWith("company_message_templates?"))).toBe(false);
+});
+it("CX-93 guidance stays OFF without both explicit flag and issuer allowlist", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_GUIDANCE_ENABLED", "false");
+  vi.stubEnv("FEATURE_PUBLIC_DOCUMENT_ORDER_GUIDANCE_COMPANY_IDS", company);
+  expect(publicDocumentOrderGuidanceEnabled(company)).toBe(false);
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_GUIDANCE_ENABLED", "true");
+  expect(publicDocumentOrderGuidanceEnabled(company)).toBe(true); expect(publicDocumentOrderGuidanceEnabled(other)).toBe(false);
+  vi.stubEnv("FEATURE_PUBLIC_DOCUMENT_ORDER_GUIDANCE_COMPANY_IDS", "");
+  expect(publicDocumentOrderGuidanceEnabled(company)).toBe(false);
+});
+it("advertises CX-93 only from a verified general link and still rejects expired order intent", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_GUIDANCE_ENABLED", "true");
+  vi.stubEnv("FEATURE_PUBLIC_DOCUMENT_ORDER_GUIDANCE_COMPANY_IDS", company);
+  const p = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  content.validUntil = "2020-01-01";
+  const body = await (await publicPost(request({ token: token(p.publicUrl) }))).json();
+  expect(body.orderGuidanceAvailable).toBe(true); expect(body.document.expired).toBe(true);
+  expect(body.document.lines.every((line: { price: unknown }) => line.price === null)).toBe(true);
+  expect(body.inquiry).toEqual({ status: "not_configured" });
+  expect((await orderIntentPost(request({ token: token(p.publicUrl) }))).status).toBe(404);
+  expect(mocks.connection).not.toHaveBeenCalled(); expect(mocks.onboarding).not.toHaveBeenCalled();
+  vi.stubEnv("FEATURE_PUBLIC_DOCUMENT_ORDER_GUIDANCE_COMPANY_IDS", other);
+  expect((await (await publicPost(request({ token: token(p.publicUrl) }))).json()).orderGuidanceAvailable).toBe(false);
+  links[0].revoked_at = new Date().toISOString();
+  expect(await (await publicPost(request({ token: token(p.publicUrl) }))).json()).not.toHaveProperty("orderGuidanceAvailable");
 });
 it("connects real sales-kit PUT and persistence to public POST without phone fallback", async () => {
   vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
