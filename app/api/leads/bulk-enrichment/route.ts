@@ -80,11 +80,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(job, { status: 202 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "일괄 작업을 시작하지 못했습니다.";
-    const status = /daily_limit_exceeded/.test(message) ? 429
-      : /lead_not_found|job_not_found/.test(message) ? 404
-      : /job_cancelled|no_failed_items/.test(message) ? 409
-      : 500;
-    return NextResponse.json({ message: status === 429 ? "회사 일일 외부 조회 한도를 모두 사용했습니다." : message }, { status });
+    if (/daily_limit_exceeded/.test(message)) return NextResponse.json({ message: "회사 일일 외부 조회 한도를 모두 사용했습니다." }, { status: 429 });
+    if (/lead_not_found/.test(message)) return NextResponse.json({ message: "리드를 찾을 수 없습니다." }, { status: 404 });
+    if (/job_not_found/.test(message)) return NextResponse.json({ message: "작업을 찾을 수 없습니다." }, { status: 404 });
+    if (/job_cancelled/.test(message)) return NextResponse.json({ message: "취소된 작업은 다시 처리할 수 없습니다." }, { status: 409 });
+    if (/no_failed_items/.test(message)) return NextResponse.json({ message: "다시 처리할 실패 항목이 없습니다." }, { status: 409 });
+    return NextResponse.json({ message: "일괄 작업을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요." }, { status: 500 });
   }
 }
 
