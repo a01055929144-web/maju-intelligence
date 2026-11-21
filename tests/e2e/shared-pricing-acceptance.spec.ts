@@ -3,6 +3,42 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { publicDocumentOutput } from "../../domains/pricing/document-share";
 import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
 
+for (const width of [1440, 390]) for (const shopping of [false, true]) test(`CX-93 expired document keeps only opted-in inquiry at ${width}px shopping=${shopping}`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 900 });
+  const content: DocumentContent = { kind: "sheet", title: "합성 기간 지난 단가표", companyName: "합성 발행 회사", contact: "PRIVATE-CONTACT-CANARY", recipient: "", footer: "",
+    validUntil: "2020-01-01", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
+    display: { columns: 1, promoLayout: "table", info: [], productWidth: 65, priceIncludesTax: true },
+    lines: [lineFromCatalog({ id: "50000000-0000-4000-8000-000000000001", name: "합성 만료 품목", displayName: "합성 만료 품목", brand: "", spec: "1kg", unit: "봉", price: 98765, taxType: "exempt" })] };
+  let available = true, guidance = true, revoked = false, intents = 0;
+  await page.route("**/api/pricing-documents/order-intent", route => { intents++; return route.fulfill({ status: 404, json: {} }); });
+  await page.route("**/api/pricing-documents/public", route => revoked ? route.fulfill({ status: 404, json: { message: "공유 문서를 사용할 수 없습니다." } }) : route.fulfill({ json: {
+    document: publicDocumentOutput({ id: "v", documentId: "d", version: 1, revision: 1, publishedAt: "2020-01-01T00:00:00Z", content, unavailablePromotions: [] }),
+    expiresAt: "2099-12-31T15:00:00Z", orderGuidanceAvailable: guidance,
+    inquiry: available ? { status: "available", phone: "01000000000", label: "합성 문의" } : { status: "not_configured" },
+    orderEntry: { available: false, ...(shopping ? { shopping: true, cartScope: "cx93", itemKeys: [null] } : {}) },
+  } }));
+  await page.goto("/pricing-document#cx93");
+  await expect(page.getByRole("region", { name: "기간 지난 단가표" })).toContainText("기간이 지나 이 단가표로는 주문할 수 없습니다");
+  await expect(page.getByText("합성 만료 품목", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(page.locator(".opacity-50").first()).toBeVisible();
+  await expect(page.getByText("98,765원", { exact: true })).toHaveCount(0);
+  const inquiry = page.getByRole("region", { name: "발행 회사 문의" });
+  const call = inquiry.getByRole("link", { name: "담당자에게 전화", exact: true });
+  await expect(call).toHaveAttribute("href", "tel:01000000000");
+  await expect(inquiry.getByText("010-0000-0000", { exact: true })).toHaveCSS("font-size", "24px");
+  expect((await call.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+  await expect(page.getByRole("button", { name: "주문 기간 종료" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "합성 만료 품목 수량 늘리기" })).toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText("CANARY");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+  await page.screenshot({ path: info.outputPath(`cx93-expired-${width}-${shopping}.png`), fullPage: true });
+  available = false; await page.reload();
+  await expect(inquiry).toContainText("공개 문의 연락처가 등록되지 않았습니다"); await expect(call).toHaveCount(0);
+  guidance = false; await page.reload(); await expect(page.locator(".opacity-50")).toHaveCount(0);
+  revoked = true; await page.reload(); await expect(inquiry).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("공유 문서를 사용할 수 없습니다"); expect(intents).toBe(0);
+});
+
 for (const width of [1440, 390]) test(`saved consent uses real API contract snapshots on public documents at ${width}px`, async ({ page }, info) => {
   const flow = JSON.parse(await readFile("test-results/readonly-pg17/public-inquiry-api/flow.json", "utf8")) as {
     publicUrl: string; savedOff: { kit: Record<string, unknown> }; savedOn: { kit: Record<string, unknown> };
