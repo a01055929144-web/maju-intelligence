@@ -34,3 +34,11 @@ export async function processCompanyStoreNotification(input: { actorId: string; 
   return supabaseRequest("rpc/confirm_new_store_account_v1", { method: "POST", body: JSON.stringify({ p_company: input.companyId,
     p_store_account: storeAccountId, p_target_customer: null, p_actor: input.actorId, p_actor_name: input.actorName }) });
 }
+
+export async function ignoreStoreProfileNotification(companyId: string, notificationId: string, actorId: string) {
+  const processedAt = new Date().toISOString();
+  await supabaseRequest(`company_notifications?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(notificationId)}` +
+    `&notification_type=eq.store_profile_changed&processed_at=is.null`, { method: "PATCH", body: JSON.stringify({
+      processed_at: processedAt, processed_by_user_id: actorId, read_at: processedAt, read_by_user_id: actorId,
+    }), headers: { Prefer: "return=minimal" } });
+}
