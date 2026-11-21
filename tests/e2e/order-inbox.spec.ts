@@ -38,6 +38,10 @@ for (const width of [1440, 390]) test(`order inbox filters, expands and confirms
   await expect(page.getByText("MAJU", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("합성 송파 시험 매장", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expect(page.getByLabel("보기").locator("option")).toHaveText(["50개", "100개", "300개", "500개"]);
+  await page.getByLabel("줄 선택").first().check();
+  await expect(page.getByRole("button", { name: "선택 엑셀 · 전체 열" })).toBeVisible();
+  await page.getByRole("button", { name: "선택 해제" }).click();
 
   await page.getByText("2개 품목 · 배송지·주문자").first().click();
   await expect(page.getByText("서울 송파구 합성로 1 101호").first()).toBeVisible();
