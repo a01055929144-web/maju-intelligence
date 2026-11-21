@@ -28,12 +28,13 @@ describe("알림 규칙 (CC-56)", () => {
       { key: "baseAddress", label: "기본 주소", before: "서울 중구 가짜로 1", after: "서울 중구 가짜로 9" }
     ]);
     expect(diffNotificationValues({ newKey: 1 }, { newKey: 2 })[0].label).toBe("newKey");
+    expect(diffNotificationValues({ taxInvoiceEmail: "전@example.com" }, { taxInvoiceEmail: "후@example.com" })[0].label).toBe("계산서 이메일");
     expect(diffNotificationValues({ a: 1 }, { a: 1 })).toEqual([]);
   });
 });
 
 describe("NotificationList (CC-56)", () => {
-  const html = renderToStaticMarkup(<NotificationList items={items} onMarkRead={() => undefined} onProcess={() => undefined} processLabel="거래처에 반영" titles={{ new_store: "새 매장", store_profile_changed: "매장 정보 변경" }} />);
+  const html = renderToStaticMarkup(<NotificationList canIgnore={(item) => item.notificationType === "store_profile_changed"} items={items} onIgnore={() => undefined} onMarkRead={() => undefined} onProcess={() => undefined} processLabel="매출처에 반영" titles={{ new_store: "새 매장", store_profile_changed: "매장 정보 변경" }} />);
   it("건수 줄 · 상태 표시 · 제목+대상 · 새 알림이 위", () => {
     expect(html).toContain("안 읽은 알림 2건 · 전체 4건");
     expect(html).toContain("새 매장 · 더새매장");
@@ -45,7 +46,8 @@ describe("NotificationList (CC-56)", () => {
     expect(html).toContain("전후 비교 보기 (2칸)");
     expect(html).not.toContain("서울 중구 가짜로 9");
     expect((html.match(/읽음 표시/g) || []).length).toBe(2);
-    expect((html.match(/>거래처에 반영</g) || []).length).toBe(3);
+    expect((html.match(/>매출처에 반영</g) || []).length).toBe(3);
+    expect((html.match(/>무시</g) || []).length).toBe(1);
   });
   it("새 주문은 읽음만 표시하고 거래처 반영 버튼은 만들지 않는다", () => {
     const order = { id: "order", notificationType: "new_order", createdAt: "2026-11-17T00:00:00Z" };

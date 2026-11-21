@@ -19,8 +19,12 @@ type Props = {
   readonly onMarkRead?: (id: string) => void;
   /** 처리(예: 변경을 거래처에 반영). 안 주면 처리 버튼이 없다. */
   readonly onProcess?: (id: string) => void;
+  /** 처리하지 않고 닫기. 매장 정보 변경처럼 명시적 무시가 필요한 알림에서만 쓴다. */
+  readonly onIgnore?: (id: string) => void;
   readonly canProcess?: (item: CompanyNotification) => boolean;
+  readonly canIgnore?: (item: CompanyNotification) => boolean;
   readonly processLabel?: string;
+  readonly ignoreLabel?: string;
   /** 요청 중인 항목 id — 그 항목 버튼을 잠근다. */
   readonly busyId?: string | null;
   /** 항목 아래에 화면이 더 넣을 것(예: 주문 보기 링크). */
@@ -34,7 +38,7 @@ type Props = {
   readonly groupByType?: boolean;
 };
 
-export function NotificationList({ busyId = null, canProcess = () => true, emptyDescription, emptyMessage = "새 알림이 없습니다.", error = null, fieldLabels, groupByType = false, items, onMarkRead, onProcess, onRetry, processLabel = "처리", renderExtra, titles = {} }: Props) {
+export function NotificationList({ busyId = null, canIgnore = () => true, canProcess = () => true, emptyDescription, emptyMessage = "새 알림이 없습니다.", error = null, fieldLabels, groupByType = false, ignoreLabel = "무시", items, onIgnore, onMarkRead, onProcess, onRetry, processLabel = "처리", renderExtra, titles = {} }: Props) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const sorted = sortNotifications(items);
   const unread = unreadCount(items);
@@ -84,10 +88,11 @@ export function NotificationList({ busyId = null, canProcess = () => true, empty
                 </div>
               ) : null}
               {renderExtra?.(item)}
-              {status !== "processed" && (onMarkRead || onProcess) ? (
+              {status !== "processed" && (onMarkRead || onProcess || onIgnore) ? (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {status === "new" && onMarkRead ? <button className="maju-button-secondary h-8 text-xs" disabled={busy} onClick={() => onMarkRead(item.id)} type="button">읽음 표시</button> : null}
-                  {onProcess && canProcess(item) ? <button className="maju-button-secondary h-8 text-xs" disabled={busy} onClick={() => onProcess(item.id)} type="button">{busy ? "처리 중…" : processLabel}</button> : null}
+                  {status === "new" && onMarkRead ? <button className="maju-button-secondary h-11 text-xs sm:h-8" disabled={busy} onClick={() => onMarkRead(item.id)} type="button">읽음 표시</button> : null}
+                  {onProcess && canProcess(item) ? <button className="maju-button-secondary h-11 text-xs sm:h-8" disabled={busy} onClick={() => onProcess(item.id)} type="button">{busy ? "처리 중…" : processLabel}</button> : null}
+                  {onIgnore && canIgnore(item) ? <button className="maju-button-secondary h-11 text-xs sm:h-8" disabled={busy} onClick={() => onIgnore(item.id)} type="button">{busy ? "처리 중…" : ignoreLabel}</button> : null}
                 </div>
               ) : null}
             </li>
