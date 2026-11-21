@@ -110,9 +110,11 @@ begin
     if not exists(select 1 from public.purchase_receipt_effective where company_id=p_company and product_catalog_id=v_product and receipt_date>v_date) then
       select receipt_date,unit_cost_ex_vat into v_latest from public.purchase_receipt_effective
         where company_id=p_company and product_catalog_id=v_product order by receipt_date desc,id desc limit 1;
-      update public.product_catalog set purchase_price=v_latest.unit_cost_ex_vat,purchase_price_date=v_latest.receipt_date,updated_at=now()
-        where company_id=p_company and id=v_product;
-      v_recalculated:=true;
+      if found then
+        update public.product_catalog set purchase_price=v_latest.unit_cost_ex_vat,purchase_price_date=v_latest.receipt_date,updated_at=now()
+          where company_id=p_company and id=v_product;
+        v_recalculated:=true;
+      end if;
     end if;
   end loop;
   if v_recalculated then perform public.pricing_p0_command(p_company,'{"action":"recalculate"}'::jsonb); end if;

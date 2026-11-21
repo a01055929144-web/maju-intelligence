@@ -14,10 +14,11 @@ grant all on all tables in schema public to service_role;
 \ir 2026-11-18-cx89-purchase-history-edits.sql
 
 do $$
-declare c uuid:='10000000-0000-4000-8000-000000000001'; p uuid:='20000000-0000-4000-8000-000000000001'; old_id uuid; latest_id uuid; result jsonb;
+declare c uuid:='10000000-0000-4000-8000-000000000001'; p uuid:='20000000-0000-4000-8000-000000000001'; lone_p uuid:='20000000-0000-4000-8000-000000000002'; old_id uuid; latest_id uuid; lone_id uuid; result jsonb;
 begin
   insert into companies values(c);
-  insert into product_catalog(company_id,id,canonical_name,purchase_price,purchase_price_date) values(c,p,'두부',1200,'2026-11-18');
+  insert into product_catalog(company_id,id,canonical_name,purchase_price,purchase_price_date) values
+    (c,p,'두부',1200,'2026-11-18'),(c,lone_p,'콩나물',700,'2026-11-18');
   insert into purchase_receipt_lines(company_id,receipt_date,dedupe_key,line_key,product_catalog_id,product_name,quantity,unit_price,unit_cost_ex_vat)
   select c,date '2026-01-01'+(n%320),n::text,'두부',p,'두부',1,1000+n%20,1000+n%20 from generate_series(1,1369)n;
   select id into old_id from purchase_receipt_lines where company_id=c order by receipt_date,id limit 1;
@@ -36,4 +37,11 @@ begin
   assert (select count(*) from purchase_receipt_effective where company_id=c)=1370;
   assert (select count(*) from purchase_receipt_correction_events where company_id=c)=4;
   assert (select purchase_price from product_catalog where company_id=c and id=p)=1300;
+  insert into purchase_receipt_lines(company_id,receipt_date,dedupe_key,line_key,product_catalog_id,product_name,quantity,unit_price,unit_cost_ex_vat)
+    values(c,'2026-11-18','lone','콩나물',lone_p,'콩나물',1,700,700) returning id into lone_id;
+  result:=mutate_purchase_receipt_line(c,'delete',lone_id,'{}','유일 매입 삭제','대표',0);
+  assert (result->>'recalculated')::boolean=false;
+  assert (select purchase_price from product_catalog where company_id=c and id=lone_p)=700;
+  assert not exists(select 1 from purchase_receipt_effective where id=lone_id);
+  assert (select count(*) from purchase_receipt_correction_events where company_id=c)=5;
 end $$;
