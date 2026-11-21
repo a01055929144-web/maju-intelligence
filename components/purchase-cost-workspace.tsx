@@ -14,7 +14,7 @@ import { PurchaseSheetMapper } from "@/components/purchase-sheet-mapper";
 import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, mergePurchaseLinesForCatalog, supplierLinkTargets, type CostImportRow, type CostProduct, type PurchaseCostCandidate } from "@/domains/pricing/purchase-cost";
 import { buildPurchaseSheet, catalogTaxEvidence, COMMON_UNITS, costExcludingVat, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchasePriceConflict, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
 import { buildCatalogPreview, type CatalogMapping } from "@/domains/product/catalog-import";
-import { MAX_PURCHASE_DATE_BODY_BYTES, buildPurchaseDateRows, holdFuturePrices, holdUnitMismatchedPrices, type DatedPurchaseLine } from "@/domains/pricing/purchase-cost-date";
+import { MAX_PURCHASE_DATE_BODY_BYTES, buildPurchaseDateRows, holdFuturePrices, type DatedPurchaseLine } from "@/domains/pricing/purchase-cost-date";
 import { dateRequestDigest, pendingDateRequest, rememberDateRequest, forgetDateRequest } from "@/lib/pricing/purchase-cost-date-client";
 import type { PurchaseDateBatch } from "@/lib/pricing/purchase-cost-date";
 import { customerErpCode } from "@/domains/product/customer-erp-code";
@@ -336,15 +336,16 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     !historicalPrice(id)).length;
   const unitConversionHolds = useMemo(() => {
     const salesUnits = new Map(unique.map(product => [product.id, product.unit]));
-    return importedLines.filter(line => updateCurrentPrices && line.productId && selected.includes(line.productId) && dateSelectedRows.includes(line.rowNumber) && line.unit.trim() && salesUnits.get(line.productId)?.trim()
-      && line.unit.trim().toLocaleLowerCase("ko") !== salesUnits.get(line.productId)!.trim().toLocaleLowerCase("ko"))
-      .map(line => ({ rowNumber: line.rowNumber, productId: line.productId!, name: line.rawName, purchaseUnit: line.unit, salesUnit: salesUnits.get(line.productId!)! }));
+    return importedLines.filter(line => {
+      if (!updateCurrentPrices || !line.productId || !selected.includes(line.productId) || !dateSelectedRows.includes(line.rowNumber)) return false;
+      const purchaseUnit = line.unit.trim().toLocaleLowerCase("ko"), salesUnit = (salesUnits.get(line.productId) || "").trim().toLocaleLowerCase("ko");
+      return !purchaseUnit || !salesUnit || purchaseUnit !== salesUnit;
+    }).map(line => ({ rowNumber: line.rowNumber, productId: line.productId!, name: line.rawName, purchaseUnit: line.unit || "미기재", salesUnit: salesUnits.get(line.productId!) || "미지정" }));
   }, [dateSelectedRows, importedLines, selected, unique, updateCurrentPrices]);
-  const unitConversionHoldProducts = new Set(unitConversionHolds.map(row => row.productId));
   const futurePriceHoldRows = importedLines.filter(line => dateSelectedRows.includes(line.rowNumber) && line.purchaseDate! > today);
   const futurePriceHoldProducts = new Set(futurePriceHoldRows.map(line => line.productId || JSON.stringify([line.code, line.rawName, line.spec, line.unit, line.supplier])));
   const futurePriceHoldCatalogIds = new Set(futurePriceHoldRows.flatMap(line => line.productId ? [line.productId] : []));
-  const effectivePriceChangeCount = selected.filter(id => !unitConversionHoldProducts.has(id) && !futurePriceHoldCatalogIds.has(id) && candidates[id]
+  const effectivePriceChangeCount = selected.filter(id => !futurePriceHoldCatalogIds.has(id) && candidates[id]
     && candidates[id].cost !== unique.find(product => product.id === id)?.cost && !historicalPrice(id)).length;
   const undatedTargets = useMemo(() => {
     const latest = new Map<string, string>();
@@ -772,8 +773,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const edited = selected.some(id => mappedProductIds.has(id) && candidates[id]
         && (candidates[id].method !== "엑셀" || !mappedLines.some(line => line.productId === id && line.cost === candidates[id].cost)));
       if (edited) throw new Error("같은 상품·적용일의 현재 매입가 후보가 여러 개입니다. 적용할 행을 선택하거나 이번 가격 반영을 보류해 주세요.");
-      const salesUnits = new Map(unique.map(product => [product.id, product.unit]));
-      const allRows = holdFuturePrices(holdUnitMismatchedPrices(buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]), salesUnits), today).map(row => {
+      const allRows = holdFuturePrices(buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]), today).map(row => {
         const target = undatedTargets.find(item => item.productId === row.productId && item.date === row.priceDate);
         return replaceUndatedCurrent && row.priceSelected && target ? { ...row, replaceUndatedCurrent: true, expectedPurchasePrice: target.previous } : row;
       });
@@ -1079,8 +1079,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       </div> : null}
       {unitRelinkBlockedRows.length ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">단위 변경으로 상품 연결을 다시 확인해야 하는 원본 행: {unitRelinkBlockedRows.join(", ")}행. 잘못된 상품에 가격이 반영되지 않도록 저장을 막았습니다. 단위 열을 채운 원본 파일을 다시 올려 열 정렬해 주세요.</p> : null}
       {unitConversionHolds.length ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
-        <p className="font-semibold">단위 환산 검증 대기 {unitConversionHolds.length}행은 원본 이력만 저장하고 현재 매입가는 바꾸지 않습니다.</p>
-        <ul>{unitConversionHolds.map(row => <li key={row.rowNumber}>원본 {row.rowNumber}행 · {row.name} · 매입 {row.purchaseUnit} → 판매 {row.salesUnit} · 환산 검증 대기(현재가 보류)</li>)}</ul>
+        <p className="font-semibold">단위 확인 대상 {unitConversionHolds.length}행 · 서버에서 검증된 환산이 없으면 원본 이력만 저장하고 현재 매입가는 보류합니다.</p>
+        <p>매입 단위를 입력하거나 상품관리에서 환산을 확인한 뒤 다시 반영해 주세요.</p>
+        <ul>{unitConversionHolds.map(row => <li key={row.rowNumber}>원본 {row.rowNumber}행 · {row.name} · 매입 {row.purchaseUnit} → 판매 {row.salesUnit}</li>)}</ul>
       </div> : null}
       {futurePriceHoldProducts.size ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900" role="status">미래 적용일 현재가 보류 {futurePriceHoldProducts.size}품목 · 원본 이력은 저장하지만 적용일이 오기 전에는 현재 매입가를 바꾸지 않습니다.</p> : null}
       {priceChoiceReview.length ? <section aria-label="현재 매입가 선택 결과" className="space-y-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-950">

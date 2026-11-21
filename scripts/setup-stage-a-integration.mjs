@@ -39,6 +39,10 @@ try {
       customer_email text,customer_password text,customer_company_id uuid,updated_at timestamptz default now());
     create table if not exists public.login_throttle_attempts(identifier text primary key,failures integer not null default 0,
       first_failure_at timestamptz not null default now(),locked_until timestamptz);
+    create table if not exists public.product_unit_conversions(
+      id uuid primary key default gen_random_uuid(), company_id uuid not null, product_catalog_id uuid not null,
+      unit_name text not null, base_quantity numeric not null check(base_quantity > 0), is_base boolean not null default false,
+      is_confirmed boolean not null default false, source text not null default 'manual');
     create table public.stage_a_failure_control(company_id uuid primary key,fail_recalculation boolean not null default false,fail_receipts boolean not null default false);
     create function public.stage_a_fail_recalculation() returns trigger language plpgsql as $$ begin
       if exists(select 1 from public.stage_a_failure_control where company_id=new.company_id and fail_recalculation)
