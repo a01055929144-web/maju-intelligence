@@ -224,10 +224,12 @@ test("S-4 desktop opens received documents with industry filters and expiry", as
   await expect(page.getByText("합성 농산 단가표", { exact: true })).toBeVisible();
   await expect(page.getByText(/8개 품목/)).toBeVisible();
   await expect(page.getByText(/기간 지남 · 유효기간 2000-01-01/)).toBeVisible();
-  await expect(page.getByRole("link", { name: "보고 주문" })).toHaveCount(1);
-  await expect(page.getByRole("link", { name: "품목 보기" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "문서 보기" })).toHaveCount(2);
+  await expect(page.getByRole("link", { name: "보고 주문" })).toHaveAttribute("href", "/store?view=order#synthetic-s4-valid");
+  await expect(page.getByLabel("다음 주문")).toContainText("합성 유통");
   await expect(page.getByText("2099-01-01 22:00")).toBeVisible();
   await expect(page.getByRole("link", { name: "전체 품목으로 주문" })).toHaveAttribute("href", "/store?view=order#synthetic-catalog");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   await page.screenshot({ path: info.outputPath("S-4-received-documents-1440.png") });
   await page.getByRole("navigation", { name: "단가표 업종" }).getByRole("link", { name: "주류" }).click();
   await expect(page.getByText("합성 농산 단가표", { exact: true })).toBeHidden();

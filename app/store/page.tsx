@@ -191,7 +191,8 @@ export default async function StorePage({ searchParams }: {
           industry={typeof params.industry === "string" ? params.industry : undefined} cutoff={cutoff}
           cartHref={orderHref?.replace("/store#", "/store?view=order#") ?? selected.catalogHref}
           industryHref={industry => industry ? `${homeHref}&industry=${encodeURIComponent(industry)}` : homeHref}
-          documentHref={documentHref} />
+          documentHref={documentHref}
+          orderHref={document => document.href.replace("/store#", "/store?view=order#")} />
       </div>
       </> : home}
     </>}
