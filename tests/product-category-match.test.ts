@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { supabaseRequest } = vi.hoisted(() => ({ supabaseRequest: vi.fn() }));
 vi.mock("../lib/store", () => ({ supabaseRequest }));
 
+import { categoryPaths } from "../domains/product/common-category-mapping";
 import { saveCategoryMatch, scoreCategoryMatch } from "../lib/product-category-match";
 
 describe("category match suggestion", () => {
@@ -19,6 +20,23 @@ describe("category match suggestion", () => {
     expect(supabaseRequest).toHaveBeenCalledWith(
       "product_categories?select=id,maju_category_id&company_id=eq.company-1&id=eq.category-1",
       { method: "PATCH", body: JSON.stringify({ maju_category_id: "maju-1" }) },
+    );
+  });
+
+  it("builds a distributor large/middle/small path", () => {
+    expect(categoryPaths([
+      { id: "large", parentId: "", level: 1, name: "농산" },
+      { id: "middle", parentId: "large", level: 2, name: "채소" },
+      { id: "small", parentId: "middle", level: 3, name: "잎채소" },
+    ]).get("small")).toBe("농산 > 채소 > 잎채소");
+  });
+
+  it("can return a mapping to 기타 without escaping the company scope", async () => {
+    supabaseRequest.mockResolvedValueOnce([{ id: "category-1", maju_category_id: null }]);
+    await expect(saveCategoryMatch("company-1", "category-1", null)).resolves.toEqual({ id: "category-1", majuCategoryId: "" });
+    expect(supabaseRequest).toHaveBeenCalledWith(
+      "product_categories?select=id,maju_category_id&company_id=eq.company-1&id=eq.category-1",
+      { method: "PATCH", body: JSON.stringify({ maju_category_id: null }) },
     );
   });
 });
