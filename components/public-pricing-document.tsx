@@ -5,6 +5,7 @@ import type { PublicDocumentOutput } from "@/domains/pricing/document-share";
 import { koreaDay } from "@/domains/pricing/document";
 import { PublicMemberCatalog, PublicSavedCart, PublicShoppingRows } from "./public-document-shopping";
 import { formatWon } from "@/domains/shared/money";
+import { formatKoreanPhoneNumber } from "@/domains/lead/contact-channels";
 import { PublicDocumentPaperImages } from "./public-document-paper-images";
 import { PricingDocPaper } from "./pricing-doc-paper";
 import { SharedPricingAcceptance } from "./shared-pricing-acceptance";
@@ -14,11 +15,13 @@ import { BottomActionBar, MobileListRow, MoneyText } from "./ui/mobile";
 import { EmptyState } from "./ui/state";
 
 type OrderEntry = { available: boolean; companyName: string; title: string; version: number; message?: string; member?: boolean; shopping?: boolean; cartScope?: string; itemKeys?: Array<string | null> };
+type Inquiry = { status: "available"; phone: string; label: string } | { status: "not_configured" | "unavailable" };
 
 export function PublicPricingDocument({ embedded }: { embedded?: { token: string; orderHref: string } }) {
   const [document, setDocument] = useState<PublicDocumentOutput | null>(null);
   const [message, setMessage] = useState("문서를 확인하고 있습니다.");
   const [expiresAt, setExpiresAt] = useState("");
+  const [inquiry, setInquiry] = useState<Inquiry | null>(null);
   const [busy, setBusy] = useState(false);
   const [acceptance, setAcceptance] = useState<{ token: string; available: boolean } | null>(null);
   const [orderEntry, setOrderEntry] = useState<OrderEntry | null>(null);
@@ -68,13 +71,13 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   }, [acceptance, draftStorageKey, member, orderEntry, orderBusy, quantities, shopping]);
   const load = useCallback(async () => {
     const current = ++sequence.current;
-    setDocument(null); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setQuantities({}); setQuery(""); setView("table"); setBusy(true); setMessage("문서를 확인하고 있습니다.");
+    setDocument(null); setInquiry(null); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setQuantities({}); setQuery(""); setView("table"); setBusy(true); setMessage("문서를 확인하고 있습니다.");
     try {
       const token = embeddedToken ?? window.location.hash.slice(1);
       if (!token || token.length > 200) throw new Error("공유 링크를 확인해 주세요. 담당자에게 새 링크를 요청해 주세요.");
       const response = await fetch("/api/pricing-documents/public", { method: "POST", cache: "no-store",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-      const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean; orderEntry?: OrderEntry };
+      const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean; orderEntry?: OrderEntry; inquiry?: Inquiry };
       if (!response.ok || !result.document) throw new Error(result.message || "문서를 확인하지 못했습니다. 다시 시도해 주세요.");
       if (!result.expiresAt || !Number.isFinite(Date.parse(result.expiresAt))) throw new Error("링크 유효기간을 확인하지 못했습니다. 다시 시도해 주세요.");
       if (sequence.current === current && result.orderEntry?.shopping && result.orderEntry.cartScope) {
@@ -87,7 +90,14 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
       }
       if (sequence.current === current && result.orderEntry?.shopping && result.orderEntry.member &&
         new URLSearchParams(window.location.search).get("view") === "cart") setView("cart");
-      if (sequence.current === current) { setDocument(result.document); setExpiresAt(result.expiresAt); setAcceptance({ token, available: result.acceptanceAvailable === true }); setOrderEntry(result.orderEntry ?? null); setMessage(""); }
+      if (sequence.current === current) {
+        const contact = result.inquiry;
+        setInquiry(contact?.status === "available" && typeof contact.phone === "string" &&
+          (/^0\d{8,10}$/.test(contact.phone) || /^1[568]\d{6}$/.test(contact.phone)) && typeof contact.label === "string"
+          ? { status: "available", phone: contact.phone, label: contact.label.slice(0, 30) }
+          : contact ? { status: contact.status === "not_configured" ? "not_configured" : "unavailable" } : null);
+        setDocument(result.document); setExpiresAt(result.expiresAt); setAcceptance({ token, available: result.acceptanceAvailable === true }); setOrderEntry(result.orderEntry ?? null); setMessage("");
+      }
     } catch (error) { if (sequence.current === current) setMessage(error instanceof Error ? error.message : "문서를 확인하지 못했습니다."); }
     finally { if (sequence.current === current) setBusy(false); }
   }, [embeddedToken]);
@@ -110,7 +120,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     const check = () => {
       window.clearTimeout(timer);
       if (Date.now() >= hardCutoff) {
-        ++sequence.current; setDocument(null); setAcceptance(null); setOrderEntry(null);
+        ++sequence.current; setDocument(null); setInquiry(null); setAcceptance(null); setOrderEntry(null);
         setMessage("링크 열람기간이 끝났습니다. 발행 회사에 새 링크를 요청해 주세요.");
       } else if (Date.now() >= priceCutoff) {
         ++sequence.current;
@@ -228,6 +238,15 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
         ))}</ul> : <EmptyState bare className="p-4" message={keyword ? "검색에 맞는 품목이 없습니다." : "표시 가능한 품목이 없습니다."} />}
       </section>}
     </div>)}
+    {safeDocument && inquiry && !embedded && <section aria-label="발행 회사 문의" className="space-y-2 print:hidden">
+      {inquiry.status === "available" ? <>
+        <p className="break-words">{safeDocument.companyName} · {inquiry.label || "발행 회사"} · {formatKoreanPhoneNumber(inquiry.phone)}</p>
+        <a className="maju-button-secondary inline-flex min-h-[44px] items-center justify-center" href={`tel:${inquiry.phone}`}>발행 회사에 전화 문의</a>
+      </> : inquiry.status === "not_configured" ? <p>이 문서에 공개 문의 연락처가 등록되지 않았습니다. 전달받은 안내문의 연락처를 확인해 주세요.</p> : <>
+        <p role="status">문의 연락처를 확인하지 못했습니다. 잠시 후 다시 확인해 주세요.</p>
+        <Button variant="outline" className="min-h-[44px]" onClick={() => void load()}>문의 연락처 다시 확인</Button>
+      </>}
+    </section>}
     {showOrder && <section aria-label="공개 문서 주문 안내" className="space-y-2 text-[15px] text-slate-700 print:hidden">
       <p>가격·주문 {until}</p>
       {shopping && !orderDisabled && orderEntry?.available && !member ? <p>카카오로 시작하면 거래 약관과 개인정보 처리에 동의합니다.</p> : member ? <p>주문 메뉴에서 발급된 주문 가능 문서를 확인해 주세요.</p>

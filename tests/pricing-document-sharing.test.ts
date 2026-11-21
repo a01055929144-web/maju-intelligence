@@ -1,17 +1,19 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { createHash } from "crypto";
+import { mkdir, writeFile } from "node:fs/promises";
 import { NextRequest } from "next/server";
 import { publicDocumentLinkExpiry, documentLinkLastDay } from "../domains/pricing/document-share";
 import { lineFromCatalog, type DocumentContent } from "../domains/pricing/document";
 import { pricingDocuments } from "../application/pricing/documents";
-const mocks = vi.hoisted(() => ({ db: vi.fn(), auth: vi.fn(), onboarding: vi.fn(), connection: vi.fn() }));
-vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db, getSupabaseConfig: vi.fn() }));
-vi.mock("../lib/auth", () => ({ getRequestAuthScope: mocks.auth, getCustomerOperationalName: (session: { name?: string } | undefined) => session?.name }));
+const mocks = vi.hoisted(() => ({ db: vi.fn(), auth: vi.fn(), capability: vi.fn(), onboarding: vi.fn(), connection: vi.fn() }));
+vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db, getSupabaseConfig: vi.fn(), isProductionStoreConfigured: () => true }));
+vi.mock("../lib/auth", () => ({ getRequestAuthScope: mocks.auth, scopeHasCapability: mocks.capability, getCustomerOperationalName: (session: { name?: string } | undefined) => session?.name }));
 vi.mock("../lib/store/07-store-owner-provisioning", () => ({ createPublicStoreOwnerOnboardingIntent: mocks.onboarding }));
 vi.mock("../lib/pricing/public-document-order-connection", () => ({ connectPublicDocumentOrder: mocks.connection }));
 import { POST as orderIntentPost } from "../app/api/pricing-documents/order-intent/route";
 import { pricingDocumentsRepository } from "../lib/pricing/documents-repository";
 import { POST as publicPost } from "../app/api/pricing-documents/public/route";
+import { PUT as saveSalesKitPut } from "../app/api/sales-kit/route";
 import { POST as privatePost } from "../app/api/pricing-documents/route";
 import { getPublicDocumentOrderContext } from "../lib/pricing/document-share";
 import { issueDocumentShareToken, verifyDocumentShareToken } from "../lib/pricing/document-share-token";
@@ -27,10 +29,13 @@ const prepare = { action: "prepare-share", documentId: doc, documentVersionId: v
 type Row = Record<string, string | number | null>;
 let links: Row[], sends: Row[], actions: Row[], content: DocumentContent, owner: string, merged: boolean, archived: boolean;
 let failInsert: boolean, failBinding: boolean, limit: string, stock: number;
+let inquiryBody: string | null, inquiryFailure: boolean;
 const seen: string[] = [];
 
 beforeEach(() => {
   vi.clearAllMocks(); links = []; sends = []; actions = []; seen.length = 0; owner = actor; merged = archived = failInsert = failBinding = false; limit = "allowed"; stock = 2;
+  inquiryBody = null; inquiryFailure = false;
+  mocks.capability.mockReturnValue(false);
   mocks.connection.mockResolvedValue(null);
   vi.stubEnv("STORE_PUBLIC_OWNER_ONBOARDING_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS", company);
   vi.stubEnv("STORE_MEMBER_SESSION_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_MEMBER_SESSION_COMPANY_IDS", company);
@@ -90,6 +95,18 @@ beforeEach(() => {
         rows.filter(matches).forEach(r => Object.assign(r, JSON.parse(String(init.body)))); return;
       }
       return rows.filter(matches);
+    }
+    if (table === "company_message_templates") {
+      if (init?.method === "POST") {
+        const saved = JSON.parse(String(init.body));
+        expect(saved.company_id).toBe(company); expect(saved.template_key).toBe("lead_dm_kit"); expect(saved.is_active).toBe(true);
+        inquiryBody = saved.body; return;
+      }
+      expect(p.get("company_id")).toBe(`eq.${company}`); expect(p.get("template_key")).toBe("eq.lead_dm_kit");
+      if (p.get("select") === "body") expect(p.get("is_active")).toBe("eq.true");
+      else expect(p.get("select")).toBe("company_id,template_key,body");
+      if (inquiryFailure) throw new Error("PRIVATE-INQUIRY-FAILURE-CANARY");
+      return inquiryBody === null ? [] : [{ company_id: company, template_key: "lead_dm_kit", body: inquiryBody }];
     }
     if (p.get("company_id") !== `eq.${company}`) return [];
     if (table === "pricing_document_versions") return p.get("id") === `eq.${version}` ? [{ id: version, document_id: doc, version: 2, revision: 3, published_at: "2026-11-06T00:00:00Z", content: { ...content, cost: "COST-CANARY", supplier: "SUPPLIER-CANARY" } }] : [];
@@ -315,6 +332,92 @@ it("creates a recipient-free public document without lead lookup, delivery or cu
   expect(await getPublicDocumentOrderContext(token(result.publicUrl), "fixture")).toMatchObject({ companyId: company, documentId: doc, documentVersionId: version, shareLinkId: result.shareLinkId });
   expect(await service.execute(scope, input)).toEqual(result);
   expect(links).toHaveLength(1); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
+});
+it.each([
+  null, "{broken", "null", "[]", JSON.stringify({ contactPhone: "010-0000-0000" }),
+  JSON.stringify({ publicContactEnabled: "true", contactPhone: "010-0000-0000" }),
+  JSON.stringify({ publicContactEnabled: false, contactPhone: "010-0000-0000" }),
+  JSON.stringify({ publicContactEnabled: true, contactPhone: "" }),
+  JSON.stringify({ publicContactEnabled: true, contactPhone: "tel:01000000000" }),
+  JSON.stringify({ publicContactEnabled: true, contactPhone: "123" }),
+])("never substitutes a representative or document contact for an unconfigured inquiry (%s)", async raw => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true"); inquiryBody = raw;
+  const p = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  const response = await publicPost(request({ token: token(p.publicUrl) }));
+  expect(response.status).toBe(200); const body = await response.json();
+  expect(body.inquiry).toEqual({ status: "not_configured" });
+  expect(seen.some(url => /company_profiles|app_users/.test(url))).toBe(false);
+  expect(JSON.stringify(body)).not.toContain("CANARY");
+});
+it("returns only an opted-in issuer inquiry, refreshes withdrawal, and keeps price expiry separate", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true"); vi.stubEnv("STORE_PUBLIC_OWNER_ONBOARDING_ENABLED", "false");
+  inquiryBody = JSON.stringify({ publicContactEnabled: true, contactPhone: "010-0000-0000", contactLabel: "합성 문의",
+    main_phone: "PRIVATE-PHONE-CANARY", settlement_account: "PRIVATE-ACCOUNT-CANARY" });
+  const p = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  // Another company's authenticated scope cannot override the public token's issuer.
+  mocks.auth.mockResolvedValue({ ok: true, companyId: other });
+  const read = async () => (await publicPost(request({ token: token(p.publicUrl) }))).json();
+  const body = await read();
+  expect(body.inquiry).toEqual({ status: "available", phone: "01000000000", label: "합성 문의" });
+  expect(body.orderEntry.available).toBe(false); expect(JSON.stringify(body)).not.toContain("CANARY");
+  expect(seen.filter(url => url.startsWith("company_message_templates?")).every(url => url.includes(`company_id=eq.${company}`))).toBe(true);
+  content.validUntil = "2020-01-01";
+  expect((await read()).inquiry).toEqual(body.inquiry); expect((await read()).document.expired).toBe(true);
+  inquiryBody = JSON.stringify({ publicContactEnabled: false, contactPhone: "01000000000" });
+  expect((await read()).inquiry).toEqual({ status: "not_configured" });
+  inquiryFailure = true;
+  const failed = await read(); expect(failed.inquiry).toEqual({ status: "unavailable" }); expect(failed.document).toBeTruthy();
+  expect(JSON.stringify(failed)).not.toContain("CANARY"); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
+});
+it.each(["revoked", "expired", "tampered", "company-override", "targeted"])("does not read or disclose inquiry on %s links", async state => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  inquiryBody = JSON.stringify({ publicContactEnabled: true, contactPhone: "01000000000" });
+  const p = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  if (state === "revoked") links[0].revoked_at = new Date().toISOString();
+  if (state === "expired") links[0].expires_at = "2000-01-01T00:00:00Z";
+  if (state === "targeted") links[0].lead_id = lead;
+  seen.length = 0;
+  const response = await publicPost(request({ token: state === "tampered" ? "invalid" : token(p.publicUrl),
+    ...(state === "company-override" ? { companyId: other } : {}) }));
+  if (state !== "targeted") expect(response.status).toBe(404);
+  const body = await response.json(); expect(body).not.toHaveProperty("inquiry");
+  expect(JSON.stringify(body)).not.toContain("01000000000");
+  expect(seen.some(url => url.startsWith("company_message_templates?"))).toBe(false);
+});
+it("connects real sales-kit PUT and persistence to public POST without phone fallback", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const p = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  const read = () => publicPost(request({ token: token(p.publicUrl) }));
+  const save = (enabled: boolean, phone = "01000000000") => saveSalesKitPut(new NextRequest("https://fixture.test/api/sales-kit", {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contactLabel: "합성 공개 문의", contactPhone: phone, publicContactEnabled: enabled }),
+  }));
+  expect((await save(true)).status).toBe(403); expect(inquiryBody).toBeNull();
+  const missing = await (await read()).json(); expect(missing.inquiry).toEqual({ status: "not_configured" });
+  mocks.capability.mockReturnValue(true);
+  const offSave = await save(false); expect(offSave.status).toBe(200); const savedOff = await offSave.json();
+  const defaultOff = await (await read()).json(); expect(defaultOff.inquiry).toEqual({ status: "not_configured" });
+  const onSave = await save(true); expect(onSave.status).toBe(200); const savedOn = await onSave.json();
+  const enabled = await (await read()).json(); expect(enabled.inquiry).toEqual({ status: "available", phone: "01000000000", label: "합성 공개 문의" });
+  const withdrawSave = await save(false); expect(withdrawSave.status).toBe(200); const savedWithdrawal = await withdrawSave.json();
+  const withdrawn = await (await read()).json(); expect(withdrawn.inquiry).toEqual({ status: "not_configured" });
+  expect((await save(true, "")).status).toBe(200);
+  expect(JSON.parse(inquiryBody!).publicContactEnabled).toBe(false);
+  const emptyPhone = await (await read()).json(); expect(emptyPhone.inquiry).toEqual({ status: "not_configured" });
+  expect((await save(true)).status).toBe(200);
+  content.validUntil = "2020-01-01";
+  const priceExpired = await (await read()).json(); expect(priceExpired.document.expired).toBe(true); expect(priceExpired.inquiry).toEqual(enabled.inquiry);
+  inquiryFailure = true;
+  const unavailable = await (await read()).json(); expect(unavailable.inquiry).toEqual({ status: "unavailable" }); inquiryFailure = false;
+  links[0].expires_at = "2000-01-01T00:00:00Z";
+  const expiredResponse = await read(); expect(expiredResponse.status).toBe(404); const expired = await expiredResponse.json();
+  links[0].expires_at = "2099-01-01T00:00:00Z"; links[0].revoked_at = new Date().toISOString();
+  const revokedResponse = await read(); expect(revokedResponse.status).toBe(404); const revoked = await revokedResponse.json();
+  expect(expired).not.toHaveProperty("inquiry"); expect(revoked).not.toHaveProperty("inquiry");
+  expect(seen.some(url => /company_profiles|app_users/.test(url))).toBe(false);
+  expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
+  await mkdir("test-results/readonly-pg17/public-inquiry-api", { recursive: true });
+  await writeFile("test-results/readonly-pg17/public-inquiry-api/flow.json", JSON.stringify({ publicUrl: p.publicUrl,
+    savedOff, savedOn, savedWithdrawal, missing, defaultOff, enabled, withdrawn, emptyPhone, priceExpired, unavailable, expired, revoked }, null, 2));
 });
 it("recovers a public link committed before a lost API response and logs only safe failure metadata", async () => {
   vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
