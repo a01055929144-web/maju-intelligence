@@ -1,0 +1,33 @@
+name: CX93 industry guard PG17
+on:
+  pull_request:
+    paths:
+      - 'docs/sql-drafts/*CX-93*'
+      - 'scripts/test-cx93-industry-guard.sh'
+      - '.github/workflows/cx93-industry-guard.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pg17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: cx93_industry_guard_test
+    steps:
+      - uses: actions/checkout@v4
+      - run: createdb cx93_industry_guard_test
+      - run: bash scripts/test-cx93-industry-guard.sh
