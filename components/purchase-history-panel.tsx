@@ -2,7 +2,7 @@
 
 import { formatWon } from "@/domains/shared/money";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { summarizePurchaseHistory, type PurchaseHistoryRow } from "@/domains/pricing/purchase-receipt";
+import { purchaseHistoryMoments, summarizePurchaseHistory, type PurchaseHistoryItem, type PurchaseHistoryMoment, type PurchaseHistoryRow } from "@/domains/pricing/purchase-receipt";
 import { SortableTh } from "@/components/sortable-th";
 import { useTableSort } from "@/lib/use-table-sort";
 
@@ -12,9 +12,6 @@ const money = formatWon;
 export function PurchaseHistoryPanel({ batch, companyId, refreshKey, restore }: { readonly batch?: { fileName?: string; receiptDate?: string; rowCount: number; status: string }; readonly companyId: string; readonly refreshKey: number; readonly restore?: { disabled: boolean; label: string; run: () => void } }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [canCorrect, setCanCorrect] = useState(false);
   const [editing, setEditing] = useState<{ action: "correct" | "delete" | "add"; id?: string; receiptDate: string; productName: string; supplier: string; spec: string; unit: string; quantity: string; cost: string; revision: number } | null>(null);
@@ -23,7 +20,7 @@ export function PurchaseHistoryPanel({ batch, companyId, refreshKey, restore }: 
   const [productId, setProductId] = useState("");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
-  const [rows, setRows] = useState<PurchaseHistoryRow[] | null>(null);
+  const [items, setItems] = useState<PurchaseHistoryItem[] | null>(null);
   const [error, setError] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -35,25 +32,21 @@ export function PurchaseHistoryPanel({ batch, companyId, refreshKey, restore }: 
 
   useEffect(() => {
     let active = true;
-    if (page === 1) setRows(null);
+    setItems(null);
     setError("");
-    setLoading(true);
-    const params = new URLSearchParams({ companyId, page: String(page) });
+    const params = new URLSearchParams({ companyId, summary: "1" });
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (search) params.set("search", search);
-    if (onlyChanged) params.set("changed", "1");
     void fetch(`/api/price-sheets/receipts?${params}`, { cache: "no-store" }).then(async (response) => {
-      const payload = (await response.json().catch(() => null)) as { rows?: PurchaseHistoryRow[]; canCorrect?: boolean; hasMore?: boolean; message?: string } | null;
+      const payload = (await response.json().catch(() => null)) as { summary?: PurchaseHistoryItem[]; canCorrect?: boolean; message?: string } | null;
       if (!active) return;
-      if (!response.ok || !payload?.rows) { setError(payload?.message || "매입 이력을 불러오지 못했습니다."); if (page === 1) setRows([]); setLoading(false); return; }
-      setRows((previous) => page === 1 ? payload.rows! : [...(previous || []), ...payload.rows!]);
+      if (!response.ok || !payload?.summary) { setError(payload?.message || "매입 이력을 불러오지 못했습니다."); setItems([]); return; }
+      setItems(payload.summary);
       setCanCorrect(payload.canCorrect === true);
-      setHasMore(payload.hasMore === true);
-      setLoading(false);
-    }).catch(() => { if (active) { setError("매입 이력을 불러오지 못했습니다. 다시 시도해 주세요."); if (page === 1) setRows([]); setLoading(false); } });
+    }).catch(() => { if (active) { setError("매입 이력을 불러오지 못했습니다. 다시 시도해 주세요."); setItems([]); } });
     return () => { active = false; };
-  }, [companyId, from, to, search, onlyChanged, page, refreshKey, reloadKey]);
+  }, [companyId, from, to, search, refreshKey, reloadKey]);
 
   async function findProducts() {
     if (!productQuery.trim()) return;
@@ -81,7 +74,6 @@ export function PurchaseHistoryPanel({ batch, companyId, refreshKey, restore }: 
       setProductChoices([]);
       setProductId("");
       setReason("");
-      setPage(1);
       setReloadKey((value) => value + 1);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "정정을 저장하지 못했습니다."); }
     finally { setSaving(false); }
@@ -113,48 +105,50 @@ export function PurchaseHistoryPanel({ batch, companyId, refreshKey, restore }: 
     }
   }
 
-  const items = useMemo(() => summarizePurchaseHistory(rows || []), [rows]);
-  const { sortKey, sortDirection, sortedRows: sortedItems, toggleSort } = useTableSort(items, {
+  const visibleItems = useMemo(() => onlyChanged ? (items || []).filter((item) => item.changeAmount) : items || [], [items, onlyChanged]);
+  const moments = (item: PurchaseHistoryItem) => purchaseHistoryMoments(item.entries, batch?.receiptDate);
+  const { sortKey, sortDirection, sortedRows: sortedItems, toggleSort } = useTableSort(visibleItems, {
     name: (a, b) => a.name.localeCompare(b.name, "ko"),
     spec: (a, b) => `${a.spec} ${a.unit}`.localeCompare(`${b.spec} ${b.unit}`, "ko"),
     supplier: (a, b) => a.supplier.localeCompare(b.supplier, "ko"),
-    date: (a, b) => a.latestDate.localeCompare(b.latestDate),
-    latestCost: (a, b) => a.latestCost - b.latestCost,
-    previousCost: (a, b) => (a.previousCost ?? -1) - (b.previousCost ?? -1),
+    date: (a, b) => (moments(a).upload?.date || "").localeCompare(moments(b).upload?.date || ""),
+    latestCost: (a, b) => (moments(a).recent?.costs[0] ?? -1) - (moments(b).recent?.costs[0] ?? -1),
+    previousCost: (a, b) => (moments(a).previous?.costs[0] ?? -1) - (moments(b).previous?.costs[0] ?? -1),
     change: (a, b) => (a.changeAmount ?? 0) - (b.changeAmount ?? 0),
     range: (a, b) => a.minCost - b.minCost || a.maxCost - b.maxCost,
     quantity: (a, b) => a.totalQuantity - b.totalQuantity,
     count: (a, b) => a.count - b.count,
   });
-  const dates = useMemo(() => new Set((rows || []).map((row) => row.receipt_date)).size, [rows]);
-  const up = items.filter((item) => item.direction === "up").length;
-  const down = items.filter((item) => item.direction === "down").length;
+  const dates = useMemo(() => new Set((items || []).flatMap((item) => item.entries.map((entry) => entry.date))).size, [items]);
+  const up = (items || []).filter((item) => item.direction === "up").length;
+  const down = (items || []).filter((item) => item.direction === "down").length;
+  const moment = (value?: PurchaseHistoryMoment) => value ? <><span className="block whitespace-nowrap text-slate-600">{value.date}</span><span className="block font-semibold">{value.costs.map(money).join(" · ")}</span></> : <span className="text-slate-400">-</span>;
 
   return (
     <section className="maju-section-card min-w-0 space-y-3 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="mr-auto font-semibold">매입 이력</h2>
-        <span className="text-xs font-semibold text-slate-500">불러온 기록 기준 {dates}일 · 품목 {items.length}개 · 인상 {up} · 인하 {down}</span>
+        <span className="text-xs font-semibold text-slate-500">불러온 기록 기준 {dates}일 · 품목 {(items || []).length}개 · 인상 {up} · 인하 {down}</span>
         {restore ? <button className="maju-button-secondary min-h-11" disabled={restore.disabled} onClick={restore.run} type="button">{restore.label}</button> : null}
         {canCorrect ? <button className="maju-button-secondary min-h-11" onClick={() => { setEditing({ action: "add", receiptDate: new Date().toISOString().slice(0, 10), productName: "", supplier: "", spec: "", unit: "", quantity: "", cost: "", revision: 0 }); setReason(""); setProductId(""); }} type="button">매입 줄 직접 추가</button> : null}
-        <label className="text-xs">시작일 <input aria-label="매입 시작일" className="maju-input min-h-11" onChange={(event) => { setFrom(event.target.value); setPage(1); }} type="date" value={from} /></label>
-        <label className="text-xs">종료일 <input aria-label="매입 종료일" className="maju-input min-h-11" onChange={(event) => { setTo(event.target.value); setPage(1); }} type="date" value={to} /></label>
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600"><input checked={onlyChanged} onChange={(event) => { setOnlyChanged(event.target.checked); setPage(1); }} type="checkbox" />단가 바뀐 품목만</label>
-        <form className="flex gap-1" onSubmit={(event) => { event.preventDefault(); setSearch(searchInput); setPage(1); }}>
+        <label className="text-xs">시작일 <input aria-label="매입 시작일" className="maju-input min-h-11" onChange={(event) => setFrom(event.target.value)} type="date" value={from} /></label>
+        <label className="text-xs">종료일 <input aria-label="매입 종료일" className="maju-input min-h-11" onChange={(event) => setTo(event.target.value)} type="date" value={to} /></label>
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600"><input checked={onlyChanged} onChange={(event) => setOnlyChanged(event.target.checked)} type="checkbox" />단가 바뀐 품목만</label>
+        <form className="flex gap-1" onSubmit={(event) => { event.preventDefault(); setSearch(searchInput); }}>
           <input aria-label="이력 검색" className="maju-input min-h-11" onChange={(event) => setSearchInput(event.target.value)} placeholder="품목·코드·매입처 검색" value={searchInput} />
           <button className="maju-button-secondary min-h-11" type="submit">검색</button>
         </form>
-        {(from || to || searchInput || search) ? <button className="maju-button-secondary min-h-11" onClick={() => { setFrom(""); setTo(""); setSearchInput(""); setSearch(""); setPage(1); }} type="button">전체 보기</button> : null}
+        {(from || to || searchInput || search) ? <button className="maju-button-secondary min-h-11" onClick={() => { setFrom(""); setTo(""); setSearchInput(""); setSearch(""); }} type="button">전체 보기</button> : null}
       </div>
       {batch ? <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"><b>직전 업로드 묶음</b> · {batch.receiptDate || "날짜 미확인"} · {batch.fileName || "파일명 미확인"} · 원본 {batch.rowCount.toLocaleString("ko-KR")}행 · {batch.status === "restored" ? "되돌림 완료" : "저장 완료"}</p> : null}
       {error ? <div className="flex items-center gap-2 text-sm text-rose-700" role="alert">{error}<button className="maju-button-secondary min-h-11" onClick={() => setReloadKey((value) => value + 1)} type="button">다시 시도</button></div> : null}
-      {rows === null ? <p className="text-sm text-slate-500">불러오는 중입니다.</p> : !items.length ? <p className="text-sm text-slate-500">조회 조건에 맞는 매입 기록이 없습니다. 기간이나 검색어를 바꿔 보세요.</p> : (
+      {items === null ? <p className="text-sm text-slate-500">불러오는 중입니다.</p> : !visibleItems.length ? <p className="text-sm text-slate-500">조회 조건에 맞는 매입 기록이 없습니다. 기간이나 검색어를 바꿔 보세요.</p> : (
         <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-slate-50 text-left text-xs text-slate-500">
               <tr>{([
-                ["name", "품목"], ["spec", "규격·단위"], ["supplier", "매입처"], ["date", "최근 매입일"],
-                ["latestCost", "최근 단가"], ["previousCost", "직전 단가"], ["change", "변동"],
+                ["name", "품목"], ["spec", "규격·단위"], ["supplier", "매입처"], ["date", "이번 업로드"],
+                ["latestCost", "최근"], ["previousCost", "그 전"], ["change", "변동"],
                 ["range", "기간 최저~최고"], ["quantity", "기간 수량"], ["count", "횟수"],
               ] as const).map(([key, label], index) => <SortableTh active={sortKey === key} className={`px-3 py-2 ${index >= 4 ? "text-right" : ""}`} direction={sortDirection} key={key} label={label} onClick={() => toggleSort(key)} />)}</tr>
             </thead>
@@ -164,13 +158,11 @@ export function PurchaseHistoryPanel({ batch, companyId, refreshKey, restore }: 
                   <tr className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-2 font-semibold"><button className="min-h-11 text-left underline-offset-2 hover:underline" onClick={() => {
                       if (open === item.key) { setOpen(""); return; }
-                      void loadProductHistory(item, rows?.find((row) => `${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}` === item.key)?.product_catalog_id || null);
+                      void loadProductHistory(item, item.productId || null);
                     }} type="button">{item.name}</button></td>
                     <td className="px-3 py-2 text-slate-600">{[item.spec, item.unit || "단위 미지정"].filter(Boolean).join(" · ")}</td>
                     <td className="px-3 py-2 text-slate-600">{item.supplier || "매입처 미지정"}</td>
-                    <td className="px-3 py-2 text-slate-600">{item.latestDate}</td>
-                    <td className="px-3 py-2 text-right font-semibold">{money(item.latestCost)}</td>
-                    <td className="px-3 py-2 text-right text-slate-500">{item.previousCost != null ? money(item.previousCost) : "-"}</td>
+                    {(() => { const moments = purchaseHistoryMoments(item.entries, batch?.receiptDate); return <><td className="px-3 py-2">{moment(moments.upload)}</td><td className="px-3 py-2">{moment(moments.recent)}</td><td className="px-3 py-2">{moment(moments.previous)}</td></>; })()}
                     <td className={`px-3 py-2 text-right font-semibold ${item.direction === "up" ? "text-rose-600" : item.direction === "down" ? "text-blue-600" : "text-slate-400"}`}>{item.changeAmount ? <>{item.direction === "up" ? "▲" : "▼"} {money(Math.abs(item.changeAmount))}{item.changeRate != null ? <span className="ml-1">({Math.abs(item.changeRate)}%)</span> : null}</> : "-"}</td>
                     <td className="px-3 py-2 text-right text-slate-500">{item.minCost === item.maxCost ? money(item.minCost) : `${money(item.minCost)} ~ ${money(item.maxCost)}`}</td>
                     <td className="px-3 py-2 text-right">{item.totalQuantity ? `${item.totalQuantity.toLocaleString("ko-KR")}${item.unit ? ` ${item.unit}` : ""}` : "-"}</td>
@@ -186,7 +178,7 @@ export function PurchaseHistoryPanel({ batch, companyId, refreshKey, restore }: 
                             return <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs" key={entry.id || `${entry.date}-${index}`}>{entry.date.slice(5)} · <b>{money(entry.cost)}</b>{entry.corrected ? " · 정정됨" : ""}{diff ? <span className={diff > 0 ? " text-rose-600" : " text-blue-600"}> {diff > 0 ? "+" : ""}{diff.toLocaleString("ko-KR")}</span> : null}{entry.quantity ? ` · ${entry.quantity.toLocaleString("ko-KR")}${item.unit ? item.unit : ""}` : ""}{canCorrect && entry.correctable && entry.id ? <><button aria-label={`${entry.date} ${item.name} 매입 기록 정정`} className="min-h-11 rounded border px-2" onClick={() => { setEditing({ action: "correct", id: entry.id!, receiptDate: entry.date, productName: item.name, supplier: item.supplier, spec: item.spec, unit: item.unit, quantity: entry.quantity == null ? "" : String(entry.quantity), cost: String(entry.cost), revision: entry.correctionRevision || 0 }); setProductId(""); setProductChoices([]); setProductQuery(""); setReason(""); }} type="button">정정</button><button aria-label={`${entry.date} ${item.name} 매입 기록 삭제`} className="min-h-11 rounded border border-rose-200 px-2 text-rose-700" onClick={() => { setEditing({ action: "delete", id: entry.id!, receiptDate: entry.date, productName: item.name, supplier: item.supplier, spec: item.spec, unit: item.unit, quantity: entry.quantity == null ? "" : String(entry.quantity), cost: String(entry.cost), revision: entry.correctionRevision || 0 }); setReason(""); }} type="button">삭제</button></> : null}</span>;
                           })}
                           {detail?.key === item.key && detail.loading ? <span className="text-xs text-slate-500">품목 이력을 불러오는 중입니다.</span> : null}
-                          {detail?.key === item.key && detail.hasMore ? <button className="maju-button-secondary min-h-11" onClick={() => void loadProductHistory(item, rows?.find((row) => `${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}` === item.key)?.product_catalog_id || null, detail.page + 1)} type="button">이 품목 이력 더 보기</button> : null}
+                          {detail?.key === item.key && detail.hasMore ? <button className="maju-button-secondary min-h-11" onClick={() => void loadProductHistory(item, item.productId || null, detail.page + 1)} type="button">이 품목 이력 더 보기</button> : null}
                         </div>
                       </td>
                     </tr>
@@ -206,7 +198,6 @@ export function PurchaseHistoryPanel({ batch, companyId, refreshKey, restore }: 
         <label className="block text-sm">정정 사유 <input aria-label="정정 사유" className="maju-input w-full" maxLength={500} minLength={5} onChange={(event) => setReason(event.target.value)} placeholder="오입력 사유를 5자 이상 적어 주세요" value={reason} /></label>
         <div className="flex gap-2"><button className={editing.action === "delete" ? "maju-button-secondary min-h-11 text-rose-700" : "maju-button-primary min-h-11"} disabled={saving || (editing.action !== "delete" && (!editing.cost || (editing.action === "add" && !editing.productName.trim()))) || reason.trim().length < 5} onClick={() => void saveCorrection()} type="button">{saving ? "저장 중" : editing.action === "delete" ? "삭제 기록 저장" : editing.action === "add" ? "직접 추가" : "정정 저장"}</button><button className="maju-button-secondary min-h-11" onClick={() => setEditing(null)} type="button">취소</button></div>
       </div> : null}
-      {hasMore && rows?.length && !error ? <button className="maju-button-secondary min-h-11" disabled={loading} onClick={() => setPage((value) => value + 1)} type="button">{loading ? "불러오는 중" : "더 보기"}</button> : null}
     </section>
   );
 }

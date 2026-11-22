@@ -197,6 +197,22 @@ export type PurchaseHistoryItem = {
   entries: Array<{ id?: string; date: string; cost: number; quantity?: number; correctionRevision?: number; corrected?: boolean; correctable?: boolean }>;
 };
 
+export type PurchaseHistoryMoment = { date: string; costs: number[] };
+
+/** 이번 업로드 날짜와 그보다 앞선 두 매입일의 원본 단가를 표시용으로만 고릅니다. */
+export function purchaseHistoryMoments(entries: PurchaseHistoryItem["entries"], uploadDate?: string) {
+  const moments = Array.from(new Set(entries.map((entry) => entry.date))).map((date) => ({
+    date,
+    costs: Array.from(new Set(entries.filter((entry) => entry.date === date).map((entry) => entry.cost)))
+  }));
+  const prior = uploadDate ? moments.filter((moment) => moment.date < uploadDate) : moments;
+  return {
+    upload: uploadDate ? moments.find((moment) => moment.date === uploadDate) : undefined,
+    recent: prior[0],
+    previous: prior[1]
+  };
+}
+
 export function attachPurchaseHistoryPreviousCosts(rows: readonly PurchaseHistoryRow[], visible: readonly PurchaseHistoryRow[]) {
   return visible.map((latest) => {
     const key = `${latest.product_catalog_id || latest.line_key}|${latest.supplier_name || ""}`;
