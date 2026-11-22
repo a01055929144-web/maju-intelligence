@@ -80,6 +80,7 @@ export function validPurchaseDateRows(value: unknown): value is PurchaseDateRow[
       || (row.replaceUndatedCurrent === true && (!row.priceSelected || !money(row.expectedPurchasePrice)))
       || (row.expectedPurchasePrice !== undefined && !money(row.expectedPurchasePrice))
       || !validDate(row.priceDate) || !money(row.cost) || !money(row.unitPrice)
+      || (row.priceSelected && row.cost <= 0)
       || (row.supplierProductId && !money(row.supplierCost))
       || !Number.isSafeInteger(row.selectedSourceRowNumber) || row.selectedSourceRowNumber < 1 || sourceRows.has(row.selectedSourceRowNumber)
       || typeof row.priceSelected !== "boolean" || typeof row.priceHeld !== "boolean" || typeof row.priceIncludesVat !== "boolean"

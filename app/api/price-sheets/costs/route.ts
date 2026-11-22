@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       if (body.action === "save-batch") {
         const changes = body.changes;
         if (!Array.isArray(changes) || !changes.length || changes.length > 100 || changes.some((change) =>
-          !change || typeof change !== "object" || ![change.cost, change.expectedCost].every(validPurchaseCostBatchValue)
+          !change || typeof change !== "object" || ![change.cost, change.expectedCost].every(validPurchaseCostBatchValue) || change.cost <= 0
           || (change.supplierProductId && !(change.expectedSupplierCost === null || typeof change.expectedSupplierCost === "number" && Number.isFinite(change.expectedSupplierCost))))) {
           return NextResponse.json({ message: "매입가 변경 항목을 확인해 주세요." }, { status: 400 });
         }
