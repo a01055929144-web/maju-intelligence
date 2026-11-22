@@ -27,12 +27,14 @@ const defaultRule: Rule = { delivery_weekdays: [1, 2, 3, 4, 5, 6], cutoff_days_b
 
 function numberOrNull(value: string) { return value === "" ? null : Number(value); }
 
-function PolicyFields({ value, onChange, inherit = false }: {
+function PolicyFields({ value, onChange, inherit = false, weekdaysNote }: {
   value: Rule; onChange: (next: Rule) => void; inherit?: boolean;
+  /** 회사 기본값에는 배송 요일 저장 칸이 없다 — 체크박스 대신 어디서 정하는지 안내한다. */
+  weekdaysNote?: string;
 }) {
   const weekdays = value.delivery_weekdays ?? [];
   return <div className="grid gap-3 md:grid-cols-3">
-    <fieldset className="md:col-span-3">
+    {weekdaysNote ? <p className="md:col-span-3 text-xs font-semibold text-slate-600">{weekdaysNote}</p> : <fieldset className="md:col-span-3">
       <legend className="mb-1 text-[11px] font-black text-slate-600">배송 요일</legend>
       {inherit && <button className="maju-button-secondary mr-2 h-8 px-3 text-xs" type="button"
         onClick={() => onChange({ ...value, delivery_weekdays: null })}>권역 값 사용</button>}
@@ -43,7 +45,7 @@ function PolicyFields({ value, onChange, inherit = false }: {
             onChange({ ...value, delivery_weekdays: next });
           }} />{label}</label>)}
       </div>
-    </fieldset>
+    </fieldset>}
     <label className="text-[11px] font-black text-slate-600">마감일
       <select className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={value.cutoff_days_before ?? ""}
         onChange={(event) => onChange({ ...value, cutoff_days_before: numberOrNull(event.target.value) })}>
@@ -151,7 +153,7 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
     <p className="text-xs font-semibold text-slate-500">회사 기본값보다 권역, 권역보다 매장별 예외가 우선합니다. 지금은 후결제 주문만 받습니다.</p>
     {message && <p role="status" className="rounded-md bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{message}</p>}
     <section className="space-y-3 rounded-lg border border-slate-200 p-4"><h2 className="text-sm font-black text-slate-950">회사 기본값</h2>
-      <PolicyFields value={company} onChange={(rule) => setCompany({ ...company, ...rule })} />
+      <PolicyFields value={company} onChange={(rule) => setCompany({ ...company, ...rule })} weekdaysNote="배송 요일은 아래 \"권역별 배송\"(매장별 예외는 매장 설정)에서 정합니다. 단가표 하단에 보이는 배송 요일은 회사 정보에서 바꿉니다." />
       <label className="block text-[11px] font-black text-slate-600">매장 공지<textarea className="mt-1 w-full rounded-md border border-slate-200 p-2 text-xs font-semibold leading-5" value={company.notice}
         onChange={(event) => setCompany({ ...company, notice: event.target.value })} /></label>
       <label className="block text-[11px] font-black text-slate-600">시세 품목 안내<textarea className="mt-1 w-full rounded-md border border-slate-200 p-2 text-xs font-semibold leading-5" value={company.marketPriceNotice}
