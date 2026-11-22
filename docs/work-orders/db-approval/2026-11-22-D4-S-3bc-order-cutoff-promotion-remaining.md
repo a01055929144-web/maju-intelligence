@@ -2,7 +2,7 @@
 
 - 적용: `docs/sql-drafts/2026-11-18-D4-S-3bc-order-cutoff-promotion-remaining.sql`
 - 복구: `docs/sql-drafts/2026-11-18-D4-S-3bc-order-cutoff-promotion-remaining.down.sql`
-- 상태: **대표 승인 · 운영 적용 잠금 중** (11/22 17:08 KST). 적용 결과는 같은 PR에 기록합니다.\n- 적용 대상: `fcmdvveqmcgtioelzqun`, 승인된 SQL blob `12b109082f56eac67b2f7ec1654aedaa9846c95b`.
+- 상태: **대표 승인 · 운영 1회 적용·읽기 검증 완료** (11/22 17:08~17:11 KST). 재실행 금지.\n- 적용 대상: `fcmdvveqmcgtioelzqun`, 승인된 SQL blob `12b109082f56eac67b2f7ec1654aedaa9846c95b`.
 
 ## 범위와 순서
 
@@ -27,3 +27,10 @@ WO-03 적용·읽기 검증 뒤, CX-123 전에 실행합니다. `product_catalog
 ## PG17 근거
 
 원본 D4 시험은 NULL 기본값·쌍 제약·취소 주문 제외·회사 격리·권한을 검증합니다. R17 폐기형 PG17 순차 시험은 WO-03 → D4 → CX-123 적용과 CX-123 → D4 역순 복구, 기존 상품행 불변을 확인합니다.
+
+## 실제 적용 결과 (11/22 17:11 KST)
+
+- 승인된 SQL blob `12b109082f56eac67b2f7ec1654aedaa9846c95b`를 WO-03 적용 뒤 한 번 실행했다. 직전 읽기에서 대상 열·제약·함수가 없고 참조 테이블과 열은 모두 있었다.
+- 기존 상품 776행·행사 3행·주문 0행·주문품목 0행, 상품 코드·가격·세금 지문이 전후 같다. 기존 상품의 마감 값은 0건이다.
+- 마감 제약 2개, `promotion_remaining_v1(uuid,uuid[])` SECURITY DEFINER·service_role 전용 실행·anon/authenticated 실행 불가 확인. 합성 ID 읽기는 0행, 새 함수 보안 권고 없음.
+- 기능 OFF·배포 없음. CX-123은 #1222 CI 초록·병합 및 별도 잠금 전까지 적용하지 않는다.
