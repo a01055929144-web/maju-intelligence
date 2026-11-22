@@ -1,12 +1,12 @@
-# CX-123 전체 상품 진열 함수 v2 — DB 승인 대기
+# CX-123 전체 상품 진열 함수 v2 — 운영 적용 기록
 
 - 적용 SQL: `docs/sql-drafts/2026-11-20-CX-123-store-catalog-v2.sql`
 - 안전 down: `docs/sql-drafts/2026-11-20-CX-123-store-catalog-v2.down.sql`
 - 격리 시험: `docs/sql-drafts/2026-11-20-CX-123-store-catalog-v2.pg17.test.sql`
-- 승인 상태: **미승인 · 미적용**
+- 승인 상태: **대표 조건부 승인 · 적용 중** (운영 프로젝트 `fcmdvveqmcgtioelzqun`, 2026-11-22)
 - 기능 상태: 기본 OFF, 회사 allowlist 미승인
 
-이 문서는 운영 적용 권한을 부여하지 않는다. CX-120 가격 함수와 아래 선행 객체를 읽기 점검하고, 대표가 대상 프로젝트와 CX-123을 명시해 별도 승인한 뒤에만 up SQL을 한 번 적용한다. 기능 ON, 회사 allowlist, 화면 연결, 배포는 각각 별도 승인 대상이다.
+대표가 운영 프로젝트와 CX-123을 명시해 조건부 적용을 승인했다. CX-120·WO-03·D4 선행 객체를 읽기 검증했고 #1222 전체 CI 초록·병합을 확인했다. 기능 ON, 회사 allowlist, 화면 연결, 배포는 이번 적용 범위에 포함하지 않는다.
 
 ## 범위
 
@@ -18,13 +18,13 @@
 - CX-122가 아직 없으면 기존처럼 주문 가능한 연결에만 가격을 공개한다. CX-122 적용 뒤에는 `store_price_visible_v1`의 수동 외식업 확인 결과만 가격 공개에 사용한다.
 - 가격 비공개이면 일반 단가, 행사 단가, `source`, `promise_until`, 포함가 여부가 모두 `null`이다.
 
-## 아직 운영에 없는 선행 스키마 (2026-11-22 읽기 확인)
+## 선행 조건 완료
 
-- CX-120 `self_order_price_v2`는 적용·읽기 검증됐습니다.
-- ① `docs/sql-drafts/20261102-WO-03-product-catalog-schema.sql`의 `product_categories`와 `product_catalog.category_id`는 운영에 없습니다.
-- ② `docs/sql-drafts/2026-11-18-D4-S-3bc-order-cutoff-promotion-remaining.sql`의 `product_catalog.order_cutoff_days_before`·`order_cutoff_time`과 `promotion_remaining_v1`은 운영에 없습니다.
-- 운영 적용 순서는 ① → ② → CX-123입니다. ①·②는 현행 운영 스키마·격리 PostgreSQL 17에서 다시 대조하고, 각 SQL에 대해 대상 프로젝트를 명시한 별도 승인을 받은 뒤에만 적용합니다. 지금은 CX-123 운영 적용 조건을 충족하지 않습니다.
-- 이 PR의 CI 통과는 격리 시험 결과이며 운영 선행 스키마 존재 또는 적용 승인이 아닙니다. 기능은 기본 OFF, 회사 allowlist 미승인입니다.
+- CX-120 `self_order_price_v2`는 적용·읽기 검증 완료.
+- WO-03 상품 분류 스키마는 승인·1회 적용·읽기 검증 완료(#1256).
+- D4 품목 마감·행사 잔량 스키마는 승인·1회 적용·읽기 검증 완료(#1257).
+- #1222 최신 CI 초록·main 병합 완료. CX-123 함수는 적용 직전 조회에서 없음.
+- 이번 운영 변경은 잠금→1회 적용→결과를 한 PR에 기록한다. 기존 상품·가격·세금·주문은 바꾸지 않는다.
 
 ## 적용 전 읽기 점검
 
