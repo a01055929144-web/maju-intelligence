@@ -4,13 +4,13 @@ begin;
 set local lock_timeout = '3s';
 set local statement_timeout = '30s';
 
-do $ begin
+do $$ begin
   if to_regprocedure('public.promotion_remaining_v1(uuid,uuid[])') is not null
     or exists (select 1 from information_schema.columns
       where table_schema='public' and table_name='product_catalog'
         and column_name in ('order_cutoff_days_before','order_cutoff_time'))
   then raise exception 'd4_already_or_partially_applied'; end if;
-end $;
+end $$;
 
 alter table public.product_catalog
   add column if not exists order_cutoff_days_before smallint;
