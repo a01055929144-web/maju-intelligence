@@ -40,14 +40,14 @@ const origins = ["국내산", "중국산", "미국산", "호주산", "수입산"
 export function ProductCatalogAdmin({
   categoriesEnabled = false,
   canManageCategories = false,
-  companyId = "",
   inventoryHistoryEnabled = false,
+  companyId = "",
   settingsKey = "products:current",
 }: {
   categoriesEnabled?: boolean;
   canManageCategories?: boolean;
-  companyId?: string;
   inventoryHistoryEnabled?: boolean;
+  companyId?: string;
   settingsKey?: string;
 }) {
   const { confirm, confirmDialog } = useConfirm();
@@ -64,6 +64,9 @@ export function ProductCatalogAdmin({
     [error, setError] = useState(""),
     [editing, setEditing] = useState<ProductCatalogAdminItem | null>(null),
     [inventoryHistory, setInventoryHistory] = useState<ProductCatalogAdminItem | null>(null),
+    [cutoffAvailable, setCutoffAvailable] = useState(false),
+    [cutoffDrafts, setCutoffDrafts] = useState<Record<string, { days: string; time: string }>>({}),
+    [bulkCutoff, setBulkCutoff] = useState({ days: "", time: "" }),
     [reviewingCategories, setReviewingCategories] = useState(false),
     // CC-26: 폴더 순서(모든 분류 화면 공통). 읽지 못하면 이름순.
     [folderOrder, setFolderOrder] = useState<FolderOrder>(new Map());
@@ -126,6 +129,19 @@ export function ProductCatalogAdmin({
     if (!response.ok) throw new Error(result.message || "상품을 처리하지 못했습니다.");
     return result;
   }
+  async function saveCutoffs(ids: string[], days: string, time: string) {
+    setError(""); setMoveMessage("");
+    try {
+      const response = await fetch("/api/product-catalog", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update-cutoffs", companyId, ids, orderCutoffDaysBefore: days === "" ? null : Number(days), orderCutoffTime: time || null }) });
+      const result = await response.json() as { savedIds?: string[]; message?: string };
+      if (!response.ok) throw new Error(result.message || "주문 마감을 저장하지 못했습니다.");
+      const saved = new Set(result.savedIds || []);
+      setItems((current) => current.map((item) => saved.has(item.id) ? { ...item, orderCutoffDaysBefore: days === "" ? null : Number(days), orderCutoffTime: time || null } : item));
+      setCutoffDrafts((current) => { const next = { ...current }; for (const id of Array.from(saved)) delete next[id]; return next; });
+      setMoveMessage(`${saved.size}개 상품의 주문 마감을 저장했습니다.${saved.size !== ids.length ? ` ${ids.length - saved.size}개는 저장되지 않았습니다. 목록을 새로 확인해 주세요.` : ""}`);
+      if (ids.length > 1) setPicked((current) => new Set(Array.from(current).filter((id) => !saved.has(id))));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "주문 마감을 저장하지 못했습니다."); }
+  }
   async function deletePicked() {
     setError(""); setMoveMessage("");
     try {
@@ -175,6 +191,7 @@ export function ProductCatalogAdmin({
         j = await r.json();
       if (!r.ok) throw new Error(j.message);
       setItems(j.items || []);
+      setCutoffAvailable(j.cutoffAvailable === true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "품목을 불러오지 못했습니다.");
     } finally {
@@ -249,6 +266,10 @@ export function ProductCatalogAdmin({
     { key: "name", label: "상품명 / 관리명", width: 150, value: (i) => `${i.name} ${i.managementName || ""} ${i.category || "미분류"}`, render: (i) => <button className="text-left font-bold hover:text-teal-700" onClick={() => setEditing(i)} type="button">{i.name}<span className="block text-xs font-normal text-slate-500">{i.managementName || "-"}</span><span className="block max-w-[180px] truncate text-[11px] font-normal text-teal-700" title={i.category || "미분류"}>{(i.category || "미분류").replaceAll(" > ", " › ")}</span></button> },
     { key: "spec", priority: 3, label: "규격", width: 75, value: (i) => i.spec || "-" },
     { key: "unit", priority: 3, label: "단위", width: 60, value: (i) => i.salesUnit || i.unit },
+    ...(cutoffAvailable && canManageCategories ? [{ key: "orderCutoff", label: "주문 마감", width: 240, sortable: false, value: (i: ProductCatalogAdminItem) => i.orderCutoffDaysBefore == null ? "회사 기준" : `${i.orderCutoffDaysBefore}일 전 ${i.orderCutoffTime}`, render: (i: ProductCatalogAdminItem) => {
+      const draft = cutoffDrafts[i.id] || { days: i.orderCutoffDaysBefore == null ? "" : String(i.orderCutoffDaysBefore), time: i.orderCutoffTime || "" };
+      return <div className="flex flex-wrap items-center gap-1"><input aria-label={`${i.name} 주문 마감 며칠 전`} className="maju-input w-14" min="0" max="365" type="number" value={draft.days} onChange={(event) => setCutoffDrafts((current) => ({ ...current, [i.id]: { ...draft, days: event.target.value } }))} /><input aria-label={`${i.name} 주문 마감 시각`} className="maju-input w-24" type="time" value={draft.time} onChange={(event) => setCutoffDrafts((current) => ({ ...current, [i.id]: { ...draft, time: event.target.value } }))} /><button className="maju-button-secondary" onClick={() => void saveCutoffs([i.id], draft.days, draft.time)} type="button">저장</button></div>;
+    } }] : []),
     { key: "supplier", priority: 3, label: "매입처", width: 110, value: (i) => i.supplierNames?.join(", ") || "매입처 없음" },
     { key: "stockMode", priority: 2, label: "재고 방식", width: 75, value: (i) => i.trackingEnabled == null ? "미설정" : i.trackingEnabled ? "재고" : "사입" },
     { key: "purchase", label: "매입가", align: "right", width: 90, value: (i) => i.purchasePrice, render: (i) => i.hasUnconfirmedConversion ? <span className="text-amber-700">환산 미확인</span> : money(i.purchasePrice) },
@@ -265,7 +286,7 @@ export function ProductCatalogAdmin({
     { key: "promoNow", priority: 2, label: "행사 상태", width: 120, value: (i) => (i.promotion ? `${i.promotion.badge} ~${i.promotion.endsOn}` : ""), render: (i) => (i.promotion ? <a className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${i.promotion.badge === "임박" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`} href={`/revenue/pricing/promotions?productId=${i.id}`} title={`${i.promotion.badge}가 ${money(i.promotion.price)} · ${i.promotion.startsOn} ~ ${i.promotion.endsOn}`}>{i.promotion.badge} ~{i.promotion.endsOn.slice(5).replace("-", "/")}</a> : <span className="text-slate-400">-</span>) },
     { key: "promoPrice", label: "행사가", align: "right", defaultHidden: true, width: 90, value: (i) => i.promotion?.price, render: (i) => (i.promotion ? money(i.promotion.price) : "-") },
     { key: "promo", label: "행사·임박", defaultHidden: true, sortable: false, width: 120, value: () => "", render: (i) => <span className="flex gap-2 text-sm font-bold text-teal-800 underline"><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("행사")}&productId=${i.id}`}>행사 걸기</a><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("임박")}&productId=${i.id}`}>임박 등록</a></span> },
-  ], [canManageCategories, inventoryHistoryEnabled]);
+  ], [canManageCategories, companyId, cutoffAvailable, cutoffDrafts, inventoryHistoryEnabled]);
   return (
     <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
       <aside className="maju-section-card self-start overflow-hidden lg:sticky lg:top-4">
@@ -301,6 +322,7 @@ export function ProductCatalogAdmin({
       <div className="min-w-0 space-y-4">
       {pickedItems.length ? <div aria-label="선택한 상품" className="flex flex-wrap items-center gap-2 rounded-xl border border-teal-300 bg-teal-50 px-4 py-2 text-sm" role="group">
         <b>{pickedItems.length}개 선택</b>
+        {cutoffAvailable && canManageCategories ? <span className="flex flex-wrap items-center gap-2"><input aria-label="일괄 주문 마감 며칠 전" className="maju-input w-20" min="0" max="365" placeholder="며칠 전" type="number" value={bulkCutoff.days} onChange={(event) => setBulkCutoff((current) => ({ ...current, days: event.target.value }))} /><input aria-label="일괄 주문 마감 시각" className="maju-input w-28" type="time" value={bulkCutoff.time} onChange={(event) => setBulkCutoff((current) => ({ ...current, time: event.target.value }))} /><button className="maju-button-secondary" onClick={() => void saveCutoffs(pickedItems.slice(0, 50).map((item) => item.id), bulkCutoff.days, bulkCutoff.time)} type="button">주문 마감 일괄 지정{pickedItems.length > 50 ? " (50개씩)" : ""}</button><span className="text-xs text-slate-600">둘 다 비우면 회사 기준</span></span> : null}
         {canManageCategories && moveTargets.length ? <span className="flex items-center gap-1">
           <select aria-label="옮길 폴더" className="min-h-[36px] rounded-lg border border-slate-300 bg-white px-2" onChange={(event) => setMoveTarget(event.target.value)} value={moveTarget}>
             <option value="">옮길 폴더 선택</option>{moveTargets.map((path) => <option key={path} value={path}>{"  ".repeat(splitCategory(path).length - 1)}{splitCategory(path).slice(-1)[0]}</option>)}</select>
@@ -377,6 +399,7 @@ export function ProductCatalogAdmin({
       {editing ? (
         <Editor
           companyId={companyId}
+          cutoffAvailable={cutoffAvailable && canManageCategories}
           item={editing}
           onClose={() => setEditing(null)}
           onSaved={(saved, keepOpen) => {
@@ -385,17 +408,17 @@ export function ProductCatalogAdmin({
                 ? cur.map((i) => (i.id === saved.id ? saved : i))
                 : [saved, ...cur],
             );
-            setMoveMessage(`${saved.name} 상품을 저장했습니다.`);
             setEditing(keepOpen ? { ...blank } : null);
+            setMoveMessage(`${saved.name} 상품을 저장했습니다.`);
           }}
         />
       ) : null}
+      {inventoryHistory ? <ProductInventoryHistoryDialog companyId={companyId} onClose={() => setInventoryHistory(null)} product={inventoryHistory} /> : null}
       {reviewingCategories ? <CategoryRecommendationReview
         companyId={companyId}
         onClose={() => setReviewingCategories(false)}
         onUpdated={(updates) => setItems((current) => current.map((item) => updates[item.id] ? { ...item, category: updates[item.id] } : item))}
       /> : null}
-      {inventoryHistory ? <ProductInventoryHistoryDialog companyId={companyId} onClose={() => setInventoryHistory(null)} product={inventoryHistory} /> : null}
       {confirmDialog}
       </div>
     </div>
@@ -564,11 +587,13 @@ function Filter({
 }
 function Editor({
   companyId,
+  cutoffAvailable,
   item,
   onClose,
   onSaved,
 }: {
   companyId: string;
+  cutoffAvailable: boolean;
   item: ProductCatalogAdminItem;
   onClose: () => void;
   onSaved: (i: ProductCatalogAdminItem, keepOpen: boolean) => void;
@@ -769,6 +794,15 @@ function Editor({
               <option value="inactive">판매중지</option>
             </select>
           </Field>
+          {cutoffAvailable ? <>
+            <Field label="주문 마감 · 며칠 전">
+              <input aria-label="주문 마감 며칠 전" className="maju-input w-full" max="365" min="0" placeholder="회사 기준" type="number" value={d.orderCutoffDaysBefore ?? ""} onChange={(event) => put("orderCutoffDaysBefore", event.target.value === "" ? null : Number(event.target.value))} />
+            </Field>
+            <Field label="주문 마감 · 시각">
+              <input aria-label="주문 마감 시각" className="maju-input w-full" type="time" value={d.orderCutoffTime || ""} onChange={(event) => put("orderCutoffTime", event.target.value || null)} />
+            </Field>
+            <p className="text-xs text-slate-600 sm:col-span-2 lg:col-span-4">두 칸을 모두 비우면 회사 마감을 따릅니다.</p>
+          </> : null}
           {error ? (
             <p className="text-sm font-semibold text-rose-700 sm:col-span-2 lg:col-span-4" role="alert">
               {error}
@@ -833,3 +867,4 @@ function Field({
     </label>
   );
 }
+

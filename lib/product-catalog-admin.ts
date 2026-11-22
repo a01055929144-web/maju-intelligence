@@ -1,5 +1,6 @@
 import { convertedUnitCost } from "../domains/product/catalog-import";
 import { customerErpCode } from "../domains/product/customer-erp-code";
+import { productOrderCutoff } from "../domains/product/order-cutoff";
 import { cleanCategory, suggestCategory } from "../domains/pricing/product-category";
 import { supabaseRequest as request } from "./store";
 import { ciLayoutProducts, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
@@ -43,6 +44,8 @@ export type ProductCatalogAdminItem = {
   createdAt?: string;
   /** CC-20b: 오늘 진행 중인 행사·임박(여러 개면 종료가 가장 빠른 것). 읽기 전용. */
   promotion?: { badge: "행사" | "임박"; price: number; startsOn: string; endsOn: string };
+  orderCutoffDaysBefore?: number | null;
+  orderCutoffTime?: string | null;
 };
 export type SaveProductCatalogInput = Omit<
   ProductCatalogAdminItem,
@@ -62,6 +65,44 @@ const enc = encodeURIComponent;
 const select =
   "id,product_code,canonical_name,purchase_product_name,brand_name,barcodes,origin_name,spec_value,spec_unit,sales_unit,purchase_unit,purchase_to_sales_ratio,tax_type,category,photo_url,is_active,default_sales_price,purchase_price,created_at";
 const num = (v: unknown) => (v == null ? undefined : Number(v));
+const cutoffFields = "id,order_cutoff_days_before,order_cutoff_time";
+
+export function productOrderCutoffEnabled(companyId: string) {
+  return Boolean(companyId) && (process.env.FEATURE_PRODUCT_ORDER_CUTOFF_COMPANY_IDS || "").split(",").some((id) => id.trim() === companyId);
+}
+
+/** A missing S-3b column hides the controls without changing the existing catalog path. */
+export async function listProductOrderCutoffsForAdmin(companyId: string, limit = 1000, query = "") {
+  if (!productOrderCutoffEnabled(companyId)) return null;
+  const search = query.trim() ? `&or=(canonical_name.ilike.*${enc(query.trim())}*,purchase_product_name.ilike.*${enc(query.trim())}*,product_code.ilike.*${enc(query.trim())}*)` : "";
+  try {
+    return await request<Array<{ id: string; order_cutoff_days_before: number | null; order_cutoff_time: string | null }>>(
+      `product_catalog?select=${cutoffFields}&company_id=eq.${enc(companyId)}${search}&order=updated_at.desc&limit=${limit}`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/order_cutoff_(days_before|time)/.test(message) && /42703|does not exist|PGRST204|schema cache/i.test(message)) return null;
+    throw error;
+  }
+}
+
+function cutoffWrite(input: SaveProductCatalogInput, enabled: boolean) {
+  const hasDays = Object.prototype.hasOwnProperty.call(input, "orderCutoffDaysBefore"), hasTime = Object.prototype.hasOwnProperty.call(input, "orderCutoffTime");
+  if (!hasDays && !hasTime) return {};
+  if (!enabled) throw new Error("상품별 주문 마감을 사용할 수 없습니다.");
+  if (!hasDays || !hasTime) throw new Error("주문 마감은 며칠 전과 시각을 함께 입력해 주세요.");
+  return productOrderCutoff(input.orderCutoffDaysBefore ?? null, input.orderCutoffTime ?? null);
+}
+
+export async function updateProductOrderCutoffsForAdmin(companyId: string, ids: readonly string[], days: number | null, time: string | null) {
+  if (!ids.length || ids.length > 50 || !ids.every((id) => productId.test(id))) throw new Error("상품을 1~50개 골라 주세요.");
+  const values = productOrderCutoff(days, time);
+  const rows = await request<Array<{ id: string }>>(
+    `product_catalog?company_id=eq.${enc(companyId)}&id=in.(${Array.from(new Set(ids)).join(",")})&select=id`,
+    { method: "PATCH", body: JSON.stringify({ ...values, updated_at: new Date().toISOString() }) },
+  );
+  return rows.map((row) => row.id);
+}
 function toItem(r: Row): ProductCatalogAdminItem {
   const name = String(r.canonical_name || r.purchase_product_name || "");
   const spec =
@@ -269,8 +310,10 @@ export async function createProductCatalogForAdmin(
   companyId: string,
   input: SaveProductCatalogInput,
   actor: Actor,
+  cutoffEnabled = false,
 ) {
   validate(input);
+  const cutoff = cutoffWrite(input, cutoffEnabled);
   const code = await request<string>("rpc/next_product_code", {
     method: "POST",
     body: JSON.stringify({ p_company_id: companyId }),
@@ -278,7 +321,7 @@ export async function createProductCatalogForAdmin(
   const rows = await request<Row[]>(`product_catalog?select=${select}`, {
     method: "POST",
     body: JSON.stringify({
-      ...write(input),
+      ...write(input), ...cutoff,
       company_id: companyId,
       source: "manual",
       source_key: `manual:${crypto.randomUUID()}`,
@@ -296,28 +339,30 @@ export async function createProductCatalogForAdmin(
       input.salesPrice,
       actor,
     );
-  return toItem(rows[0]);
+  return { ...toItem(rows[0]), ...(cutoffEnabled ? { orderCutoffDaysBefore: input.orderCutoffDaysBefore ?? null, orderCutoffTime: input.orderCutoffTime ?? null } : {}) };
 }
 export async function updateProductCatalogForAdmin(
   companyId: string,
   id: string,
   input: SaveProductCatalogInput,
   actor: Actor,
+  cutoffEnabled = false,
 ) {
   validate(input);
+  const cutoff = cutoffWrite(input, cutoffEnabled);
   const before = await request<Row[]>(
     `product_catalog?select=${select}&id=eq.${enc(id)}&company_id=eq.${enc(companyId)}`,
   );
   if (!before[0]) throw new Error("품목을 찾을 수 없습니다.");
   const rows = await request<Row[]>(
     `product_catalog?id=eq.${enc(id)}&company_id=eq.${enc(companyId)}&select=${select}`,
-    { method: "PATCH", body: JSON.stringify(write(input)) },
+    { method: "PATCH", body: JSON.stringify({ ...write(input), ...cutoff }) },
   );
   if (!rows[0]) throw new Error("품목을 수정하지 못했습니다.");
   const previous = num(before[0].default_sales_price);
   if (input.salesPrice != null && previous !== input.salesPrice)
     await recordPrice(companyId, id, previous, input.salesPrice, actor);
-  return toItem(rows[0]);
+  return { ...toItem(rows[0]), ...(cutoffEnabled && Object.keys(cutoff).length ? { orderCutoffDaysBefore: input.orderCutoffDaysBefore ?? null, orderCutoffTime: input.orderCutoffTime ?? null } : {}) };
 }
 
 export type ProductCategoryUpdate = { id: string; category: string; expectedCategory: string };
@@ -394,3 +439,4 @@ export async function updateProductCategoriesForAdmin(
   }
   return results;
 }
+
