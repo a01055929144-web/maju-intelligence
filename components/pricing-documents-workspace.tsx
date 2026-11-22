@@ -138,7 +138,7 @@ export function PricingDocumentsWorkspace({
         return readDocumentExtensionCatalog(companyId, { id: draft.id, expected: draft.revision, mode: extension.mode }, payload).then(result => result as T);
       }
       return documentRequest<T>(companyId, action, payload).then(r => {
-        if (typeof r.qrDisplayAvailable === "boolean") setQrDisplayAvailable(r.qrDisplayAvailable);
+        setQrDisplayAvailable(r.qrDisplayAvailable === true);
         return r.result;
       });
     },

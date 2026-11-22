@@ -75,7 +75,7 @@ async function handle(request: NextRequest, write: boolean) {
       )
       .digest("hex"),
     manager,
-    qrDisplayEnabled: documentQrDisplayEnabled(auth.companyId),
+    ...(documentQrDisplayEnabled(auth.companyId) ? { qrDisplayEnabled: true } : {}),
     documentVatEnabled: documentVatEnabled(auth.companyId),
     ...(documentSharingEnabled(auth.companyId) ? { sharingEnabled: true, actorName: resolveLeadContactActorName([getCustomerOperationalName(auth.customerSession), auth.customerSession?.name, auth.adminSession?.name]) } : {}),
     ...(documentArchiveEnabled() ? { archiveEnabled: true } : {}),
@@ -130,7 +130,7 @@ async function handle(request: NextRequest, write: boolean) {
           },
         );
     return NextResponse.json(
-      { result, manager, qrDisplayAvailable: scope.qrDisplayEnabled, ...(scope.archiveEnabled ? { archiveAvailable: true } : {}) },
+      { result, manager, ...(scope.qrDisplayEnabled ? { qrDisplayAvailable: true } : {}), ...(scope.archiveEnabled ? { archiveAvailable: true } : {}) },
       { headers: { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" } },
     );
   } catch (error) {
