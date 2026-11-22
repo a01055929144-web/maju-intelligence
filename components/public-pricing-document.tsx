@@ -233,7 +233,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
                 line.brand,
                 safeDocument.display.showTaxType ? (line.taxType === "exempt" ? "면세" : "과세") : "",
                 line.badge,
-                line.badge && line.endsOn ? `${line.endsOn}까지` : "",
+                line.badge && line.endsOn && line.endsOn !== safeDocument.validUntil ? `${line.endsOn}까지` : "",
                 line.badge && line.remaining != null ? `남은 ${line.remaining}` : "",
               ].filter(Boolean).join(" · ")}</span>
             </>} trailing={line.price === null ? undefined : <MoneyText value={line.price} />} />
@@ -243,7 +243,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     </div>)}
     {safeDocument && inquiry && !embedded && <section aria-label="발행 회사 문의" className="space-y-2 print:hidden">
       {inquiry.status === "available" ? <>
-        <p className="break-words">{safeDocument.companyName} · {inquiry.label || "발행 회사"}<span className={expiredGuidance ? "block text-[24px] font-semibold" : ""}>{expiredGuidance ? "" : " · "}{formatKoreanPhoneNumber(inquiry.phone)}</span></p>
+        <p className="break-words">{[safeDocument.companyName, inquiry.label && inquiry.label !== safeDocument.companyName ? inquiry.label : ""].filter(Boolean).join(" · ")}<span className={expiredGuidance ? "block text-[24px] font-semibold" : ""}>{expiredGuidance ? "" : " · "}{formatKoreanPhoneNumber(inquiry.phone)}</span></p>
         <a className={`maju-button-secondary inline-flex items-center justify-center ${expiredGuidance ? "!min-h-[48px] w-full" : "min-h-[44px]"}`} href={`tel:${inquiry.phone}`}>{expiredGuidance ? "담당자에게 전화" : "발행 회사에 전화 문의"}</a>
       </> : inquiry.status === "not_configured" ? <p>이 문서에 공개 문의 연락처가 등록되지 않았습니다. 전달받은 안내문의 연락처를 확인해 주세요.</p> : <>
         <p role="status">문의 연락처를 확인하지 못했습니다. 잠시 후 다시 확인해 주세요.</p>
