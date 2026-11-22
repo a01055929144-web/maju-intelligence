@@ -19,8 +19,9 @@ type Link = { id: string; kind?: "document" | "catalog"; customerName: string; d
   orderCount: number; interest: string; stage: string };
 type Event = { id: string; event_type: string; occurred_at: string;
   device_class: string | null; actor_name: string | null };
+type DetailItem = { name: string; spec: string; source: "promotion" | "store" | "grade" | "base" | "edited" | "document" };
 
-export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
+export function StoreLinksWorkspace({ companyId, detailEnabled = false }: { companyId: string; detailEnabled?: boolean }) {
   const { confirm, confirmDialog } = useConfirm();
   const [documents, setDocuments] = useState<Draft[]>([]);
   const [kind, setKind] = useState<"document" | "catalog">("document");
@@ -37,7 +38,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
   const [linksLoaded, setLinksLoaded] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const [detail, setDetail] = useState<{ id: string; events: Event[] } | null>(null);
+  const [detail, setDetail] = useState<{ link: Link; events: Event[]; items: DetailItem[]; ledgerExposure?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [createdUrl, setCreatedUrl] = useState("");
@@ -174,17 +175,17 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       setMessage(`${processed}곳까지 처리했습니다. ${error instanceof Error ? error.message : "나머지 링크를 처리하지 못했습니다."} 다시 시도하면 활성 링크를 재사용합니다.`);
     } finally { setBusy(false); }
   }
-  async function showDetail(id: string) {
+  async function showDetail(link: Link) {
     try {
-      const response = await fetch(`/api/pricing-store-links?${base}&linkId=${encodeURIComponent(id)}`);
-      const result = await response.json() as { events?: Event[]; message?: string };
+      const response = await fetch(`/api/pricing-store-links?${base}&linkId=${encodeURIComponent(link.id)}`);
+      const result = await response.json() as { events?: Event[]; items?: DetailItem[]; ledgerExposure?: string; message?: string };
       if (!response.ok) throw new Error(result.message || "열람 기록을 불러오지 못했습니다.");
-      setDetail({ id, events: result.events ?? [] });
+      setDetail({ link, events: result.events ?? [], items: result.items ?? [], ledgerExposure: result.ledgerExposure });
     } catch (error) { setMessage(error instanceof Error ? error.message : "열람 기록을 불러오지 못했습니다."); }
   }
   // CC-13: 매장별 링크 표도 공용 표(열 편집·너비·정렬·엑셀). 동작 버튼은 그대로.
   const linkColumns: CommonTableColumn<Link>[] = [
-    { key: "customer", label: "매장", value: (link) => link.customerName, sortable: true, render: (link) => <button className="underline" onClick={() => void showDetail(link.id)} type="button">{link.customerName}</button> },
+    { key: "customer", label: "매장", value: (link) => link.customerName, sortable: true, render: (link) => <button className="underline" onClick={() => void showDetail(link)} type="button">{link.customerName}</button> },
     { key: "kind", label: "종류", value: (link) => link.kind === "catalog" ? "전체 상품" : "문서", sortable: true },
     { key: "document", label: "문서", value: (link) => link.kind === "catalog" ? "-" : `${link.documentTitle} v${link.documentVersion ?? ""}`, sortable: true },
     { key: "issued", label: "발행", value: (link) => link.issuedAt, sortable: true, render: (link) => new Date(link.issuedAt).toLocaleDateString("ko-KR") },
@@ -258,10 +259,21 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       <div className="flex gap-2"><button disabled={page <= 1} className="rounded border px-3 py-2" onClick={() => setPage(page - 1)}>이전</button>
         <span className="p-2">{page}페이지</span><button disabled={!hasMore} className="rounded border px-3 py-2" onClick={() => setPage(page + 1)}>다음</button></div>
     </section>
-    {detail && <section className="rounded border p-4"><h2 className="font-semibold">열람 기록</h2>
-      <p className="text-sm text-slate-600">최근 50건 · 연결된 매장 링크 기준</p>
-      <ul className="mt-2 divide-y text-sm">{detail.events.map((event) => <li key={event.id} className="py-2">
-        {new Date(event.occurred_at).toLocaleString("ko-KR")} · {event.event_type} · {event.actor_name || event.device_class || ""}</li>)}</ul>
+    {detail && <section aria-label="매장 링크 상세" className="space-y-5 rounded border bg-white p-4"><div><h2 className="font-semibold">{detailEnabled ? "매장 링크 상세" : "열람 기록"}</h2>
+      <p className="text-sm text-slate-600">{detail.link.customerName} · {detail.link.documentTitle}{detail.link.documentVersion ? ` v${detail.link.documentVersion}` : ""}</p></div>
+      {detailEnabled && <><dl className="grid gap-3 text-sm sm:grid-cols-4">
+        <div><dt className="text-slate-600">열람</dt><dd className="font-semibold">{detail.link.viewCount}회</dd></div>
+        <div><dt className="text-slate-600">주문</dt><dd className="font-semibold">{detail.link.orderCount}건</dd></div>
+        <div><dt className="text-slate-600">상태</dt><dd className="font-semibold">{detail.link.canOrder ? "주문 가능" : "주문 중지"}</dd></div>
+        <div><dt className="text-slate-600">거래원장</dt><dd className="font-semibold">{detail.ledgerExposure === "orders-only" ? "주문 기록만 표시" : "직접 노출 안 함"}</dd></div>
+      </dl>
+      <div><h3 className="font-semibold">보이는 품목 · 가격 출처</h3>{detail.items.length ? <ul className="mt-2 divide-y text-sm">{detail.items.map((item, index) => <li className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-1 py-2" key={`${item.name}-${index}`}>
+        <span className="min-w-0"><strong className="break-words">{item.name}</strong>{item.spec && <span className="block break-words text-slate-600">{item.spec}</span>}</span>
+        <span className="shrink-0 text-right font-semibold">{{ promotion: "행사", store: "매장가", grade: "등급가", base: "기본가", edited: "직접 편집", document: "발행 문서" }[item.source]}</span>
+      </li>)}</ul> : <p className="mt-2 text-sm text-slate-600">{detail.link.kind === "catalog" ? "전체 상품 링크는 현재 노출 중인 활성 상품을 보여 줍니다." : "이 링크에서 보이는 문서 품목이 없습니다."}</p>}</div></>}
+      <div><h3 className="font-semibold">열람·주문 기록</h3><p className="text-sm text-slate-600">최근 50건 · 연결된 매장 링크 기준</p>
+      {detail.events.length ? <ul className="mt-2 divide-y text-sm">{detail.events.map((event) => <li key={event.id} className="break-words py-2">
+        {new Date(event.occurred_at).toLocaleString("ko-KR")} · {event.event_type} · {event.actor_name || event.device_class || ""}</li>)}</ul> : <p className="mt-2 text-sm text-slate-600">아직 열람·주문 기록이 없습니다.</p>}</div>
       <button className="mt-2 rounded border px-3 py-2" onClick={() => setDetail(null)}>닫기</button>
     </section>}
     {confirmDialog}

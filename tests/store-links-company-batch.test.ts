@@ -46,6 +46,8 @@ const oldEnv = Object.fromEntries(
     "STORE_PUBLIC_BASE_URL",
     "FEATURE_PRICING_COMPANY_IDS",
     "FEATURE_STORE_ORDERING_COMPANY_IDS",
+    "STORE_LINK_DETAIL_ENABLED",
+    "STORE_LINK_DETAIL_COMPANY_IDS",
   ].map((key) => [key, process.env[key]]),
 );
 
@@ -58,6 +60,8 @@ beforeEach(() => {
   process.env.STORE_PUBLIC_BASE_URL = "https://store.example.test";
   process.env.FEATURE_PRICING_COMPANY_IDS = company;
   process.env.FEATURE_STORE_ORDERING_COMPANY_IDS = company;
+  delete process.env.STORE_LINK_DETAIL_ENABLED;
+  delete process.env.STORE_LINK_DETAIL_COMPANY_IDS;
   mocks.auth.mockResolvedValue({
     ok: true,
     companyId: company,
@@ -265,6 +269,25 @@ it("hides another author's quote links and denies their event details", async ()
   const detail = await GET(new NextRequest(`http://localhost/api/pricing-store-links?linkId=${customer}`));
   expect(detail.status).toBe(404);
   expect(mocks.db.mock.calls.some(([path]) => String(path).startsWith("storefront_link_events?"))).toBe(false);
+});
+
+it("returns visible document items and their stored price sources only for an enabled company", async () => {
+  process.env.STORE_LINK_DETAIL_ENABLED = "true";
+  process.env.STORE_LINK_DETAIL_COMPANY_IDS = company;
+  mocks.db.mockImplementation(async (path: string) => {
+    if (path.startsWith("storefront_links?")) return [{ id: customer, customer_id: customer, document_version_id: version }];
+    if (path.includes("select=id,document_id")) return [{ id: version, document_id: version }];
+    if (path.startsWith("pricing_documents?")) return [{ id: version, kind: "sheet", owner_key: "owner" }];
+    if (path.startsWith("storefront_link_events?")) return [{ id: "event", event_type: "view", occurred_at: "2026-11-22T00:00:00Z", device_class: "mobile", actor_name: null }];
+    if (path.includes("select=content")) return [{ content: { lines: [
+      { displayName: "행사 감자", spec: "10kg", unit: "BOX", price: 12000, promotionId: customer, visible: true },
+      { displayName: "숨김 양파", spec: "", unit: "", price: 9000, priceSource: "base", promotionId: null, visible: false },
+    ] } }];
+    throw new Error(`Unexpected query ${path}`);
+  });
+  const response = await GET(new NextRequest(`http://localhost/api/pricing-store-links?linkId=${customer}`));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ ledgerExposure: "orders-only", items: [{ name: "행사 감자", source: "promotion" }] });
 });
 
 it.each(["FEATURE_PRICING_COMPANY_IDS", "FEATURE_STORE_ORDERING_COMPANY_IDS"])("blocks link reads and issuance when %s excludes the session company",async flag=>{

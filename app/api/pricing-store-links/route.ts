@@ -9,6 +9,7 @@ import { issueStoreLinkToken } from "@/lib/pricing/store-link-token";
 import { supabaseRequest } from "@/lib/store";
 import { isId } from "@/domains/pricing/document";
 import { shortShareLinksEnabled } from "@/lib/pricing/short-share-feature";
+import { storeLinkDetailEnabled } from "@/lib/pricing/store-link-detail-feature";
 
 export const dynamic = "force-dynamic";
 
@@ -143,10 +144,11 @@ export async function GET(request: NextRequest) {
           { status: 400 },
         );
       const rows = await supabaseRequest<LinkRow[]>(
-        `storefront_links?company_id=eq.${encodeURIComponent(company)}&document_version_id=not.is.null&id=eq.${detailId}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&limit=1`,
+        `storefront_links?company_id=eq.${encodeURIComponent(company)}&id=eq.${detailId}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&limit=1`,
       );
       if (
         !rows.length ||
+        (rows[0].document_version_id === null && !storeLinkDetailEnabled(company)) ||
         (rows[0].document_version_id !== null &&
           !(
             await accessibleVersions(company, actor, [
@@ -169,8 +171,17 @@ export async function GET(request: NextRequest) {
       >(
         `storefront_link_events?company_id=eq.${encodeURIComponent(company)}&link_id=eq.${detailId}&select=id,event_type,occurred_at,device_class,actor_name&order=occurred_at.desc,id.desc&limit=50`,
       );
+      if (!storeLinkDetailEnabled(company) || rows[0].document_version_id === null)
+        return NextResponse.json({ events }, { headers: { "Cache-Control": "no-store" } });
+      const versions = await supabaseRequest<Array<{ content: { lines?: Array<{ displayName?: string; spec?: string; unit?: string; price?: number; priceSource?: string; promotionId?: string | null; visible?: boolean }> } }>>(
+        `pricing_document_versions?company_id=eq.${encodeURIComponent(company)}&id=eq.${rows[0].document_version_id}&select=content&limit=1`,
+      );
+      const items = (versions[0]?.content.lines ?? []).filter(line => line.visible === true).slice(0, 300).map(line => ({
+        name: String(line.displayName || "품목"), spec: [line.spec, line.unit].filter(Boolean).join(" · "),
+        source: line.promotionId ? "promotion" : ["store", "grade", "base", "edited"].includes(String(line.priceSource)) ? line.priceSource : "document",
+      }));
       return NextResponse.json(
-        { events },
+        { events, items, ledgerExposure: "orders-only" },
         { headers: { "Cache-Control": "no-store" } },
       );
     }
