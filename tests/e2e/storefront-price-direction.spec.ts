@@ -63,6 +63,7 @@ for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves se
   await storeTab(page, "내역").click();
   await expect(page.locator(`[data-store-order-id="${id}"]`)).toContainText("7,777원");
   await expect(detail).toHaveCount(0);
+  if (width === 1440) await expect(page).toHaveURL(/[?&]view=history(?:&|#|$)/);
   await Promise.all([
     page.waitForResponse(response => response.url().endsWith("/api/storefront") &&
       response.request().postDataJSON()?.token === "synthetic-cx67-expired"),
