@@ -2,7 +2,7 @@
 
 - 적용: `docs/sql-drafts/20261102-WO-03-product-catalog-schema.sql`
 - 복구: `docs/sql-drafts/20261102-WO-03-product-catalog-schema.down.sql`
-- 상태: **대표 승인 · 운영 적용 잠금 중** (11/22 17:02 KST). 적용 결과는 같은 PR에 기록합니다.\n- 적용 대상: `fcmdvveqmcgtioelzqun`, 승인된 SQL blob `4bda3e4ad4cae40145c3f1e1d3049f91ff94229c`.
+- 상태: **대표 승인 · 운영 1회 적용·읽기 검증 완료** (11/22 17:02~17:06 KST). 재실행 금지.\n- 적용 대상: `fcmdvveqmcgtioelzqun`, 승인된 SQL blob `4bda3e4ad4cae40145c3f1e1d3049f91ff94229c`.
 
 ## 범위와 순서
 
@@ -27,3 +27,10 @@ CX-123 전체 상품 진열의 첫 선행 단계입니다. 기존 `product_catal
 ## PG17 근거
 
 원본 WO-03 시험은 회사 간 분류 격리·단계/중복 검사·권한을 검증합니다. R17 폐기형 PG17 순차 시험은 WO-03 → D4 → CX-123 적용과 소비 함수 역순 제거, 기존 상품행 불변을 확인합니다.
+
+## 실제 적용 결과 (11/22 17:06 KST)
+
+- 승인된 SQL blob `4bda3e4ad4cae40145c3f1e1d3049f91ff94229c`를 한 번 적용했다. 직전 읽기에서 대상 테이블·열·함수·인덱스·제약이 모두 없고 기존 상품 코드 제약 위반은 0건이었다.
+- 전후 상품 776행과 상품 코드·매입가·판매가·세금 구분 지문이 일치했다. 분류 테이블 0행, 기존 상품의 분류 연결 0행이다.
+- 새 테이블 RLS 활성, anon/authenticated 조회 및 트리 검증 함수 실행 불가, service_role 조회·실행 가능. 대상 제약 2개·인덱스 4개 확인.
+- 보안 점검의 `rls_enabled_no_policy` INFO는 브라우저 역할 권한을 회수하고 service_role만 허용한 이 새 테이블의 의도된 상태다. 기능 OFF·배포 없음. D4 적용은 별도 잠금·검증으로 진행한다.
