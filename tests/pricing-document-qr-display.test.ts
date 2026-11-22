@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ request: vi.fn() }));
-vi.mock("../lib/store", () => ({ supabaseRequest: mocks.request }));
+const mocks = vi.hoisted(() => ({ request: vi.fn(), contract: vi.fn() }));
+vi.mock("../lib/store", () => ({ supabaseRequest: (...args: unknown[]) => args[0] === "rpc/pricing_document_qr_display_contract_v1" ? mocks.contract(...args) : mocks.request(...args) }));
 import { readDocumentQrDisplay, saveDocumentQrDisplay } from "../lib/pricing/document-qr-display";
 import { documentQrDisplayEnabled } from "../lib/pricing/feature";
 import { documentQrDisplay, parseDisplay, DEFAULT_DISPLAY } from "../domains/pricing/document";
@@ -11,7 +11,7 @@ const scope = { companyId: "20000000-0000-4000-8000-000000000001", actor: "verif
 const settings = { position: "top-right", size: "large" } as const;
 const content = { title: "stored snapshot", lines: [{ price: 101, taxType: "taxable", visible: false, promotionId: "old-promotion", priceIncludesTax: true }], display: { ...DEFAULT_DISPLAY, footerBold: true }, legacyMarker: "preserve" };
 const row = { id, revision: 7, kind: "sheet", owner_key: scope.actor, content, archived_at: null };
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => { vi.resetAllMocks(); mocks.contract.mockResolvedValue(1); });
 afterEach(() => vi.unstubAllEnvs());
 
 it("keeps old document defaults and round-trips only valid QR settings", () => {
@@ -70,4 +70,13 @@ it("fails closed if another save wins the revision race", async () => {
   mocks.request.mockResolvedValueOnce([row]).mockResolvedValueOnce([]);
   await expect(saveDocumentQrDisplay(scope, { id, expected: 7, settings })).rejects.toMatchObject({ status: 409 });
   expect(mocks.request).toHaveBeenCalledTimes(2);
+});
+
+it("refuses storage when the SQL retention contract is absent or replaced", async () => {
+  mocks.contract.mockResolvedValueOnce(0).mockRejectedValueOnce(new Error("missing RPC"));
+  await expect(readDocumentQrDisplay(scope, id)).rejects.toMatchObject({ status: 503 });
+  await expect(saveDocumentQrDisplay(scope, { id, expected: 7, settings })).rejects.toMatchObject({ status: 503 });
+  expect(mocks.request).not.toHaveBeenCalled();
+  await expect(readDocumentQrDisplay({ ...scope, qrDisplayEnabled: false }, id)).rejects.toMatchObject({ status: 404 });
+  expect(mocks.contract).toHaveBeenCalledTimes(2);
 });

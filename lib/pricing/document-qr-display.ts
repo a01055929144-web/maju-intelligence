@@ -9,6 +9,10 @@ function path(scope: DocumentScope, id: string) {
 }
 async function scopedDocument(scope: DocumentScope, id: string) {
   if (!scope.qrDisplayEnabled) throw new DocumentSendError("QR 표시 설정을 사용할 수 없습니다.", 404);
+  try {
+    const contract = await supabaseRequest<number>("rpc/pricing_document_qr_display_contract_v1", { method: "POST", body: "{}" });
+    if (contract !== 1) throw new Error("qr_contract_required");
+  } catch { throw new DocumentSendError("QR 표시 설정 서버 계약 적용 후 사용할 수 있습니다. 관리자에게 확인해 주세요.", 503); }
   // One scoped row; * permits old schemas without archived_at while honoring it when present.
   const rows = await supabaseRequest<Row[]>(path(scope, id) + "&select=*&limit=1");
   const row = rows[0];
