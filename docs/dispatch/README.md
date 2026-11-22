@@ -100,6 +100,9 @@ Claude와 Codex는 사용량 한도가 달라서 **둘 중 남아 있는 쪽이 
 
 | 차수 | 지시서 | 현황판 |
 | --- | --- | --- |
+| **R17 급한 일 정리 (11/22)** | [Codex](2026-11-22-R17-codex.md) · [Claude Code](2026-11-22-R17-claude-code.md) · [현황](../work-orders/2026-11-22-status-1540.md) | U1 · U2 · R17-1~10 · C1~C8 |
+| 11/20 영업 파일럿 우선순위 | [문서](2026-11-20-sales-pilot-priorities.md) | P0-1~3 |
+| CX-93 첫 주문 업종 판정 (11/21) | [문서](../work-orders/2026-11-21-CX-93-first-order-contract-gap.md) | #1240 · #1242 · #1244 |
 | **11/20 제이에스리테일 3매장 영업 파일럿** | [현장 일정·제품 우선순위](2026-11-20-sales-pilot-priorities.md) | P0 매입가 저장 · 매장 PC 문서/QR · 리드 방문 기록 |
 | **R16 매장 가격 · 전체 상품 · 거래처 등록 (11/18)** | [지시서](2026-11-18-R16-catalog-price.md) · [설계 12](../backend/12_CATALOG_PRICE_FLOW.md) | CX-119~126 |
 | 상품별 주문 마감 (11/18) | [지시서](2026-11-18-R15-product-cutoff.md) | CX-114~117 |
