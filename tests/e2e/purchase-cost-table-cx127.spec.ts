@@ -44,7 +44,7 @@ for (const width of [1440, 390]) test(`purchase cost table keeps eight default f
     ]);
   } else {
     await expect(page.locator("table[aria-colcount]")).toHaveCount(0);
-    await expect(page.getByText("합성 상품 1", { exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "합성 상품 1 품목명", exact: true })).toBeVisible();
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

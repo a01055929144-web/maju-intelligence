@@ -163,6 +163,10 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await page.reload();
     const checkVisibleCosts = async (restored: boolean) => {
       await page.getByRole('navigation',{name:'매입가 보기',exact:true}).getByRole('button',{name:'전체',exact:true}).click();
+      await page.getByRole('button',{name:'열 편집',exact:true}).last().click();
+      const dateToggle=page.getByText('적용일',{exact:true}).locator('..').locator('input[type="checkbox"]');
+      if(!await dateToggle.isChecked())await dateToggle.check();
+      await page.getByRole('button',{name:'열 편집',exact:true}).last().click();
       for (const i of [0,12,13,14,744]) {
         const label=name(i,scenario.existing);
         await page.getByRole('searchbox',{name:'품목 검색',exact:true}).fill(saved.items.find(item=>item.code===code(i))!.catalog_code);
