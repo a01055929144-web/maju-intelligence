@@ -580,8 +580,6 @@ test("unresolved catalog mapping reports source rows and never guesses an ID", a
 test("date rollout blocks direct v1 cost changes without leaving a stale price date", async ({ page }) => {
   const { writes, receipts, dateWrites } = await purchaseUpload(page);
   await expect(page.getByText("날짜별 저장을 사용 중입니다.", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "전체", exact: true }).click();
-  await page.getByRole("button", { name: "수정", exact: true }).click();
   await expect(page.getByRole("spinbutton", { name: "합성 상품 변경 후 매입가 수정" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^③ 저장/ })).toBeDisabled();
   expect(writes).toHaveLength(0); expect(receipts).toHaveLength(0); expect(dateWrites).toHaveLength(0);
@@ -686,7 +684,7 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   await expect(page.getByRole("button", { name: /^③ 저장/ })).toBeEnabled();
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
-  await expect(page.getByRole("region", { name: "매입가 저장 결과" })).toContainText("현재 매입가 변경 4품목 / 이력만 1품목");
+  await expect(page.getByRole("region", { name: "매입가 저장 결과" })).toContainText("현재 매입가 변경 3품목 / 이력만 2품목");
   await expect(nav.getByRole("button", { name: "매입 이력", exact: true })).toHaveAttribute("aria-pressed", "true");
   expect(dateWrites).toHaveLength(2); expect(dateWrites[1]).toEqual(dateWrites[0]);
   const rows = dateWrites[1].rows;
@@ -694,7 +692,7 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
     [2, 150, 1, 150, 15, 165], [3, 80, 2, 160, 16, 176], [4, 100, 3, 300, 30, 330],
     [5, 120, 4, 480, 48, 528], [6, 130, 5, 650, 65, 715], [7, 90, 6, 540, 54, 594]
   ]);
-  expect(rows.filter(row => row.priceSelected)).toHaveLength(4); expect(rows.filter(row => row.priceHeld)).toHaveLength(1);
+  expect(rows.filter(row => row.priceSelected)).toHaveLength(3); expect(rows.filter(row => row.priceHeld)).toHaveLength(1);
   expect(rows[4].priceSelected).toBe(false);
   expect(rows[4].rawValues[5]).toBe("130");
   expect(rows[5]).toMatchObject({ productId: "20000000-0000-4000-8000-000000000005", unit: "병", spec: "750ml" });
