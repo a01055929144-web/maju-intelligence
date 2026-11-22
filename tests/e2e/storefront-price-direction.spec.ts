@@ -22,7 +22,7 @@ for (const width of [1440, 390]) test(`CX-116 shows and enforces product cutoffs
   if (width === 1440) await page.getByRole("button", { name: "격자형" }).click();
   await expect(page.getByText("이 상품 0일 전 12:00 마감", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "합성 마감 품목 수량 늘리기" }).click();
-  await expect(page.getByLabel("합성 마감 품목 수량")).toHaveText("1");
+  await expect(page.getByLabel("합성 마감 품목 수량", { exact: true })).toHaveText("1");
   passed = true;
   await page.getByLabel("배송일").fill("2099-01-02");
   await expect(page.getByText("마감 지남 — 다음 배송일로", { exact: true }).first()).toBeVisible();
