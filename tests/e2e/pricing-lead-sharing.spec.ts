@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { publicDocumentLinkExpiry, documentLinkLastDay, publicDocumentOutput } from "../../domains/pricing/document-share";
+import { mkdir } from "node:fs/promises";
+import { publicDocumentLinkExpiry, publicDocumentOutput } from "../../domains/pricing/document-share";
 import type { DocumentContent, DocumentVersion, DocumentOutput } from "../../domains/pricing/document";
 import { DEFAULT_DISPLAY, lineFromCatalog } from "../../domains/pricing/document";
 // CC-14: 휴대폰(≤640px)에서는 보조 버튼이 더보기 메뉴 안에 있다. PC는 툴바 버튼.
@@ -180,8 +181,10 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(qr).toHaveAttribute("src", qrSource!);
   expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
-  await page.screenshot({ path: info.outputPath(`cx128-${kind}-${width}.png`), fullPage: true });
-  if (width === 1440) await page.pdf({ path: info.outputPath(`cx128-${kind}-a4.pdf`), format: "A4", printBackground: true });
+  const cx128Artifacts = "test-results/readonly-pg17/cx128-b";
+  await mkdir(cx128Artifacts, { recursive: true });
+  await page.screenshot({ path: `${cx128Artifacts}/cx128-${kind}-${width}.png`, fullPage: true });
+  if (width === 1440) await page.pdf({ path: `${cx128Artifacts}/cx128-${kind}-a4.pdf`, format: "A4", printBackground: true });
   let signupReady = false, intentReady = false;
   const publicViewer = await browser.newPage({ viewport: { width, height: 900 } });
   await publicViewer.route("**/api/pricing-documents/public", route => publicRevoked
