@@ -38,7 +38,6 @@ export function PageContent({
   qr,
   online = false,
   fontScale = 1,
-  hideEmptyCutoff = false,
 }: {
   data: DocumentOutput;
   page: number;
@@ -47,7 +46,6 @@ export function PageContent({
   qr?: DocumentOrderQr | null;
   online?: boolean;
   fontScale?: number;
-  hideEmptyCutoff?: boolean;
 }) {
   const accent =
     data.theme === "blue"
@@ -57,7 +55,7 @@ export function PageContent({
         : "#1f2937";
   const display = parseDisplay(data.display);
   const headerInfo = display.info.filter((item) => item.place === "header");
-  const footerInfo = display.info.filter((item) => item.place === "footer" && !(hideEmptyCutoff && (item.key === "next_day_cutoff_time" || item.label === "주문 마감")));
+  const footerInfo = display.info.filter((item) => item.place === "footer");
   const footerType = documentFooterTypography(display, fontScale);
   const promos = data.lines.filter((l) => l.badge);
   const regular = data.lines.filter((l) => !l.badge);
@@ -223,23 +221,6 @@ export function PricingDocumentPreview({
     [busy, setBusy] = useState(false),
     [day, setDay] = useState(koreaDay());
   const [qr, setQr] = useState<DocumentOrderQr | null>(null);
-  const [hideEmptyCutoff, setHideEmptyCutoff] = useState(false);
-  const [cutoffWarning, setCutoffWarning] = useState("");
-  const cutoffRead = useRef<Promise<void>>(Promise.resolve());
-  useEffect(() => {
-    let active = true;
-    setHideEmptyCutoff(false);
-    setCutoffWarning("");
-    cutoffRead.current = companyId ? fetch(`/api/company-profile?companyId=${encodeURIComponent(companyId)}`, { cache: "no-store" })
-      .then(async response => { if (!response.ok) throw new Error("cutoff_read_failed"); return response.json(); })
-      .then((profile: { values?: Record<string, unknown> } | null) => {
-        if (active && profile?.values) {
-          const cutoff = profile.values.next_day_cutoff_time;
-          setHideEmptyCutoff(cutoff == null || typeof cutoff === "string" && !cutoff.trim());
-        }
-      }).catch(() => { if (active) setCutoffWarning("회사 마감 설정을 확인하지 못해 기존 문구를 유지합니다. 미리보기를 다시 열어 확인해 주세요."); }) : Promise.resolve();
-    return () => { active = false; };
-  }, [companyId]);
   const papers = useRef<Array<HTMLDivElement | null>>([]);
   const output = documentOutput(current, day),
     pages = printPages(output, fontScale, Boolean(qr));
@@ -252,7 +233,6 @@ export function PricingDocumentPreview({
     return () => window.clearTimeout(timer);
   }, [current.content.validUntil, day]);
   const prepare = useCallback(async () => {
-    await cutoffRead.current;
     const latest = refreshedDocumentVersion(version, refresh ? await refresh() : version);
     if (!alive.current) throw new Error("미리보기를 다시 열어 주세요.");
     flushSync(() => {
@@ -304,7 +284,6 @@ export function PricingDocumentPreview({
         </span>
       </div>
       {companyId && (canManageLinks || publicSharingAvailable) && current.version > 0 ? <PricingDocumentOrderQr key={current.id} companyId={companyId} version={current} publicSharingAvailable={publicSharingAvailable} allowCustomerLink={canManageLinks} initiallyOpen={openPublicQr && publicSharingAvailable} onInsert={setQr} /> : null}
-      {cutoffWarning ? <p role="status" className="pricing-no-print text-sm text-amber-800">{cutoffWarning}</p> : null}
       {error && (
         <p role="alert" className="pricing-no-print text-red-700">
           {error} 같은 버튼으로 다시 시도하거나 미리보기를 닫고 버전을 다시 선택해 주세요.
@@ -314,7 +293,7 @@ export function PricingDocumentPreview({
         <div className="pricing-no-print">
           <h3 className="mb-2 font-semibold">온라인 · 휴대폰</h3>
           <div className="pricing-online max-w-[390px] rounded-2xl border bg-white p-3 shadow">
-            <PageContent data={output} page={1} pages={1} qr={qr} hideEmptyCutoff={hideEmptyCutoff} online />
+            <PageContent data={output} page={1} pages={1} qr={qr} online />
           </div>
         </div>
         <div className="min-w-0">
@@ -333,7 +312,6 @@ export function PricingDocumentPreview({
                       data={data}
                       fontScale={fontScale}
                       qr={qr}
-                      hideEmptyCutoff={hideEmptyCutoff}
                       page={i + 1}
                       pages={pages.length}
                       start={pages

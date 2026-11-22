@@ -35,7 +35,6 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   const draft = () => ({ id: documentId, revision, content, updatedAt: "2026-11-06T00:00:00Z", recalculation: { publishedAt: published ? "2026-11-06T00:00:00Z" : null, needsRecalculation: false, changedProductCount: 0 } });
   const version = (): DocumentVersion => ({ id: versionId, documentId, version: 1, revision, content: publishedContent!, publishedAt: "2026-11-06T00:00:00Z", unavailablePromotions: [] });
   const publicExpiry = () => publicDocumentLinkExpiry(version().content.validUntil);
-  await page.route("**/api/company-profile*", route => route.fulfill({ json: { values: { next_day_cutoff_time: width === 1440 ? "" : "00:00" } } }));
   await page.route("**/api/pricing-store-links*", route => {
     if (route.request().method() === "POST") {
       expect(route.request().postDataJSON()).toEqual({ companyId, action: "create", customerId, documentVersionId: versionId });
@@ -61,7 +60,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       result = published ? [version()] : [];
     }
     if (action === "save") { content = b.content; documentId = b.id; revision++; result = draft(); }
-    if (action === "publish") { published = true; publishedContent = structuredClone(content!); publishedContent.display = { ...publishedContent.display, info: [{ key: "next_day_cutoff_time", label: "주문 마감", value: "전날 00:00", place: "footer" }] }; result = version(); }
+    if (action === "publish") { published = true; publishedContent = structuredClone(content!); result = version(); }
     if (action === "prepare-share" && b.leadId === null) {
       publicInputs.push(b); expect(b).not.toHaveProperty("ttlDays");
       expect(b.documentId).toBe(documentId); expect(b.documentVersionId).toBe(versionId);
@@ -180,9 +179,6 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await preview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
   await expect(qr).toHaveAttribute("src", qrSource!);
   expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
-  const paper = preview.locator(".pricing-paper").first();
-  if (width === 1440) await expect(paper).not.toContainText("주문 마감 · 전날 00:00");
-  else await expect(paper).toContainText("주문 마감 · 전날 00:00");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
   await page.screenshot({ path: info.outputPath(`cx128-${kind}-${width}.png`), fullPage: true });
   if (width === 1440) await page.pdf({ path: info.outputPath(`cx128-${kind}-a4.pdf`), format: "A4", printBackground: true });
