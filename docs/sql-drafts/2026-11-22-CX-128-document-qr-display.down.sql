@@ -7,10 +7,10 @@ do $$ begin
     then raise exception 'qr_display_down_refused_contract_in_use'; end if;
 end $$;
 drop function public.pricing_document_qr_display_contract_v1();
-do $ begin
+do $$ begin
   execute replace(pg_get_functiondef('public.pricing_p1_clean_before_qr_display_v1(uuid,jsonb)'::regprocedure),
     'FUNCTION public.pricing_p1_clean_before_qr_display_v1(', 'FUNCTION public.pricing_p1_clean(');
-end $;
+end $$;
 drop function public.pricing_p1_clean_before_qr_display_v1(uuid,jsonb);
 notify pgrst,'reload schema';
 commit;

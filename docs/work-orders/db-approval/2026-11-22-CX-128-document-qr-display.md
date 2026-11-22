@@ -23,3 +23,9 @@ A는 기존 pricing_documents.content.display.qr에 두 enum만 저장한다. �
 ## 운영 경계
 
 SQL 초안+down+PG17까지만. 운영 프로젝트 쓰기·SQL 실행·환경 등록·기능 ON·배포 없음. 코드/SQL 검토 병합과 운영 적용은 다르다. FEATURE_DOCUMENT_QR_DISPLAY_COMPANY_IDS는 비어 있는 상태를 유지하며 대표 운영 승인 전에는 켜지 않는다. C는 대표 최신 직접 지시대로 제외.
+
+## 첫 PG17 실패 원인
+
+1. JavaScript 문자열 교체가 SQL $$ 구분자를 $ 한 개로 바꿨다.
+2. 실제 VAT/footer 선행 fixture는 통과했고 새 QR 블록 실행 전 문법 검사에서 멈췄다.
+3. up/down/사용 중 down 확인 블록의 구분자만 문자 패치로 복원하고, 같은 변형이 남지 않았는지 정적 확인했다. 운영 실행 없음.

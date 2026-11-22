@@ -12,10 +12,10 @@ do $$ begin
     then raise exception 'qr_display_cleaner_prerequisite_required'; end if;
 end $$;
 -- Copy the current implementation; replace the original OID so cached callers use the wrapper.
-do $ begin
+do $$ begin
   execute replace(pg_get_functiondef('public.pricing_p1_clean(uuid,jsonb)'::regprocedure),
     'FUNCTION public.pricing_p1_clean(', 'FUNCTION public.pricing_p1_clean_before_qr_display_v1(');
-end $;
+end $$;
 create or replace function public.pricing_p1_clean(p_company uuid,p_content jsonb) returns jsonb
 language plpgsql stable security invoker set search_path=pg_catalog,public,pg_temp as $$
 declare cleaned jsonb; qr jsonb:=p_content#>'{display,qr}';

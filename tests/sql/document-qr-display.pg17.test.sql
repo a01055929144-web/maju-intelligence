@@ -49,8 +49,8 @@ select public.pricing_document_qr_display_contract_v1();
 reset role;
 \! if psql -X --dbname="$DOCUMENT_QR_TEST_DATABASE" --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/2026-11-22-CX-128-document-qr-display.down.sql >/tmp/qr-display-refused-down.log 2>&1; then exit 1; fi; grep -q qr_display_down_refused_contract_in_use /tmp/qr-display-refused-down.log
 select 1 / (not :'SHELL_ERROR'::boolean)::integer as expected_qr_down_refusal;
-do $ begin
+do $$ begin
   assert public.pricing_document_qr_display_contract_v1()=1,'refused down changed contract';
   assert exists(select 1 from public.pricing_documents where content#>'{display,qr}' is not null),'refused down lost QR';
-end $;
+end $$;
 select 'QR_DISPLAY_PG17_PASS';
