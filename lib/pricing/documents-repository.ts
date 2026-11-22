@@ -1,3 +1,5 @@
+import { readDocumentQrDisplay, saveDocumentQrDisplay } from "./document-qr-display";
+import type { DocumentQrDisplay } from "../../domains/pricing/document";
 import { createHash, randomBytes } from "crypto";
 import { getSupabaseConfig, supabaseRequest } from "../store";
 import type { DocumentScope, PricingDocumentsRepository } from "../../application/pricing/documents";
@@ -128,6 +130,8 @@ async function recordDocumentSend(scope: DocumentScope, input: DocumentSendInput
 
 export const pricingDocumentsRepository: PricingDocumentsRepository = {
   async request<T>(scope: DocumentScope, action: string, payload: object): Promise<T> {
+    if (action === "qr-display") return readDocumentQrDisplay(scope, (payload as { id: string }).id) as Promise<T>;
+    if (action === "save-qr-display") return saveDocumentQrDisplay(scope, payload as { id: string; expected: number; settings: DocumentQrDisplay }) as Promise<T>;
     if (action === "save-promotion" && "expected" in payload && payload.expected === 0) {
       const content = object("content" in payload ? payload.content : null);
       const productId = content.productId;
