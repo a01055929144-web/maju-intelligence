@@ -153,7 +153,7 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
     <p className="text-xs font-semibold text-slate-500">회사 기본값보다 권역, 권역보다 매장별 예외가 우선합니다. 지금은 후결제 주문만 받습니다.</p>
     {message && <p role="status" className="rounded-md bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{message}</p>}
     <section className="space-y-3 rounded-lg border border-slate-200 p-4"><h2 className="text-sm font-black text-slate-950">회사 기본값</h2>
-      <PolicyFields value={company} onChange={(rule) => setCompany({ ...company, ...rule })} weekdaysNote="배송 요일은 아래 \"권역별 배송\"(매장별 예외는 매장 설정)에서 정합니다. 단가표 하단에 보이는 배송 요일은 회사 정보에서 바꿉니다." />
+      <PolicyFields value={company} onChange={(rule) => setCompany({ ...company, ...rule })} weekdaysNote="배송 요일은 아래 ‘권역별 배송’(매장별 예외는 매장 설정)에서 정합니다. 단가표 하단에 보이는 배송 요일은 회사 정보에서 바꿉니다." />
       <label className="block text-[11px] font-black text-slate-600">매장 공지<textarea className="mt-1 w-full rounded-md border border-slate-200 p-2 text-xs font-semibold leading-5" value={company.notice}
         onChange={(event) => setCompany({ ...company, notice: event.target.value })} /></label>
       <label className="block text-[11px] font-black text-slate-600">시세 품목 안내<textarea className="mt-1 w-full rounded-md border border-slate-200 p-2 text-xs font-semibold leading-5" value={company.marketPriceNotice}
