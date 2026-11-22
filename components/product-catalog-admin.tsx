@@ -689,8 +689,10 @@ function Editor({
           <Field label="규격">
             <div className="flex gap-2">
               <input
+                aria-label="규격 수량"
                 className="maju-input min-w-0 flex-1"
                 min="0"
+                step="0.001"
                 type="number"
                 value={d.specValue ?? ""}
                 onChange={(e) =>
