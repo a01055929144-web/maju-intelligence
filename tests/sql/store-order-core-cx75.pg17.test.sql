@@ -318,7 +318,9 @@ end $$;
 alter table public.product_catalog add column order_cutoff_days_before smallint, add column order_cutoff_time time;
 \ir ../../docs/sql-drafts/2026-11-22-CX-117-product-order-cutoff.sql
 do $$
-declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+1;
+-- Keep the inherited company deadline (previous day 22:00) in the future,
+-- including CI runs after 22:00; product deadlines still straddle now below.
+declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+2;
  r jsonb; k uuid:=gen_random_uuid(); product_name text;
 begin
  select coalesce(nullif(sales_product_name,''),nullif(purchase_product_name,''),'품목')
@@ -363,7 +365,7 @@ update public.store_order_settings set unified_order_core_enabled=false
 where company_id='00000000-0000-4000-8000-000000000001';
 do $$ declare r jsonb; begin
  r:=public.place_store_account_order('00000000-0000-4000-8000-000000000001',
- (clock_timestamp() at time zone 'Asia/Seoul')::date+1,
+ (clock_timestamp() at time zone 'Asia/Seoul')::date+2,
  '[{"productId":"60000000-0000-4000-8000-000000000001","quantity":1}]',gen_random_uuid(),null,null,'cx117-blank-cutoff',
  '30000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001');
  if r->>'id' is null then raise exception 'cx117_blank_cutoff_changed_default'; end if;
