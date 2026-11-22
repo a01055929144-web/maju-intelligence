@@ -32,7 +32,7 @@
 
 **책임**: 매입 상품과 판매 품목의 매칭, 마진 기반 판매가 계산, 견적 발행·유효기간·공개 링크, 고객용 원가 비노출 응답.
 
-- 함수: `listProductCatalog`, `uploadSalesQuotePhoto`, `createSalesQuote`, `listSalesQuotes`, `getPublicSalesQuote`, `applyDefaultMargin`, `calculateQuoteLine`, `calculateQuoteTotals`, `toCustomerQuoteLines`, `resolveQuoteValidUntil`, `normalizeProductToken`
+- 함수: `uploadSalesQuotePhoto`, `createSalesQuote`, `listSalesQuotes`, `getPublicSalesQuote`, `applyDefaultMargin`, `calculateQuoteLine`, `calculateQuoteTotals`, `toCustomerQuoteLines`, `resolveQuoteValidUntil`, `normalizeProductToken`
 - 테이블: `product_catalog`, `sales_quotes`, `sales_quote_items`
 - 관련 파일: `domains/quote/quote.ts`, `components/mobile-quote-builder.tsx`, `app/api/product-catalog/route.ts`, `app/api/sales-quotes/route.ts`, `app/api/public/quotes/[token]/route.ts`, `app/quote/[token]/page.tsx`
 - 경계 규칙: 매입가·마진율은 회사 내부 편집 화면에서만 사용한다. 공개 견적 조회는 UUID 토큰과 유효기간을 검증하고 고객 응답에서 원가·마진 컬럼을 SELECT 단계부터 제외한다.

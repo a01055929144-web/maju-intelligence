@@ -156,6 +156,17 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-20-CX-121-document-extension.pg17.test.sql
 
+      - name: Verify CX-123 store catalog v2 draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: cx123_store_catalog_v2_test
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-20-CX-123-store-catalog-v2.pg17.test.sql
+
       - name: Verify CX-81 lead bulk jobs on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1

@@ -2,6 +2,37 @@ import { expect, test } from "@playwright/test";
 import { storeTab } from "./store-tab";
 const company = "00000000-0000-4000-8000-000000000001";
 
+for (const width of [1440, 390]) test(`CX-116 shows and enforces product cutoffs at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  let passed = false;
+  await page.route("**/api/storefront", route => route.fulfill({ json: {
+    mobileCommon: true,
+    orderCutoffGuidance: { serverNow: passed ? "2099-01-01T04:00:00.000Z" : "2098-12-31T00:00:00.000Z" },
+    store: { title: "합성 품목 마감", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 주소",
+      version: 1, validUntil: "2099-12-31", priceAvailable: true, canOrder: true, nextDeliveryDate: "2099-01-01",
+      selectedDeliveryDate: passed ? "2099-01-02" : "2099-01-01", notice: "", marketPriceNotice: "",
+      policy: { weekdays: [0,1,2,3,4,5,6], holidays: [], cutoffDaysBefore: 0, cutoffTime: "23:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 },
+      lines: [{ key: "product:", productId: "product", promotionId: null, name: "합성 마감 품목", category: "농산", brand: "", spec: "1kg", unit: "봉",
+        badge: "", taxType: "exempt", unitPrice: 1000, priceIncludesTax: false, isMarketPrice: false, remaining: null, maximumQuantity: null,
+        recentDispatchPrice: null, recentDispatchDate: null, productCutoff: { cutoffAtKst: "2099-01-01T12:00:00+09:00", daysBefore: 0, time: "12:00" } }] },
+    preferences: [], orders: [], historyPage: 1, historyHasMore: false,
+  } }));
+  await page.goto("/store#synthetic-cx116");
+  await storeTab(page, "주문").click();
+  if (width === 1440) await page.getByRole("button", { name: "격자형" }).click();
+  await expect(page.getByText("이 상품 0일 전 12:00 마감").first()).toBeVisible();
+  await page.getByRole("button", { name: "합성 마감 품목 수량 늘리기" }).click();
+  await expect(page.getByLabel("합성 마감 품목 수량", { exact: true })).toHaveText("1");
+  passed = true;
+  await page.getByLabel("배송일").fill("2099-01-02");
+  await expect(page.getByText("마감 지남 — 다음 배송일로").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "합성 마감 품목 수량 늘리기" })).toBeDisabled();
+  if (width === 390) await page.getByRole("button", { name: /장바구니 확인/ }).click();
+  await expect(page.getByText("마감 지남 — 품목을 빼거나 다음 배송일로 바꿔 주세요.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "후결제로 주문 신청" })).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+});
+
 for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves server amounts and clears revoked documents at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   const id = "70000000-0000-4000-8000-000000000067";
@@ -63,6 +94,7 @@ for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves se
   await storeTab(page, "내역").click();
   await expect(page.locator(`[data-store-order-id="${id}"]`)).toContainText("7,777원");
   await expect(detail).toHaveCount(0);
+  if (width === 1440) await expect(page).toHaveURL(/[?&]view=history(?:&|#|$)/);
   await Promise.all([
     page.waitForResponse(response => response.url().endsWith("/api/storefront") &&
       response.request().postDataJSON()?.token === "synthetic-cx67-expired"),

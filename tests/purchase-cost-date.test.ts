@@ -64,6 +64,13 @@ it.each([0.3, 0.25, 1.5])("forwards source unit price independently of decimal q
   expect(row).toMatchObject({ quantity, unitPrice, cost: unitPrice, supplyAmount: unitPrice * quantity, priceSelected: true });
   expect(validPurchaseDateRows([row])).toBe(true);
 });
+it("blocks zero current price while preserving a zero-cost history row when explicitly held", () => {
+  const line = { ...fixture(1, 1)[0], cost: 0, rawCost: 0 };
+  expect(() => buildPurchaseDateRows([line], [line.rowNumber], [])).toThrow("저장할 원본 거래행");
+  const held = buildPurchaseDateRows([line], [], [line.rowNumber]);
+  expect(held[0]).toMatchObject({ cost: 0, priceSelected: false, priceHeld: true });
+  expect(validPurchaseDateRows(held)).toBe(true);
+});
 it("keeps future effective rows as history without promoting the selected price early", () => {
   const rows = buildPurchaseDateRows(fixture(1, 1).map(line => ({ ...line, purchaseDate: "2099-11-20" })), [2], []);
   expect(holdFuturePrices(rows, "2026-11-21")).toMatchObject([{ priceDate: "2099-11-20", priceSelected: false, priceHeld: true }]);

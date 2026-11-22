@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { publicDocumentLinkExpiry, documentLinkLastDay, publicDocumentOutput } from "../../domains/pricing/document-share";
+import { mkdir } from "node:fs/promises";
+import { publicDocumentLinkExpiry, publicDocumentOutput } from "../../domains/pricing/document-share";
 import type { DocumentContent, DocumentVersion, DocumentOutput } from "../../domains/pricing/document";
 import { DEFAULT_DISPLAY, lineFromCatalog } from "../../domains/pricing/document";
 // CC-14: 휴대폰(≤640px)에서는 보조 버튼이 더보기 메뉴 안에 있다. PC는 툴바 버튼.
@@ -168,9 +169,22 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(preview.getByRole("button", { name: "공개 링크 복사", exact: true })).toBeVisible();
   expect(orderLinks).toBe(0); expect(deliveryRecords.size).toBe(0); expect(contactRecords.size).toBe(0);
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
-  await expect(preview.locator(".pricing-paper").first()).toContainText("QR로 문서를 열고 주문·가입을 시작하세요");
-  await expect(preview.locator(".pricing-paper").first()).toContainText(`가격·주문: ${version().content.validUntil}까지`);
-  await expect(preview.locator(".pricing-paper").first()).toContainText(`QR 품목 열람: ${documentLinkLastDay(publicExpiry())}까지`);
+  const savedVersion = JSON.stringify(version());
+  const linkRequests = publicInputs.length;
+  const qr = preview.locator(".pricing-paper footer img").first();
+  await expect(qr).toBeVisible();
+  const qrSource = await qr.getAttribute("src");
+  const qrRow = qr.locator("..");
+  await expect(qrRow).toHaveText("");
+  await expect(preview.locator(".pricing-online footer img").locator("..")).toHaveText("");
+  await preview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
+  await expect(qr).toHaveAttribute("src", qrSource!);
+  expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+  const cx128Artifacts = "test-results/readonly-pg17/cx128-b";
+  await mkdir(cx128Artifacts, { recursive: true });
+  await page.screenshot({ path: `${cx128Artifacts}/cx128-${kind}-${width}.png`, fullPage: true });
+  if (width === 1440) await page.pdf({ path: `${cx128Artifacts}/cx128-${kind}-a4.pdf`, format: "A4", printBackground: true });
   let signupReady = false, intentReady = false;
   const publicViewer = await browser.newPage({ viewport: { width, height: 900 } });
   await publicViewer.route("**/api/pricing-documents/public", route => publicRevoked
@@ -222,7 +236,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
   await expect(preview.locator(".pricing-paper").first().getByRole("img", { name: "합성 QR 매장 주문 링크 QR", exact: true })).toBeVisible();
   await preview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
-  await expect.poll(() => printed).toBe(1);
+  await expect.poll(() => printed).toBe(2);
   const qrDownload = page.waitForEvent("download");
   await preview.getByRole("button", { name: "QR PNG 저장", exact: true }).click();
   expect((await qrDownload).suggestedFilename()).toBe("order-qr-v1.png");
