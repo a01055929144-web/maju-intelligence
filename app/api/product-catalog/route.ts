@@ -7,8 +7,10 @@ import {
   restoreProductsForAdmin,
   listProductCategorySuggestions,
   listProductCatalogForAdmin,
+  listProductOrderCutoffsForAdmin,
   updateProductCatalogForAdmin,
   updateProductCategoriesForAdmin,
+  updateProductOrderCutoffsForAdmin,
   type SaveProductCatalogInput,
 } from "@/lib/product-catalog-admin";
 export const dynamic = "force-dynamic";
@@ -43,12 +45,15 @@ export async function GET(request: NextRequest) {
       const page = Math.max(1, Number(request.nextUrl.searchParams.get("page")) || 1);
       return NextResponse.json(await listProductCategorySuggestions(scope.companyId!, page));
     }
-    return NextResponse.json({
-      items: await listProductCatalogForAdmin(
-        scope.companyId!,
-        request.nextUrl.searchParams.get("q") || "",
-      ),
-    });
+    const query = request.nextUrl.searchParams.get("q") || "";
+    const items = await listProductCatalogForAdmin(scope.companyId!, query);
+    const cutoffs = canEditCutoff(scope) ? await listProductOrderCutoffsForAdmin(scope.companyId!, 1000, query) : null;
+    const byId = new Map(cutoffs?.map((row) => [row.id, row]));
+    return NextResponse.json({ cutoffAvailable: cutoffs !== null, items: cutoffs === null ? items : items.map((item) => ({
+      ...item,
+      orderCutoffDaysBefore: byId.get(item.id)?.order_cutoff_days_before ?? null,
+      orderCutoffTime: byId.get(item.id)?.order_cutoff_time?.slice(0, 5) ?? null,
+    })) });
   } catch (e) {
     return NextResponse.json(
       {
@@ -65,6 +70,12 @@ async function payload(request: NextRequest) {
     | null;
   return { body, scope: await getRequestAuthScope(request, body?.companyId) };
 }
+function cutoffRequested(body: Partial<SaveProductCatalogInput>) {
+  return Object.prototype.hasOwnProperty.call(body, "orderCutoffDaysBefore") || Object.prototype.hasOwnProperty.call(body, "orderCutoffTime");
+}
+function canEditCutoff(scope: Scope) {
+  return scope.ok && (Boolean(scope.adminSession) || Boolean(scope.customerSession && canManagePriceSheets(scope.customerSession)));
+}
 export async function POST(request: NextRequest) {
   const { body, scope } = await payload(request),
     error = denied(scope);
@@ -75,11 +86,14 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   try {
+    const cutoffAvailable = (await listProductOrderCutoffsForAdmin(scope.companyId!, 1)) !== null;
+    if (cutoffRequested(body) && (!cutoffAvailable || !canEditCutoff(scope))) return NextResponse.json({ message: "상품별 주문 마감을 사용할 권한이나 설정이 없습니다." }, { status: 403 });
     return NextResponse.json({
       item: await createProductCatalogForAdmin(
         scope.companyId!,
         body as SaveProductCatalogInput,
         actor(scope),
+        cutoffAvailable,
       ),
     });
   } catch (e) {
@@ -95,6 +109,17 @@ export async function PATCH(request: NextRequest) {
   const { body, scope } = await payload(request),
     error = denied(scope);
   if (error) return error;
+  if (body?.action === "update-cutoffs") {
+    if (!canEditCutoff(scope)) return NextResponse.json({ message: "대표·관리자만 주문 마감을 설정할 수 있습니다." }, { status: 403 });
+    try {
+      if ((await listProductOrderCutoffsForAdmin(scope.companyId!, 1)) === null) return NextResponse.json({ message: "상품별 주문 마감을 아직 사용할 수 없습니다." }, { status: 503 });
+      if (!Array.isArray(body.ids)) return NextResponse.json({ message: "상품을 골라 주세요." }, { status: 400 });
+      const savedIds = await updateProductOrderCutoffsForAdmin(scope.companyId!, body.ids, body.orderCutoffDaysBefore ?? null, body.orderCutoffTime ?? null);
+      return NextResponse.json({ savedIds });
+    } catch (e) {
+      return NextResponse.json({ message: e instanceof Error ? e.message : "주문 마감을 저장하지 못했습니다." }, { status: 400 });
+    }
+  }
   if (body?.action === "delete-products" || body?.action === "restore-products") {
     // CC-24: 삭제·숨김·되살리기는 대표·관리자만(직원은 불가). 관리자 미리보기는 세션 없음 = 허용.
     if (scope.ok && scope.customerSession && !canManagePriceSheets(scope.customerSession)) return NextResponse.json({ message: "대표·관리자만 상품을 삭제할 수 있습니다." }, { status: 403 });
@@ -125,12 +150,15 @@ export async function PATCH(request: NextRequest) {
       { status: 400 },
     );
   try {
+    const cutoffAvailable = (await listProductOrderCutoffsForAdmin(scope.companyId!, 1)) !== null;
+    if (cutoffRequested(body) && (!cutoffAvailable || !canEditCutoff(scope))) return NextResponse.json({ message: "상품별 주문 마감을 사용할 권한이나 설정이 없습니다." }, { status: 403 });
     return NextResponse.json({
       item: await updateProductCatalogForAdmin(
         scope.companyId!,
         body.id,
         body as SaveProductCatalogInput,
         actor(scope),
+        cutoffAvailable,
       ),
     });
   } catch (e) {
@@ -142,3 +170,4 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
+
