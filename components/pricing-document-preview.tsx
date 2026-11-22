@@ -225,18 +225,19 @@ export function PricingDocumentPreview({
   const [qr, setQr] = useState<DocumentOrderQr | null>(null);
   const [hideEmptyCutoff, setHideEmptyCutoff] = useState(false);
   const [cutoffWarning, setCutoffWarning] = useState("");
+  const cutoffRead = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     let active = true;
     setHideEmptyCutoff(false);
     setCutoffWarning("");
-    if (companyId) void fetch(`/api/company-profile?companyId=${encodeURIComponent(companyId)}`, { cache: "no-store" })
+    cutoffRead.current = companyId ? fetch(`/api/company-profile?companyId=${encodeURIComponent(companyId)}`, { cache: "no-store" })
       .then(async response => { if (!response.ok) throw new Error("cutoff_read_failed"); return response.json(); })
       .then((profile: { values?: Record<string, unknown> } | null) => {
         if (active && profile?.values) {
           const cutoff = profile.values.next_day_cutoff_time;
           setHideEmptyCutoff(cutoff == null || typeof cutoff === "string" && !cutoff.trim());
         }
-      }).catch(() => { if (active) setCutoffWarning("회사 마감 설정을 확인하지 못해 기존 문구를 유지합니다. 미리보기를 다시 열어 확인해 주세요."); });
+      }).catch(() => { if (active) setCutoffWarning("회사 마감 설정을 확인하지 못해 기존 문구를 유지합니다. 미리보기를 다시 열어 확인해 주세요."); }) : Promise.resolve();
     return () => { active = false; };
   }, [companyId]);
   const papers = useRef<Array<HTMLDivElement | null>>([]);
@@ -251,6 +252,7 @@ export function PricingDocumentPreview({
     return () => window.clearTimeout(timer);
   }, [current.content.validUntil, day]);
   const prepare = useCallback(async () => {
+    await cutoffRead.current;
     const latest = refreshedDocumentVersion(version, refresh ? await refresh() : version);
     if (!alive.current) throw new Error("미리보기를 다시 열어 주세요.");
     flushSync(() => {
