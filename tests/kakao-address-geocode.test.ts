@@ -1,5 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { geocodeAddress } from "../lib/kakao-address-geocode";
+
+// 지역 검색 폴백이 실제 카카오 네트워크를 부르면 CI에서 5초를 넘겨 흔들린다.
+vi.mock("../lib/kakao-keyword-leads", () => ({ geocodeRegionLabel: async () => null }));
 
 const reply = (documents: unknown[], ok = true) => (async () => ({ ok, json: async () => ({ documents }) })) as unknown as typeof fetch;
 
