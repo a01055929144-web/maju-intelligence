@@ -2,7 +2,7 @@
 
 - 적용: `docs/sql-drafts/2026-11-18-D4-S-3bc-order-cutoff-promotion-remaining.sql`
 - 복구: `docs/sql-drafts/2026-11-18-D4-S-3bc-order-cutoff-promotion-remaining.down.sql`
-- 상태: **미승인 · 운영 미적용**. 이 문서는 적용 권한이 아닙니다.
+- 상태: **대표 승인 · 운영 적용 잠금 중** (11/22 17:08 KST). 적용 결과는 같은 PR에 기록합니다.\n- 적용 대상: `fcmdvveqmcgtioelzqun`, 승인된 SQL blob `12b109082f56eac67b2f7ec1654aedaa9846c95b`.
 
 ## 범위와 순서
 
