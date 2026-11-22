@@ -130,11 +130,15 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
     const started=Date.now();
     await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
-    await expect(page.getByRole('region',{name:'매입가 저장 결과',exact:true})).toContainText('현재 매입가 변경 557품목 / 이력만 188품목');
+    const expectedChanged=Array.from({length:745-188},(_,offset)=>offset+188)
+      .filter(i=>i>=scenario.existing || chosenCost(i,scenario.existing)!==100).length;
+    const expectedHistoryOnly=745-expectedChanged;
+    await expect(page.getByRole('region',{name:'매입가 저장 결과',exact:true}))
+      .toContainText(`현재 매입가 변경 ${expectedChanged}품목 / 이력만 ${expectedHistoryOnly}품목`);
     expect(writes).toHaveLength(2); expect(writes[1]).toEqual(writes[0]);
     const saved=state();
     expect(saved.products_count).toBe(745); expect(saved.receipts).toBe(3417); expect(saved.batches).toBe(1);
-    expect(saved.batch).toMatchObject({id:writes[0].id,status:'completed',row_count:3417,history_only_product_count:188});
+    expect(saved.batch).toMatchObject({id:writes[0].id,status:'completed',row_count:3417,history_only_product_count:expectedHistoryOnly});
     expect(saved.batch!.recalc_run_id).toBeTruthy();
     expect(JSON.parse(db('verify-source',undefined,file.rows))).toMatchObject({verifiedOriginalRows:3417,allRawValuesAndAmountsPreserved:true});
     expect(saved.items).toHaveLength(745);
@@ -142,8 +146,9 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     for(let i=0;i<745;i++) {
       const product=saved.items.find(item=>item.code===code(i))!; expect(product).toBeTruthy();
       const held=i<188, cost=held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing);
+      const unchangedCurrent=i<scenario.existing && cost===100;
       expect(Number(product.cost)).toBe(cost); expect(Number(product.price)).toBe(Math.ceil(cost*1.2/10)*10);
-      expect(product.date).toBe(held?(i<scenario.existing?priorDate:null):date);
+      expect(product.date).toBe(unchangedCurrent?priorDate:held?null:date);
       // A known source unit must survive standard-product creation and be visible after reload.
       expect(product.purchase_unit).toBe(units[i%4]);
       if(i>=scenario.existing)expect(product.sales_unit).toBe(units[i%4]);
