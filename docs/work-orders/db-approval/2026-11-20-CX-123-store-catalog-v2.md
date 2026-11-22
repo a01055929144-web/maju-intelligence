@@ -18,6 +18,14 @@
 - CX-122가 아직 없으면 기존처럼 주문 가능한 연결에만 가격을 공개한다. CX-122 적용 뒤에는 `store_price_visible_v1`의 수동 외식업 확인 결과만 가격 공개에 사용한다.
 - 가격 비공개이면 일반 단가, 행사 단가, `source`, `promise_until`, 포함가 여부가 모두 `null`이다.
 
+## 아직 운영에 없는 선행 스키마 (2026-11-22 읽기 확인)
+
+- CX-120 `self_order_price_v2`는 적용·읽기 검증됐습니다.
+- ① `docs/sql-drafts/20261102-WO-03-product-catalog-schema.sql`의 `product_categories`와 `product_catalog.category_id`는 운영에 없습니다.
+- ② `docs/sql-drafts/2026-11-18-D4-S-3bc-order-cutoff-promotion-remaining.sql`의 `product_catalog.order_cutoff_days_before`·`order_cutoff_time`과 `promotion_remaining_v1`은 운영에 없습니다.
+- 운영 적용 순서는 ① → ② → CX-123입니다. ①·②는 현행 운영 스키마·격리 PostgreSQL 17에서 다시 대조하고, 각 SQL에 대해 대상 프로젝트를 명시한 별도 승인을 받은 뒤에만 적용합니다. 지금은 CX-123 운영 적용 조건을 충족하지 않습니다.
+- 이 PR의 CI 통과는 격리 시험 결과이며 운영 선행 스키마 존재 또는 적용 승인이 아닙니다. 기능은 기본 OFF, 회사 allowlist 미승인입니다.
+
 ## 적용 전 읽기 점검
 
 1. `store_accounts`, `product_catalog`, `product_categories`, `pricing_promotions`가 존재한다.
