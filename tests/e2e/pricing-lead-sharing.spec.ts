@@ -170,30 +170,16 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   expect(orderLinks).toBe(0); expect(deliveryRecords.size).toBe(0); expect(contactRecords.size).toBe(0);
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
   const savedVersion = JSON.stringify(version());
-  const qrSource = await preview.locator(".pricing-paper [data-document-qr] img").first().getAttribute("src");
   const linkRequests = publicInputs.length;
-  for (const position of ["bottom-left", "bottom-right", "top-right", "top-left"]) {
-    await preview.getByRole("combobox", { name: "QR 위치", exact: true }).selectOption(position);
-    for (const size of ["small", "normal", "large"]) {
-      await preview.getByRole("combobox", { name: "QR 크기", exact: true }).selectOption(size);
-      const qr = preview.locator(".pricing-paper [data-document-qr]").first();
-      await expect(qr).toHaveAttribute("data-qr-position", position);
-      await expect(qr).toHaveAttribute("data-qr-size", size);
-      await expect(qr).toHaveText("");
-      await expect(qr.locator("img")).toHaveAttribute("src", qrSource!);
-      const geometry = await qr.evaluate(element => {
-        const box = element.getBoundingClientRect(), image = element.querySelector("img")!.getBoundingClientRect();
-        const paper = element.closest(".pricing-paper")!, content = paper.querySelector(".pricing-output-content")!;
-        const style = getComputedStyle(paper);
-        return { left: image.left - box.left, right: box.right - image.right, size: image.width, content: content.getBoundingClientRect().height, available: paper.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom), top: element === content.firstElementChild };
-      });
-      expect(position.endsWith("left") ? geometry.left : geometry.right).toBeLessThan(2);
-      expect(geometry.top).toBe(position.startsWith("top"));
-      expect(geometry.size).toBeCloseTo(({ small: 24, normal: 30, large: 36 }[size as "small" | "normal" | "large"]) * 96 / 25.4, 0);
-      expect(geometry.content).toBeLessThanOrEqual(geometry.available + 2);
-      expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
-    }
-  }
+  const qr = preview.locator(".pricing-paper footer img").first();
+  await expect(qr).toBeVisible();
+  const qrSource = await qr.getAttribute("src");
+  const qrRow = qr.locator("..");
+  await expect(qrRow).toHaveText("");
+  await expect(preview.locator(".pricing-online footer img").locator("..")).toHaveText("");
+  await preview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
+  await expect(qr).toHaveAttribute("src", qrSource!);
+  expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
   const paper = preview.locator(".pricing-paper").first();
   if (width === 1440) await expect(paper).not.toContainText("주문 마감 · 전날 00:00");
   else await expect(paper).toContainText("주문 마감 · 전날 00:00");
@@ -251,7 +237,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
   await expect(preview.locator(".pricing-paper").first().getByRole("img", { name: "합성 QR 매장 주문 링크 QR", exact: true })).toBeVisible();
   await preview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
-  await expect.poll(() => printed).toBe(1);
+  await expect.poll(() => printed).toBe(2);
   const qrDownload = page.waitForEvent("download");
   await preview.getByRole("button", { name: "QR PNG 저장", exact: true }).click();
   expect((await qrDownload).suggestedFilename()).toBe("order-qr-v1.png");

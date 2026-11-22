@@ -17,7 +17,7 @@ import { Button } from "./ui/button";
 import { formatWon } from "@/domains/shared/money";
 
 export function pricingPaperStyle(fontScale: number) {
-  return `.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * fontScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}`;
+  return `.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * fontScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-paper footer img{width:30mm;height:30mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}`;
 }
 
 export async function pricingPaperImage(paper: HTMLElement) {
@@ -38,8 +38,6 @@ export function PageContent({
   qr,
   online = false,
   fontScale = 1,
-  qrPosition = "bottom-left",
-  qrSize = "normal",
   hideEmptyCutoff = false,
 }: {
   data: DocumentOutput;
@@ -49,8 +47,6 @@ export function PageContent({
   qr?: DocumentOrderQr | null;
   online?: boolean;
   fontScale?: number;
-  qrPosition?: "bottom-left" | "bottom-right" | "top-right" | "top-left";
-  qrSize?: "small" | "normal" | "large";
   hideEmptyCutoff?: boolean;
 }) {
   const accent =
@@ -71,14 +67,11 @@ export function PageContent({
   const chunks = Array.from({ length: columns }, (_, i) => regular.slice(i * perColumn, (i + 1) * perColumn)).filter((chunk) => chunk.length);
   const price = (l: OutputLine) => (l.price !== null ? formatWon(l.price) : "—");
   const flyer = data.layout === "flyer";
-  const qrMillimeters = { small: 24, normal: 30, large: 36 }[qrSize];
-  const qrBlock = qr ? <div data-document-qr data-qr-position={qrPosition} data-qr-size={qrSize} className={`flex items-center gap-3 ${qrPosition.endsWith("right") ? "justify-end" : "justify-start"}`}><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} style={{ width: `${qrMillimeters}mm`, height: `${qrMillimeters}mm` }} className="shrink-0" />{qr.audience !== "public" ? <p className="text-xs"><strong>{qr.customerName}</strong><br />QR을 스캔해 주문하세요. 이 거래처에만 전달해 주세요.</p> : null}</div> : null;
   return (
     <div
       className="pricing-output-content"
       style={{ borderTop: `6px solid ${accent}` }}
     >
-      {qrPosition.startsWith("top") ? qrBlock : null}
       <header className="space-y-1.5 border-b pb-3">
         {/* 11/4: 문서를 주는 회사가 먼저 눈에 들어오도록 회사명을 가장 크게 */}
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -189,7 +182,7 @@ export function PageContent({
         <p className="py-8">표시 가능한 품목이 없습니다.</p>
       )}
       <footer className="mt-auto space-y-1.5 border-t pt-3 text-sm">
-        {qrPosition.startsWith("bottom") ? qrBlock : null}
+        {qr ? <div className="flex items-center gap-3"><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} className="h-32 w-32 shrink-0" />{qr.audience !== "public" ? <p className="text-xs"><strong>{qr.customerName}</strong><br />QR을 스캔해 주문하세요. 이 거래처에만 전달해 주세요.</p> : null}</div> : null}
         {footerInfo.length ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
             {footerInfo.map((item) => <p key={`${item.label}-${item.value}`}>{item.label} · {item.value}</p>)}
@@ -230,20 +223,20 @@ export function PricingDocumentPreview({
     [busy, setBusy] = useState(false),
     [day, setDay] = useState(koreaDay());
   const [qr, setQr] = useState<DocumentOrderQr | null>(null);
-  const [qrPosition, setQrPosition] = useState<"bottom-left" | "bottom-right" | "top-right" | "top-left">("bottom-left");
-  const [qrSize, setQrSize] = useState<"small" | "normal" | "large">("normal");
   const [hideEmptyCutoff, setHideEmptyCutoff] = useState(false);
+  const [cutoffWarning, setCutoffWarning] = useState("");
   useEffect(() => {
     let active = true;
     setHideEmptyCutoff(false);
+    setCutoffWarning("");
     if (companyId) void fetch(`/api/company-profile?companyId=${encodeURIComponent(companyId)}`, { cache: "no-store" })
-      .then(async response => response.ok ? response.json() : null)
+      .then(async response => { if (!response.ok) throw new Error("cutoff_read_failed"); return response.json(); })
       .then((profile: { values?: Record<string, unknown> } | null) => {
         if (active && profile?.values) {
           const cutoff = profile.values.next_day_cutoff_time;
           setHideEmptyCutoff(cutoff == null || typeof cutoff === "string" && !cutoff.trim());
         }
-      }).catch(() => { /* Unknown settings must not be treated as an empty cutoff. */ });
+      }).catch(() => { if (active) setCutoffWarning("회사 마감 설정을 확인하지 못해 기존 문구를 유지합니다. 미리보기를 다시 열어 확인해 주세요."); });
     return () => { active = false; };
   }, [companyId]);
   const papers = useRef<Array<HTMLDivElement | null>>([]);
@@ -309,10 +302,7 @@ export function PricingDocumentPreview({
         </span>
       </div>
       {companyId && (canManageLinks || publicSharingAvailable) && current.version > 0 ? <PricingDocumentOrderQr key={current.id} companyId={companyId} version={current} publicSharingAvailable={publicSharingAvailable} allowCustomerLink={canManageLinks} initiallyOpen={openPublicQr && publicSharingAvailable} onInsert={setQr} /> : null}
-      {qr ? <div className="pricing-no-print flex flex-wrap gap-3">
-        <label>QR 위치<select aria-label="QR 위치" className="ml-2 min-h-[44px] rounded border px-2" value={qrPosition} onChange={event => setQrPosition(event.target.value as typeof qrPosition)}><option value="bottom-left">왼쪽 아래</option><option value="bottom-right">오른쪽 아래</option><option value="top-right">오른쪽 위</option><option value="top-left">왼쪽 위</option></select></label>
-        <label>QR 크기<select aria-label="QR 크기" className="ml-2 min-h-[44px] rounded border px-2" value={qrSize} onChange={event => setQrSize(event.target.value as typeof qrSize)}><option value="small">작게</option><option value="normal">보통</option><option value="large">크게</option></select></label>
-      </div> : null}
+      {cutoffWarning ? <p role="status" className="pricing-no-print text-sm text-amber-800">{cutoffWarning}</p> : null}
       {error && (
         <p role="alert" className="pricing-no-print text-red-700">
           {error} 같은 버튼으로 다시 시도하거나 미리보기를 닫고 버전을 다시 선택해 주세요.
@@ -322,7 +312,7 @@ export function PricingDocumentPreview({
         <div className="pricing-no-print">
           <h3 className="mb-2 font-semibold">온라인 · 휴대폰</h3>
           <div className="pricing-online max-w-[390px] rounded-2xl border bg-white p-3 shadow">
-            <PageContent data={output} page={1} pages={1} qr={qr} qrPosition={qrPosition} qrSize={qrSize} hideEmptyCutoff={hideEmptyCutoff} online />
+            <PageContent data={output} page={1} pages={1} qr={qr} hideEmptyCutoff={hideEmptyCutoff} online />
           </div>
         </div>
         <div className="min-w-0">
@@ -341,8 +331,6 @@ export function PricingDocumentPreview({
                       data={data}
                       fontScale={fontScale}
                       qr={qr}
-                      qrPosition={qrPosition}
-                      qrSize={qrSize}
                       hideEmptyCutoff={hideEmptyCutoff}
                       page={i + 1}
                       pages={pages.length}
