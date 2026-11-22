@@ -11,8 +11,8 @@ for (const width of [1440, 390]) test(`CX-93 admin distributor industries works 
     const response = await page.goto(`/admin/companies?companyId=${companyId}`, { waitUntil: "domcontentloaded" });
     expect(response?.ok()).toBeTruthy();
     await expect(page.getByText("유통사 업종 관리", { exact: true })).toBeVisible();
-    await expect(page.getByDisplayValue("농산 유통")).toBeVisible();
-    await page.getByLabel("주류 유통").check();
+    await expect(page.locator('input[value="농산 유통"]')).toBeVisible();
+    await page.getByRole("checkbox", { name: "주류 유통" }).check();
     await page.getByRole("button", { name: "변경 영향 확인" }).click();
     await expect(page.getByText(/활성 연결 3건/)).toBeVisible();
     await page.getByRole("button", { name: "배정 저장" }).click();

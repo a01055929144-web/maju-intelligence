@@ -1,0 +1,32 @@
+name: CX-93 industry admin PG17
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cx93-industry-admin.yml"
+      - "docs/sql-drafts/2026-11-21-CX-93-distributor-industry-contract*.sql"
+
+jobs:
+  pg17:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify distributor industry admin contract
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql --set=ON_ERROR_STOP=1 --file=2026-11-21-CX-93-distributor-industry-contract.pg17.test.sql
