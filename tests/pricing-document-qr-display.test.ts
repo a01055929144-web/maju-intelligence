@@ -62,7 +62,7 @@ it.each([
 });
 it("rejects shared-sheet writes by sales and stale revisions before writing", async () => {
   mocks.request.mockResolvedValue([row]);
-  await expect(saveDocumentQrDisplay({ ...scope, manager: false }, { id, expected: 7, settings })).rejects.toMatchObject({ status: 403 });
+  await expect(saveDocumentQrDisplay({ ...scope, manager: false }, { id, expected: 7, settings })).rejects.toMatchObject({ status: 404 });
   await expect(saveDocumentQrDisplay(scope, { id, expected: 6, settings })).rejects.toMatchObject({ status: 409 });
   expect(mocks.request.mock.calls.every(([, options]) => !options)).toBe(true);
 });

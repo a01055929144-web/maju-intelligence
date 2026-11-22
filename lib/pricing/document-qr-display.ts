@@ -22,7 +22,7 @@ export async function readDocumentQrDisplay(scope: DocumentScope, id: string) {
 }
 export async function saveDocumentQrDisplay(scope: DocumentScope, input: { id: string; expected: number; settings: DocumentQrDisplay }) {
   const row = await scopedDocument(scope, input.id);
-  if (row.kind === "sheet" && !scope.manager) throw new DocumentSendError("표시 설정 수정 권한이 없습니다.", 403);
+  if (row.kind === "sheet" && !scope.manager) throw new DocumentSendError("표시 설정을 수정할 문서를 찾지 못했습니다.", 404);
   if (row.revision !== input.expected) throw new DocumentSendError("다른 화면에서 문서가 바뀌었습니다. 미리보기를 다시 열어 주세요.", 409);
   // Normal save can replace promotion prices. Preserve the stored content unchanged except display.qr.
   // The revision predicate makes this replacement a compare-and-swap with concurrent draft saves.
