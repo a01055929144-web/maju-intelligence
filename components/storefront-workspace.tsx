@@ -35,7 +35,8 @@ type Product = { key: string; productId: string; promotionId: string | null;
   badge: string; taxType: "taxable" | "exempt"; unitPrice: number | null;
   priceIncludesTax: boolean; isMarketPrice: boolean; remaining: number | null;
   maximumQuantity: number | null;
-  recentDispatchPrice: number | null; recentDispatchDate: string | null };
+  recentDispatchPrice: number | null; recentDispatchDate: string | null;
+  productCutoff?: { cutoffAtKst: string; daysBefore: number; time: string } };
 type Store = { source?: "document" | "catalog"; title: string; companyName: string; customerName: string;
   deliveryAddress: string | null; version: number; validUntil: string;
   priceAvailable: boolean; canOrder: boolean; nextDeliveryDate: string | null;
@@ -225,6 +226,10 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   const cutoff = data?.orderCutoffGuidance && store?.canOrder && deliveryReady && pricesVisible && guidanceNow !== null
     ? orderCutoffGuidance(deliveryDate, store.policy, new Date(guidanceNow)) : null;
   const confirmingAfterCutoff = cutoff?.open === false && Boolean(retryKey.current);
+  const productCutoffPassed = (line: Product) => Boolean(line.productCutoff && guidanceNow !== null && Date.parse(line.productCutoff.cutoffAtKst) <= guidanceNow);
+  const productCutoffLabel = (line: Product) => line.productCutoff
+    ? productCutoffPassed(line) ? "마감 지남 — 다음 배송일로" : `이 상품 ${line.productCutoff.daysBefore}일 전 ${line.productCutoff.time} 마감`
+    : "";
   const preferences = new Map(data?.preferences.map((item) => [item.productId, item]) ?? []);
   const categories = Array.from(new Set(store?.lines.map((line) => line.category || "미분류") ?? [])).sort((a, b) => a.localeCompare(b, "ko"));
   const hasPriceDirections = pricesReady && Boolean(store?.priceAvailable && store.lines.some(line => publicSalesPriceDirection(line.salesPriceDirection)));
@@ -247,6 +252,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
     return ascending ? order : -order;
   });
   const selected = store?.lines.filter((line) => (cart[line.key] ?? 0) > 0) ?? [];
+  const productCutoffBlocked = selected.some(productCutoffPassed);
   let summary: ReturnType<typeof summarizeOrder> | null = null;
   try {
     if (store && selected.length) summary = summarizeOrder(selected.map((line) => ({
@@ -265,6 +271,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   const promotionBlocked = !editing && !retryKey.current && selected.some(line => promotionState(line) && (cart[line.key] ?? 0) > maxQuantity(line));
   const confirmingPromotion = Boolean(retryKey.current && selected.some(line => promotionState(line)));
   function changeQuantity(line: Product, delta: number) {
+    if (delta > 0 && productCutoffPassed(line)) { setMessage("마감이 지난 품목입니다. 다음 배송일을 선택해 주세요."); return; }
     if (promotionState(line)) {
       const current = cart[line.key] ?? 0;
       if (delta > 0 && current >= maxQuantity(line)) return;
@@ -276,6 +283,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   }
   function setQuantity(line: Product, value: number | null) {
     if (busy) return;
+    if ((value ?? 0) > (cart[line.key] ?? 0) && productCutoffPassed(line)) { setMessage("마감이 지난 품목입니다. 다음 배송일을 선택해 주세요."); return; }
     if (value !== null && Number(value.toFixed(3)) !== value) {
       setMessage("수량은 소수 셋째 자리까지 입력해 주세요.");
       return;
@@ -316,7 +324,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   }
   function fromOrder(order: Order, edit: boolean) {
     if (!pricesReady || !store?.priceAvailable || !store.canOrder || busy) return;
-    const available = new Set(store?.lines.map((line) => line.key) ?? []);
+    const available = new Set(store?.lines.filter(line => !productCutoffPassed(line)).map((line) => line.key) ?? []);
     const copied = order.lines.filter((line) => available.has(`${line.product_id}:${line.promotion_id ?? ""}`));
     const missing = order.lines.length - copied.length;
     if (edit && missing) {
@@ -341,6 +349,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   async function submit() {
     if (submitting.current || !store || !deliveryReady || !pricesReady || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
     if (promotionBlocked) { setMessage("행사 잔량을 다시 확인하고 담은 수량을 조정해 주세요."); return; }
+    if (productCutoffBlocked) { setMessage("마감이 지난 품목이 있습니다. 빼거나 다음 배송일을 선택해 주세요."); return; }
     if (data?.orderCutoffGuidance && !retryKey.current) {
       const clock = guidanceClock.current;
       if (!clock) { setMessage("마감 정보를 다시 불러온 뒤 주문해 주세요."); return; }
@@ -415,7 +424,8 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>행사 잔량 다시 확인</Button>}
       {selected.length ? <ul className="max-h-48 divide-y overflow-y-auto text-sm">{selected.map(line =>
         <li className="flex justify-between gap-2 py-2" key={line.key}>
-          <div className="min-w-0 break-words"><span>{line.name} · {cart[line.key]}{line.unit}</span>{promotionInfo(line)}</div>
+          <div className="min-w-0 break-words"><span>{line.name} · {cart[line.key]}{line.unit}</span>
+            {line.productCutoff && <span className="block text-xs text-amber-800">{productCutoffLabel(line)}</span>}{promotionInfo(line)}</div>
           <button aria-label={`${line.name} 장바구니에서 빼기`} className="min-h-11 shrink-0 px-1 underline" disabled={busy} onClick={() => setQuantity(line, 0)} type="button">빼기</button>
         </li>)}</ul> : <p className="text-sm text-slate-500">담은 품목이 없습니다.</p>}
       {data?.orders[0] && !editing && <Button className="min-h-11 w-full" variant="outline" disabled={busy || !store.canOrder || !pricesReady}
@@ -430,8 +440,9 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         {summary.belowMinimum && <p className="text-amber-800">최소 주문금액 {won(store.policy.minimumAmount)} 미달</p>}
       </div>}
       {promotionBlocked && <p role="status">행사 잔량을 다시 확인하고 담은 수량을 조정해 주세요. 담은 수량은 유지됩니다.</p>}
+      {productCutoffBlocked && <p role="status">마감 지남 — 품목을 빼거나 다음 배송일로 바꿔 주세요.</p>}
       {editing && selected.some(line => promotionState(line)) && <p>주문 수정은 기존 예약분을 포함해 서버에서 다시 확인합니다.</p>}
-      <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit || promotionBlocked || (cutoff?.open === false && !confirmingAfterCutoff)} className="min-h-[48px] w-full"
+      <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit || promotionBlocked || productCutoffBlocked || (cutoff?.open === false && !confirmingAfterCutoff)} className="min-h-[48px] w-full"
         onClick={() => void submit()}>{busy ? "저장 중" : confirmingAfterCutoff || confirmingPromotion ? "이전 주문 결과 확인" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
   </>;
   return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
@@ -530,15 +541,17 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
           promotionInfo={data?.promotionAvailability && pricesVisible && !catalogMode ? line => promotionInfo(line, false) : undefined}
           pricesVisible={pricesVisible} catalogMode={catalogMode} preferences={preferences}
           marketNotice={store.marketPriceNotice} onQuantity={setQuantity} onPreference={changePreference}
+          productCutoffLabel={productCutoffLabel}
           settingsKey={`store-order:${store.companyName}:${store.customerName}`} />
       </div>}
       {!tableView && <ul aria-label="주문 품목" className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{visibleProducts.map((line) => <li key={line.key} className="rounded border p-3">
         {mobileOrder ? <MobileListRow title={line.name}
-          subtitle={[line.brand, line.spec, line.unit, line.badge].filter(Boolean).join(" · ")}
+          subtitle={[line.brand, line.spec, line.unit, line.badge, productCutoffLabel(line)].filter(Boolean).join(" · ")}
           trailing={!pricesVisible ? "가격 확인 필요" : line.isMarketPrice ? "시가" :
             line.unitPrice === null ? "가격 문의" : <MoneyText value={line.unitPrice} />} /> : <>
         <div className="flex justify-between gap-2"><div><strong>{line.name}</strong>
           {line.badge && <span className="ml-2 rounded bg-amber-50 px-2 text-xs">{line.badge}</span>}
+          {line.productCutoff && <Badge className="ml-2">{productCutoffLabel(line)}</Badge>}
           <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p>
           {pricesVisible && (line.salesPriceDirection === "up" || line.salesPriceDirection === "down" || line.salesPriceDirection === "flat") ? <Badge>판매가 {line.salesPriceDirection === "up" ? "상승" : line.salesPriceDirection === "down" ? "하락" : "보합"}</Badge> : null}</div>
           <div className="text-right text-sm">{!pricesVisible ? "배송일 가격 확인 필요" : line.isMarketPrice ? "시세 · 가격 미정" :
@@ -561,7 +574,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         <div className="mt-3 flex items-center justify-end gap-2 md:mt-0">
           <button disabled={busy} aria-label={`${line.name} 수량 줄이기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, -1)}>−</button>
           <span aria-label={`${line.name} 수량`} className="min-w-8 text-center">{cart[line.key] || 0}</span>
-          <button disabled={busy || Boolean(promotionState(line) && (cart[line.key] ?? 0) >= maxQuantity(line))} aria-label={`${line.name} 수량 늘리기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, 1)}>＋</button>
+          <button disabled={busy || productCutoffPassed(line) || Boolean(promotionState(line) && (cart[line.key] ?? 0) >= maxQuantity(line))} aria-label={`${line.name} 수량 늘리기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, 1)}>＋</button>
         </div>
       </li>)}</ul>}
       {catalogMode && catalog?.hasMore && <button className="min-h-[44px] w-full rounded border text-sm font-bold" disabled={busy} onClick={() => void moreCatalog()} type="button">상품 더 보기</button>}
@@ -638,7 +651,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   </main>;
 }
 
-function StoreOrderTable({ rows, companyName, cart, busy, pricesVisible, catalogMode, preferences, marketNotice, onQuantity, onPreference, settingsKey, promotionInfo }: {
+function StoreOrderTable({ rows, companyName, cart, busy, pricesVisible, catalogMode, preferences, marketNotice, onQuantity, onPreference, settingsKey, promotionInfo, productCutoffLabel }: {
   rows: Product[];
   companyName: string;
   cart: Record<string, number>;
@@ -651,6 +664,7 @@ function StoreOrderTable({ rows, companyName, cart, busy, pricesVisible, catalog
   onPreference: (id: string, key: "isFavorite" | "isHidden") => Promise<void>;
   settingsKey: string;
   promotionInfo?: (line: Product) => ReactNode;
+  productCutoffLabel: (line: Product) => string;
 }) {
   const qty = (line: Product) => cart[line.key] ?? 0;
   const marketCount = rows.filter(line => line.isMarketPrice && qty(line) > 0).length;
@@ -668,6 +682,7 @@ function StoreOrderTable({ rows, companyName, cart, busy, pricesVisible, catalog
       {pricesVisible && publicSalesPriceDirection(line.salesPriceDirection) && <Badge className="ml-1">
         판매가 {line.salesPriceDirection === "up" ? "상승" : line.salesPriceDirection === "down" ? "하락" : "보합"}
       </Badge>}
+      {line.productCutoff && <Badge className="ml-1">{productCutoffLabel(line)}</Badge>}
     </> },
     { key: "company", label: "유통사", width: 110, value: () => companyName },
     ...(promotionInfo ? [{ key: "promotionAvailability", label: "행사 수량", width: 260, sortable: false,
