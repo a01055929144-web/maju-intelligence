@@ -236,6 +236,7 @@ export function PricingDocumentPreview({
     [busy, setBusy] = useState(false),
     [day, setDay] = useState(koreaDay());
   const [qr, setQr] = useState<DocumentOrderQr | null>(null);
+  const qrSettingsAvailable = qrDisplayAvailable && version.version > 0 && Boolean(companyId);
   const [qrSettings, setQrSettings] = useState(() => documentQrDisplay(version.content.display?.qr));
   const [savedQrSettings, setSavedQrSettings] = useState<DocumentQrDisplay | null>(null);
   const [qrRevision, setQrRevision] = useState<number | null>(null);
@@ -245,8 +246,8 @@ export function PricingDocumentPreview({
     let active = true;
     qrRead.current = Promise.resolve();
     setQrRevision(null);
-    if (!qrDisplayAvailable) setQrSettings(documentQrDisplay(version.content.display?.qr));
-    if (qrDisplayAvailable && companyId) {
+    if (!qrSettingsAvailable) setQrSettings(documentQrDisplay(version.content.display?.qr));
+    if (qrSettingsAvailable && companyId) {
       const loading = documentRequest<{ revision: number; settings: DocumentQrDisplay }>(companyId, "qr-display", { id: version.documentId }).then(({ result }) => {
         if (active) { setQrSettings(result.settings); setSavedQrSettings(result.settings); setQrRevision(result.revision); }
       }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "QR 표시 설정을 불러오지 못했습니다."); throw cause; });
@@ -254,7 +255,7 @@ export function PricingDocumentPreview({
       void loading.catch(() => undefined);
     }
     return () => { active = false; };
-  }, [companyId, version.documentId, qrDisplayAvailable]);
+  }, [companyId, version.documentId, qrSettingsAvailable]);
   async function saveQrSettings() {
     if (!companyId || qrRevision === null || !qrDisplayEditable) return;
     setBusy(true); setError(""); setQrMessage("");
@@ -330,11 +331,11 @@ export function PricingDocumentPreview({
         </span>
       </div>
       {companyId && (canManageLinks || publicSharingAvailable) && current.version > 0 ? <PricingDocumentOrderQr key={current.id} companyId={companyId} version={current} publicSharingAvailable={publicSharingAvailable} allowCustomerLink={canManageLinks} initiallyOpen={openPublicQr && publicSharingAvailable} onInsert={setQr} /> : null}
-      {qrDisplayAvailable ? <div className="pricing-no-print flex flex-wrap items-center gap-3">
+      {qrSettingsAvailable ? <div className="pricing-no-print flex flex-wrap items-center gap-3">
         <label>QR 위치<select aria-label="QR 위치" className="ml-2 min-h-[44px] rounded border px-2" disabled={busy || qrRevision === null || !qrDisplayEditable} value={qrSettings.position} onChange={event => { setQrSettings({ ...qrSettings, position: event.target.value as DocumentQrDisplay["position"] }); setQrMessage(""); }}><option value="bottom-left">왼쪽 아래</option><option value="bottom-right">오른쪽 아래</option><option value="top-right">오른쪽 위</option><option value="top-left">왼쪽 위</option></select></label>
         <label>QR 크기<select aria-label="QR 크기" className="ml-2 min-h-[44px] rounded border px-2" disabled={busy || qrRevision === null || !qrDisplayEditable} value={qrSettings.size} onChange={event => { setQrSettings({ ...qrSettings, size: event.target.value as DocumentQrDisplay["size"] }); setQrMessage(""); }}><option value="small">작게</option><option value="normal">보통</option><option value="large">크게</option></select></label>
         <Button className="min-h-[44px]" disabled={busy || qrRevision === null || !qrDisplayEditable || JSON.stringify(qrSettings) === JSON.stringify(savedQrSettings)} onClick={() => void saveQrSettings()} type="button" variant="outline">QR 표시 설정 저장</Button>
-        <p role="status" className="text-sm">{qrMessage || (qrDisplayEditable ? "선택 후 저장하면 다음에 문서를 열어도 같은 표시를 사용합니다." : "표시 설정은 대표·관리자 또는 견적 작성자에게 요청해 주세요.")}</p>
+        <p role={qrMessage ? "status" : undefined} aria-label={qrMessage ? "QR 표시 설정 저장 결과" : undefined} className="text-sm">{qrMessage || (qrDisplayEditable ? "선택 후 저장하면 다음에 문서를 열어도 같은 표시를 사용합니다." : "표시 설정은 대표·관리자 또는 견적 작성자에게 요청해 주세요.")}</p>
       </div> : null}
       {error && (
         <p role="alert" className="pricing-no-print text-red-700">

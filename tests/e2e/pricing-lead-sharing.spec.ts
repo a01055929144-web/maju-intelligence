@@ -155,12 +155,12 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true })).toBeVisible();
   await expect(preview.getByRole("combobox", { name: "QR을 받을 거래처", exact: true })).toHaveCount(0);
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
-  await expect(preview.getByRole("status")).toContainText("합성 공개 링크 재시도");
+  await expect(preview.getByRole("region", { name: "주문 링크 QR", exact: true }).getByRole("status")).toContainText("합성 공개 링크 재시도");
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
-  await expect(preview.getByRole("status")).toContainText("문서 응답을 확인하지 못했습니다");
+  await expect(preview.getByRole("region", { name: "주문 링크 QR", exact: true }).getByRole("status")).toContainText("문서 응답을 확인하지 못했습니다");
   await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveCount(0);
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
-  await expect(preview.getByRole("status")).toContainText("발급된 공개 주소를 확인하지 못했습니다");
+  await expect(preview.getByRole("region", { name: "주문 링크 QR", exact: true }).getByRole("status")).toContainText("발급된 공개 주소를 확인하지 못했습니다");
   await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveCount(0);
   await page.evaluate(() => {
     const original = HTMLCanvasElement.prototype.toDataURL;
@@ -168,12 +168,12 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     HTMLCanvasElement.prototype.toDataURL = () => { throw new Error("synthetic QR render failure"); };
   });
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
-  await expect(preview.getByRole("status")).toContainText("공개 링크는 발급됐지만 QR 이미지를 만들지 못했습니다");
+  await expect(preview.getByRole("region", { name: "주문 링크 QR", exact: true }).getByRole("status")).toContainText("공개 링크는 발급됐지만 QR 이미지를 만들지 못했습니다");
   await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveAttribute("href", new URL(publicUrl, page.url()).href);
   await expect(preview.getByRole("button", { name: "공개 링크 복사", exact: true })).toBeVisible();
   await page.evaluate(() => window.dispatchEvent(new Event("restore-synthetic-qr")));
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
-  await expect(preview.getByRole("status")).toContainText("거래처 선택 없이");
+  await expect(preview.getByRole("region", { name: "주문 링크 QR", exact: true }).getByRole("status")).toContainText("거래처 선택 없이");
   expect(publicInputs).toHaveLength(5); for (const input of publicInputs) expect(input).toEqual(publicInputs[0]);
   await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveAttribute("href", new URL(publicUrl, page.url()).href);
   await expect(preview.getByRole("img", { name: "공개 문서 주문 QR 미리보기", exact: true })).toHaveAttribute("src", /^data:image\/png;base64,/);
@@ -212,7 +212,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
         expect(qrSettings).toEqual({ position: "bottom-left", size: "normal" });
         await saveQr.click();
       }
-      await expect(preview.getByRole("status").filter({ hasText: "QR 표시 설정을 저장했습니다" })).toBeVisible();
+      await expect(preview.getByRole("status", { name: "QR 표시 설정 저장 결과", exact: true })).toBeVisible();
       const rendered = preview.locator(".pricing-paper [data-document-qr]").first();
       await expect(rendered).toHaveAttribute("data-qr-position", position);
       await expect(rendered).toHaveAttribute("data-qr-size", size);
