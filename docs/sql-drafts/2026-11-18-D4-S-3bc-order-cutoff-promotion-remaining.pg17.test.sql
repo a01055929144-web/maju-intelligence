@@ -1,13 +1,12 @@
 \set ON_ERROR_STOP on
-begin;
 
 do $$ begin
   if current_setting('server_version_num')::integer < 170000 then raise exception 'PostgreSQL 17+ required'; end if;
 end $$;
 
-create role anon nologin;
-create role authenticated nologin;
-create role service_role nologin;
+do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
+do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
+do $$ begin create role service_role nologin; exception when duplicate_object then null; end $$;
 create table public.product_catalog(id uuid primary key, company_id uuid not null, unique(company_id, id));
 create table public.pricing_promotions(
   id uuid primary key, company_id uuid not null, product_id uuid not null,
@@ -59,10 +58,10 @@ begin
   assert has_function_privilege('service_role', 'public.promotion_remaining_v1(uuid,uuid[])', 'execute'), 'service role cannot execute';
 end $$;
 
+update public.product_catalog set order_cutoff_days_before=null, order_cutoff_time=null;
 \ir 2026-11-18-D4-S-3bc-order-cutoff-promotion-remaining.down.sql
 do $$ begin
   assert to_regprocedure('public.promotion_remaining_v1(uuid,uuid[])') is null, 'function remained after down';
   assert not exists(select 1 from information_schema.columns where table_schema = 'public' and table_name = 'product_catalog' and column_name like 'order_cutoff%'), 'columns remained after down';
 end $$;
 
-rollback;
