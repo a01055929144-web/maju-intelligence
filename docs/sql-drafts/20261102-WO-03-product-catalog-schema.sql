@@ -3,6 +3,15 @@
 -- 기존 product_supplier_defaults, supplier_products, product_inventory_settings도 그대로 사용한다.
 
 begin;
+set local lock_timeout = '3s';
+set local statement_timeout = '30s';
+
+do $ begin
+  if to_regclass('public.product_categories') is not null
+    or exists (select 1 from information_schema.columns
+      where table_schema='public' and table_name='product_catalog' and column_name='category_id')
+  then raise exception 'wo03_already_or_partially_applied'; end if;
+end $;
 
 create table if not exists public.product_categories (
   id uuid default gen_random_uuid(),
