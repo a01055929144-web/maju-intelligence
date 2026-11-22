@@ -2,7 +2,7 @@
 
 - 적용: `docs/sql-drafts/20261102-WO-03-product-catalog-schema.sql`
 - 복구: `docs/sql-drafts/20261102-WO-03-product-catalog-schema.down.sql`
-- 상태: **미승인 · 운영 미적용**. 이 문서는 적용 권한이 아닙니다.
+- 상태: **대표 승인 · 운영 적용 잠금 중** (11/22 17:02 KST). 적용 결과는 같은 PR에 기록합니다.\n- 적용 대상: `fcmdvveqmcgtioelzqun`, 승인된 SQL blob `4bda3e4ad4cae40145c3f1e1d3049f91ff94229c`.
 
 ## 범위와 순서
 
