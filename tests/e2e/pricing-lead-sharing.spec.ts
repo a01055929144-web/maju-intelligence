@@ -35,6 +35,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   const draft = () => ({ id: documentId, revision, content, updatedAt: "2026-11-06T00:00:00Z", recalculation: { publishedAt: published ? "2026-11-06T00:00:00Z" : null, needsRecalculation: false, changedProductCount: 0 } });
   const version = (): DocumentVersion => ({ id: versionId, documentId, version: 1, revision, content: publishedContent!, publishedAt: "2026-11-06T00:00:00Z", unavailablePromotions: [] });
   const publicExpiry = () => publicDocumentLinkExpiry(version().content.validUntil);
+  await page.route("**/api/company-profile*", route => route.fulfill({ json: { values: { next_day_cutoff_time: width === 1440 ? "" : "00:00" } } }));
   await page.route("**/api/pricing-store-links*", route => {
     if (route.request().method() === "POST") {
       expect(route.request().postDataJSON()).toEqual({ companyId, action: "create", customerId, documentVersionId: versionId });
@@ -60,7 +61,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       result = published ? [version()] : [];
     }
     if (action === "save") { content = b.content; documentId = b.id; revision++; result = draft(); }
-    if (action === "publish") { published = true; publishedContent = structuredClone(content!); result = version(); }
+    if (action === "publish") { published = true; publishedContent = structuredClone(content!); publishedContent.display = { ...publishedContent.display, info: [{ key: "next_day_cutoff_time", label: "주문 마감", value: "전날 00:00", place: "footer" }] }; result = version(); }
     if (action === "prepare-share" && b.leadId === null) {
       publicInputs.push(b); expect(b).not.toHaveProperty("ttlDays");
       expect(b.documentId).toBe(documentId); expect(b.documentVersionId).toBe(versionId);
@@ -168,9 +169,37 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(preview.getByRole("button", { name: "공개 링크 복사", exact: true })).toBeVisible();
   expect(orderLinks).toBe(0); expect(deliveryRecords.size).toBe(0); expect(contactRecords.size).toBe(0);
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
-  await expect(preview.locator(".pricing-paper").first()).toContainText("QR로 문서를 열고 주문·가입을 시작하세요");
-  await expect(preview.locator(".pricing-paper").first()).toContainText(`가격·주문: ${version().content.validUntil}까지`);
-  await expect(preview.locator(".pricing-paper").first()).toContainText(`QR 품목 열람: ${documentLinkLastDay(publicExpiry())}까지`);
+  const savedVersion = JSON.stringify(version());
+  const qrSource = await preview.locator(".pricing-paper [data-document-qr] img").first().getAttribute("src");
+  const linkRequests = publicInputs.length;
+  for (const position of ["bottom-left", "bottom-right", "top-right", "top-left"]) {
+    await preview.getByRole("combobox", { name: "QR 위치", exact: true }).selectOption(position);
+    for (const size of ["small", "normal", "large"]) {
+      await preview.getByRole("combobox", { name: "QR 크기", exact: true }).selectOption(size);
+      const qr = preview.locator(".pricing-paper [data-document-qr]").first();
+      await expect(qr).toHaveAttribute("data-qr-position", position);
+      await expect(qr).toHaveAttribute("data-qr-size", size);
+      await expect(qr).toHaveText("");
+      await expect(qr.locator("img")).toHaveAttribute("src", qrSource!);
+      const geometry = await qr.evaluate(element => {
+        const box = element.getBoundingClientRect(), image = element.querySelector("img")!.getBoundingClientRect();
+        const paper = element.closest(".pricing-paper")!, content = paper.querySelector(".pricing-output-content")!;
+        const style = getComputedStyle(paper);
+        return { left: image.left - box.left, right: box.right - image.right, size: image.width, content: content.getBoundingClientRect().height, available: paper.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom), top: element === content.firstElementChild };
+      });
+      expect(position.endsWith("left") ? geometry.left : geometry.right).toBeLessThan(2);
+      expect(geometry.top).toBe(position.startsWith("top"));
+      expect(geometry.size).toBeCloseTo(({ small: 24, normal: 30, large: 36 }[size as "small" | "normal" | "large"]) * 96 / 25.4, 0);
+      expect(geometry.content).toBeLessThanOrEqual(geometry.available + 2);
+      expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
+    }
+  }
+  const paper = preview.locator(".pricing-paper").first();
+  if (width === 1440) await expect(paper).not.toContainText("주문 마감 · 전날 00:00");
+  else await expect(paper).toContainText("주문 마감 · 전날 00:00");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+  await page.screenshot({ path: info.outputPath(`cx128-${kind}-${width}.png`), fullPage: true });
+  if (width === 1440) await page.pdf({ path: info.outputPath(`cx128-${kind}-a4.pdf`), format: "A4", printBackground: true });
   let signupReady = false, intentReady = false;
   const publicViewer = await browser.newPage({ viewport: { width, height: 900 } });
   await publicViewer.route("**/api/pricing-documents/public", route => publicRevoked
