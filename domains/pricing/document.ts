@@ -27,7 +27,15 @@ export type PrintLine = {
 export type DocumentInfoItem = { key: string; label: string; value: string; place: "header" | "footer" };
 /** 11/4: 문서 보기 표시 — 품목 격자 열 수, 행사 블록 모양, 회사 정보 줄 */
 /** autoPromos: 켜면 진행 중인 행사·임박을 문서에 자동으로 넣는다(CC-20). 꺼져 있으면 키 자체가 없다. */
-export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean; showTaxType: boolean; autoPromos?: boolean; footerFontSize?: 12 | 14 | 16; footerBold?: boolean };
+export const DOCUMENT_QR_POSITIONS = ["bottom-left", "bottom-right", "top-right", "top-left"] as const;
+export const DOCUMENT_QR_SIZES = ["small", "normal", "large"] as const;
+export type DocumentQrDisplay = { position: typeof DOCUMENT_QR_POSITIONS[number]; size: typeof DOCUMENT_QR_SIZES[number] };
+export function documentQrDisplay(value: unknown): DocumentQrDisplay {
+  const d = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return { position: DOCUMENT_QR_POSITIONS.includes(d.position as DocumentQrDisplay["position"]) ? d.position as DocumentQrDisplay["position"] : "bottom-left",
+    size: DOCUMENT_QR_SIZES.includes(d.size as DocumentQrDisplay["size"]) ? d.size as DocumentQrDisplay["size"] : "normal" };
+}
+export type DocumentDisplay = { qr?: DocumentQrDisplay; columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean; showTaxType: boolean; autoPromos?: boolean; footerFontSize?: 12 | 14 | 16; footerBold?: boolean };
 export const DEFAULT_DISPLAY: DocumentDisplay = { columns: 1, promoLayout: "cards", info: [], productWidth: 65, priceIncludesTax: false, showTaxType: false };
 export const MAX_DOCUMENT_LINES = 300;
 /** Bank details belong to the authenticated connected-store profile, never a document. */
@@ -51,7 +59,7 @@ export function parseDisplay(value: unknown): DocumentDisplay {
       })
     : [];
   const productWidth = typeof d.productWidth === "number" && Number.isFinite(d.productWidth) ? Math.max(45, Math.min(80, Math.round(d.productWidth))) : DEFAULT_DISPLAY.productWidth;
-  return { columns, promoLayout, info, productWidth, priceIncludesTax: d.priceIncludesTax === true, showTaxType: d.showTaxType === true, ...(d.autoPromos === true ? { autoPromos: true } : {}),
+  return { ...(d.qr ? { qr: documentQrDisplay(d.qr) } : {}), columns, promoLayout, info, productWidth, priceIncludesTax: d.priceIncludesTax === true, showTaxType: d.showTaxType === true, ...(d.autoPromos === true ? { autoPromos: true } : {}),
     ...(d.footerFontSize === 12 || d.footerFontSize === 14 || d.footerFontSize === 16 ? { footerFontSize: d.footerFontSize } : {}), ...(d.footerBold === true ? { footerBold: true } : {}) };
 }
 export function documentFooterTypography(display: DocumentDisplay, fontScale = 1) {
