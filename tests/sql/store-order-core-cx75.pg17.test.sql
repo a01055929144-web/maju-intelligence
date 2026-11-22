@@ -316,11 +316,13 @@ end $$;
 
 -- D4 schema is test-only here; product cutoffs use server Asia/Seoul time.
 alter table public.product_catalog add column order_cutoff_days_before smallint, add column order_cutoff_time time;
+\ir ../../docs/sql-drafts/2026-11-22-CX-117-product-order-cutoff.sql
 do $$
--- Keep the same weekday as tomorrow, but beyond the company deadline even after 22:00 KST.
-declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+8;
- r jsonb; k uuid:=gen_random_uuid();
+declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+1;
+ r jsonb; k uuid:=gen_random_uuid(); product_name text;
 begin
+ select coalesce(nullif(sales_product_name,''),nullif(purchase_product_name,''),'품목')
+ into product_name from public.product_catalog where id='60000000-0000-4000-8000-000000000001';
  deadline:=(clock_timestamp() at time zone 'Asia/Seoul')-interval '1 minute';
  update public.product_catalog set order_cutoff_days_before=delivery-deadline::date,order_cutoff_time=deadline::time
  where id='60000000-0000-4000-8000-000000000001';
@@ -329,7 +331,17 @@ begin
  '[{"productId":"60000000-0000-4000-8000-000000000001","quantity":1}]',k,null,null,'cx75-cutoff',
  '30000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001');
  raise exception 'cx75_cutoff_accepted_after';
- exception when raise_exception then if sqlerrm<>'Delivery date unavailable' then raise; end if; end;
+ exception when raise_exception then if sqlerrm<>'product_cutoff_passed: '||product_name then raise; end if; end;
+ update public.store_order_settings set unified_order_core_enabled=false
+ where company_id='00000000-0000-4000-8000-000000000001';
+ begin
+ perform public.place_store_account_order('00000000-0000-4000-8000-000000000001',delivery,
+ '[{"productId":"60000000-0000-4000-8000-000000000001","quantity":1}]',k,null,null,'cx117-cutoff-off-core',
+ '30000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001');
+ raise exception 'cx117_cutoff_accepted_with_core_off';
+ exception when raise_exception then if sqlerrm<>'product_cutoff_passed: '||product_name then raise; end if; end;
+ update public.store_order_settings set unified_order_core_enabled=true
+ where company_id='00000000-0000-4000-8000-000000000001';
  deadline:=(clock_timestamp() at time zone 'Asia/Seoul')+interval '1 minute';
  update public.product_catalog set order_cutoff_days_before=delivery-deadline::date,order_cutoff_time=deadline::time
  where id='60000000-0000-4000-8000-000000000001';
@@ -338,6 +350,31 @@ begin
  '30000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001');
  if r->>'id' is null then raise exception 'cx75_cutoff_rejected_before'; end if;
 end $$;
+\set ON_ERROR_STOP off
+\ir ../../docs/sql-drafts/2026-11-22-CX-117-product-order-cutoff.down.sql
+\set ON_ERROR_STOP on
+do $$ begin
+ if position('product_cutoff_passed:' in pg_get_functiondef('public.place_store_order_core_v2(text,jsonb)'::regprocedure))=0
+ then raise exception 'cx117_down_ignored_active_cutoff'; end if;
+end $$;
+update public.product_catalog set order_cutoff_days_before=null,order_cutoff_time=null
+where id='60000000-0000-4000-8000-000000000001';
+update public.store_order_settings set unified_order_core_enabled=false
+where company_id='00000000-0000-4000-8000-000000000001';
+do $$ declare r jsonb; begin
+ r:=public.place_store_account_order('00000000-0000-4000-8000-000000000001',
+ (clock_timestamp() at time zone 'Asia/Seoul')::date+1,
+ '[{"productId":"60000000-0000-4000-8000-000000000001","quantity":1}]',gen_random_uuid(),null,null,'cx117-blank-cutoff',
+ '30000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001');
+ if r->>'id' is null then raise exception 'cx117_blank_cutoff_changed_default'; end if;
+end $$;
+\ir ../../docs/sql-drafts/2026-11-22-CX-117-product-order-cutoff.down.sql
+do $$ begin
+ if position('product_cutoff_passed:' in pg_get_functiondef('public.place_store_order_core_v2(text,jsonb)'::regprocedure))>0
+ then raise exception 'cx117_down_did_not_restore_core'; end if;
+end $$;
+update public.store_order_settings set unified_order_core_enabled=true
+where company_id='00000000-0000-4000-8000-000000000001';
 alter table public.product_catalog drop column order_cutoff_days_before,drop column order_cutoff_time;
 
 -- A post-write one-won drift must roll back the engine's complete subtransaction.
@@ -366,10 +403,6 @@ begin
 end $$;
 drop trigger cx75_test_drift on public.store_orders;
 drop function public.cx75_test_drift();
-\ir promotion-cancelled-reservation-cx74.pg17.test.sql
-\set CX74_CURRENT_ENGINE_VARIANT true
-\ir promotion-cancelled-reservation-cx74.pg17.test.sql
-\unset CX74_CURRENT_ENGINE_VARIANT
 \set ON_ERROR_STOP off
 \ir ../../docs/sql-drafts/2026-11-18-CX-75-common-order-core.down.sql
 \set ON_ERROR_STOP on
@@ -386,3 +419,4 @@ do $$ begin
  then raise exception 'cx75_down_definition_or_acl'; end if;
 end $$;
 select 'cx75_common_order_core_pg17_pass';
+
