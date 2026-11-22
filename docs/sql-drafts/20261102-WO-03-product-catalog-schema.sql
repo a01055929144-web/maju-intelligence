@@ -6,12 +6,12 @@ begin;
 set local lock_timeout = '3s';
 set local statement_timeout = '30s';
 
-do $ begin
+do $$ begin
   if to_regclass('public.product_categories') is not null
     or exists (select 1 from information_schema.columns
       where table_schema='public' and table_name='product_catalog' and column_name='category_id')
   then raise exception 'wo03_already_or_partially_applied'; end if;
-end $;
+end $$;
 
 create table if not exists public.product_categories (
   id uuid default gen_random_uuid(),
