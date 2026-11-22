@@ -6966,55 +6966,9 @@ export async function sendCustomerDeliveryMessage(
   }
 }
 
-export type ProductCatalogItem = {
-  id: string;
-  matchStatus: "inactive" | "matched" | "requested" | "unmatched";
-  name: string;
-  purchasePrice: number;
-  salesName?: string;
-  salesPrice?: number;
-  spec?: string;
-  unit: string;
-};
-
-type ProductCatalogRow = {
-  default_sales_price: number | null;
-  id: string;
-  match_status: ProductCatalogItem["matchStatus"];
-  purchase_price: number;
-  purchase_product_name: string;
-  purchase_spec: string | null;
-  purchase_unit: string;
-  sales_product_name: string | null;
-};
-
 function isMissingSalesQuoteSchemaError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
   return /product_catalog|sales_quotes|sales_quote_items|PGRST205|42P01|does not exist|schema cache/i.test(message);
-}
-
-export async function listProductCatalog(companyId: string, query = ""): Promise<ProductCatalogItem[]> {
-  if (!isProductionStoreConfigured()) return [];
-  const token = query.trim();
-  const search = token ? `&purchase_product_name=ilike.*${encodeURIComponent(token)}*` : "";
-  try {
-    const rows = await supabaseRequest<ProductCatalogRow[]>(
-      `product_catalog?select=id,purchase_product_name,purchase_spec,purchase_unit,purchase_price,sales_product_name,default_sales_price,match_status&company_id=eq.${encodeURIComponent(companyId)}&match_status=neq.inactive${search}&order=updated_at.desc&limit=100`
-    );
-    return rows.map((row) => ({
-      id: row.id,
-      matchStatus: row.match_status,
-      name: row.purchase_product_name,
-      purchasePrice: Number(row.purchase_price) || 0,
-      salesName: row.sales_product_name || undefined,
-      salesPrice: row.default_sales_price == null ? undefined : Number(row.default_sales_price),
-      spec: row.purchase_spec || undefined,
-      unit: row.purchase_unit || "EA"
-    }));
-  } catch (error) {
-    if (isMissingSalesQuoteSchemaError(error)) return [];
-    throw error;
-  }
 }
 
 export type CreateSalesQuoteInput = {

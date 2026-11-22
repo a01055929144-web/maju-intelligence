@@ -318,8 +318,7 @@ end $$;
 alter table public.product_catalog add column order_cutoff_days_before smallint, add column order_cutoff_time time;
 \ir ../../docs/sql-drafts/2026-11-22-CX-117-product-order-cutoff.sql
 do $$
--- Keep the inherited company deadline (previous day 22:00) in the future,
--- including CI runs after 22:00; product deadlines still straddle now below.
+-- CI 시각 의존 방지: 배송일을 모레로 둔다(내일 배송은 22:00 이후 회사 마감에 걸려 밤마다 실패). 상품 마감은 아래에서 지금±1분으로 따로 만든다.
 declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+2;
  r jsonb; k uuid:=gen_random_uuid(); product_name text;
 begin
