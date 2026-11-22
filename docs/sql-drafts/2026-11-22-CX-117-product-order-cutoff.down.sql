@@ -27,8 +27,8 @@ declare
 begin
   if fn is null then raise exception 'cx117_core_missing'; end if;
   if exists(select 1 from public.product_catalog
-    where is_active and order_cutoff_days_before is not null)
-  then raise exception 'cx117_clear_active_product_cutoffs_before_down'; end if;
+    where order_cutoff_days_before is not null)
+  then raise exception 'cx117_clear_product_cutoffs_before_down'; end if;
   select proacl,proowner into original_acl,original_owner
     from pg_proc where oid=fn and prosecdef;
   if not found then raise exception 'cx117_core_security_changed'; end if;
