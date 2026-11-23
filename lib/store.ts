@@ -18,7 +18,8 @@ import { analyzeCompany, AnalysisResult } from "./analysis";
 import { readLatestReport, readReportById } from "./analytics/report-read";
 import { readLatestBriefing } from "./analytics/briefing-read";
 import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
-import { getSupabaseConfig, isProductionStoreConfigured, normalizeCompanyKind, supabaseRequest, type CompanyKind, type SupabaseConfig } from "./store/00-core";
+import { getRouteDistanceCacheMap } from "./store/02-route-distance-cache";
+import { getDefaultCompanyId, getSupabaseConfig, isProductionStoreConfigured, normalizeCompanyKind, supabaseRequest, type CompanyKind, type SupabaseConfig } from "./store/00-core";
 import { accountLoginV2Enabled } from "./account-login-feature";
 import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
@@ -937,7 +938,6 @@ export type DatabaseCheck = {
 
 
 type SupabaseRow = Record<string, unknown>;
-const DEFAULT_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 const CUSTOMER_ATTACHMENT_BUCKET = "customer-attachments";
 const SALES_QUOTE_PHOTO_BUCKET = CUSTOMER_ATTACHMENT_BUCKET;
 const AUTH_CREDENTIALS_ID = "maju-default";
@@ -1327,9 +1327,6 @@ export async function supabaseStorageRequest<T>(path: string, init: RequestInit 
 }
 
 
-function getDefaultCompanyId() {
-  return process.env.CUSTOMER_COMPANY_ID || DEFAULT_COMPANY_ID;
-}
 
 export async function getExcelMappingPreset(
   uploadType: "customer-master" | "sales-analysis",
@@ -12667,60 +12664,6 @@ export async function getCompanyOriginAddress(companyId?: string) {
   return settings?.originAddress || process.env.COMPANY_ORIGIN_ADDRESS || "경기도 하남시 초이로 133 1층";
 }
 
-export async function saveRouteDistanceCache(
-  companyId: string | undefined,
-  result: RouteDistanceResult,
-  options: { customerId?: string | null } = {}
-) {
-  const resolvedCompanyId = companyId || getDefaultCompanyId();
-
-  if (!isProductionStoreConfigured()) {
-    return {
-      persisted: false,
-      ...result
-    };
-  }
-
-  const rows = await supabaseRequest<
-    Array<{
-      calculated_at: string;
-      distance_km: number | string;
-      duration_minutes: number;
-      id: string;
-      provider: string;
-    }>
-  >("route_distance_cache?on_conflict=company_id,destination_address", {
-    method: "POST",
-    headers: {
-      Prefer: "resolution=merge-duplicates,return=representation"
-    },
-    body: JSON.stringify([
-      {
-        company_id: resolvedCompanyId,
-        customer_id: options.customerId || null,
-        origin_address: result.originAddress,
-        destination_address: result.destinationAddress,
-        origin_lat: result.originPoint?.lat ?? null,
-        origin_lng: result.originPoint?.lng ?? null,
-        destination_lat: result.destinationPoint?.lat ?? null,
-        destination_lng: result.destinationPoint?.lng ?? null,
-        distance_km: result.distanceKm,
-        duration_minutes: result.durationMinutes,
-        provider: result.provider,
-        route_geometry: result.routeGeometry,
-        raw_response: result.rawResponse,
-        calculated_at: new Date().toISOString()
-      }
-    ])
-  });
-
-  return {
-    persisted: true,
-    cacheId: rows[0]?.id,
-    ...result,
-    calculatedAt: rows[0]?.calculated_at
-  };
-}
 
 export type DeliveryVehicleFuelType = "gasoline" | "diesel";
 
@@ -13043,43 +12986,6 @@ export async function deleteDeliveryVehicleFuelType(companyId: string, driverNam
   }
 }
 
-async function getRouteDistanceCacheMap(companyId: string) {
-  const cache = new Map<
-    string,
-    {
-      calculatedAt: string;
-      distanceKm: number;
-      durationMinutes: number;
-    }
-  >();
-
-  if (!isProductionStoreConfigured()) return cache;
-
-  const rows = await supabaseRequest<
-    Array<{
-      calculated_at: string;
-      destination_address: string;
-      distance_km: number | string;
-      duration_minutes: number;
-    }>
-  >(
-    `route_distance_cache?select=destination_address,distance_km,duration_minutes,calculated_at&company_id=eq.${encodeURIComponent(
-      companyId
-    )}&order=calculated_at.desc&limit=1000`
-  ).catch(() => []);
-
-  rows.forEach((row) => {
-    if (!cache.has(row.destination_address)) {
-      cache.set(row.destination_address, {
-        calculatedAt: new Date(row.calculated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
-        distanceKm: Number(row.distance_km || 0),
-        durationMinutes: Number(row.duration_minutes || 0)
-      });
-    }
-  });
-
-  return cache;
-}
 
 function findSampleCustomerForLead(lead: LeadItem) {
   const region = lead.region || "";
@@ -15541,3 +15447,4 @@ export * from "./store/00-core";
 export * from "./store/06-insights";
 export * from "./store/12-subscriptions";
 export * from "./store/02-map-filter-presets";
+export * from "./store/02-route-distance-cache";
