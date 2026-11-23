@@ -392,7 +392,7 @@ for(const width of [1440,390])test(`public signup source returns in store home a
   // Return document fixture is outside this task; the real portal component is rendered below.
   await page.route(/\/pricing-document(?:\?|$)/,route=>route.fulfill({contentType:"text/html; charset=utf-8",body:'<main><h1>합성 가입 단가표</h1><a href="/store">매장 홈</a></main>'}));
   await page.goto("/store/activate?fixture=store-owner-activation&profile=1");
-  for(const [label,value] of [["매장명","합성 공개 가입 매장"],["사업자 대표자명","합성 대표"],["사업자등록번호","1234567890"],["매장 연락처","01012345678"],["매장 주소","합성로 1"],["상세주소","1층"]] as const)await page.getByLabel(label,{exact:true}).fill(value);
+  for(const [label,value] of [["매장명","합성 공개 가입 매장"],["사업자 대표자명","합성 대표"],["사업자등록번호","1234567890"],["매장 연락처","01012345678"],["매장 주소","합성로 1"],["상세주소 (선택)","1층"]] as const)await page.getByLabel(label,{exact:true}).fill(value);
   await page.getByRole("button",{name:"주소 검색",exact:true}).click();await page.getByRole("button",{name:"서울특별시 송파구 합성로 1 (00000)",exact:true}).click();
   await page.getByRole("button",{name:"매장 등록 완료",exact:true}).click();
   await expect(page).toHaveURL(/pricing-document\?continueOrder=1#synthetic-source$/);
