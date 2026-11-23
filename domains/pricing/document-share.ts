@@ -48,7 +48,7 @@ export function documentSharePreviewId(code: string) {
   return isId(id) ? id : null;
 }
 export function brandedDocumentSharePreview(input: { companyName: string; title: string }) {
-  return { title: `${input.companyName.trim().slice(0, 80) || "유통사"} ${input.title.trim().slice(0, 70) || "단가표"} · MAJU`,
+  return { title: `MAJU · ${input.companyName.trim().slice(0, 80) || "유통사"} ${input.title.trim().slice(0, 70) || "단가표"}`,
     description: "가입 전 단가표 확인 · 가입 후 식자재 단가 비교와 간편 주문을 MAJU에서 시작하세요." };
 }
 

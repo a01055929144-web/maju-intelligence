@@ -635,7 +635,7 @@ const openShort = (code: string, userAgent = "Mozilla/5.0") => shortLinkGet(new 
 it("CX-132 issues an opaque code once, keeps prices/version and supports original fragment links", async () => {
   const result = await brandedShare(), frozen = JSON.stringify({ links, content });
   expect(result.publicUrl).toMatch(/^\/s\/[0-9a-f]{32}$/);
-  expect(links[0].preview_title).toBe("합성 회사 합성 견적 · MAJU");
+  expect(links[0].preview_title).toBe("MAJU · 합성 회사 합성 견적");
   const again = await brandedShare(); expect(again).toEqual(result);
   const response = await openShort(result.publicUrl.slice(3));
   expect(response.status).toBe(302); expect(response.headers.get("cache-control")).toBe("no-store");
@@ -655,9 +655,9 @@ it("CX-132 Kakao/Twitter bots receive token-free OG/Twitter metadata only", asyn
     expect(location.pathname).toBe(`/q/${links[0].preview_id}`); expect(location.hash).toBe(""); expect(location.search).toBe("");
   }
   const meta = await previewMetadata({ params: Promise.resolve({ previewId: String(links[0].preview_id) }) });
-  expect(meta).toMatchObject({ title: "합성 회사 합성 견적 · MAJU", referrer: "no-referrer", robots: { index: false, follow: false },
-    openGraph: { title: "합성 회사 합성 견적 · MAJU", description: expect.stringContaining("가입 전 단가표 확인") },
-    twitter: { title: "합성 회사 합성 견적 · MAJU", description: expect.stringContaining("간편 주문") } });
+  expect(meta).toMatchObject({ title: "MAJU · 합성 회사 합성 견적", referrer: "no-referrer", robots: { index: false, follow: false },
+    openGraph: { title: "MAJU · 합성 회사 합성 견적", description: expect.stringContaining("가입 전 단가표 확인") },
+    twitter: { title: "MAJU · 합성 회사 합성 견적", description: expect.stringContaining("간편 주문") } });
   await mkdir("test-results/readonly-pg17/cx132", { recursive: true });
   await writeFile("test-results/readonly-pg17/cx132/metadata.json", JSON.stringify({ source: "synthetic handler + database fixture", realKakaoCacheTested: false, metadata: meta, shortLinkCacheControl: "no-store", tokenInBotRedirect: false }, null, 2));
   const serialized = JSON.stringify(meta);
