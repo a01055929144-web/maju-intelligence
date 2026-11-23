@@ -247,7 +247,8 @@ export async function readDocumentSharePreview(previewId: string) {
   const row = rows[0];
   if (!row || !documentSharingEnabled(row.company_id) ||
     !(industryBasketsEnabled(row.company_id) || (row.lead_id === null && documentShareBrandingEnabled(row.company_id))) ||
-    row.revoked_at || !(Date.parse(row.expires_at) > Date.now())) return null;
+    row.revoked_at || !(Date.parse(row.expires_at) > Date.now()) ||
+    (row.lead_id === null && !publicDocumentOrderEntryEnabled(row.company_id))) return null;
   const version = await published(row.company_id, row.document_version_id, row.created_by_key);
   if (version.documentId !== row.document_id) return null;
   return { title: row.preview_title || "공유 단가표", description: row.preview_description || "MAJU에서 단가표를 확인하세요." };

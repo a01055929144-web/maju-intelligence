@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import { cache } from "react";
 import { notFound } from "next/navigation";
 import { PreviewRedirect } from "./preview-redirect";
 import { readDocumentSharePreview } from "@/lib/pricing/document-share";
 
 export const dynamic = "force-dynamic";
-const read = cache((previewId: string) => readDocumentSharePreview(previewId).catch(() => null));
+const read = (previewId: string) => readDocumentSharePreview(previewId).catch(() => null);
 const privateMetadata: Metadata = { referrer: "no-referrer", robots: { index: false, follow: false } };
 
 export async function generateMetadata({ params }: { params: Promise<{ previewId: string }> }): Promise<Metadata> {

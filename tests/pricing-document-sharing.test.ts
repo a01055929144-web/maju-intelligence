@@ -658,6 +658,8 @@ it("CX-132 Kakao/Twitter bots receive token-free OG/Twitter metadata only", asyn
   expect(meta).toMatchObject({ title: "합성 회사 합성 견적 · MAJU", referrer: "no-referrer", robots: { index: false, follow: false },
     openGraph: { title: "합성 회사 합성 견적 · MAJU", description: expect.stringContaining("가입 전 단가표 확인") },
     twitter: { title: "합성 회사 합성 견적 · MAJU", description: expect.stringContaining("간편 주문") } });
+  await mkdir("test-results/readonly-pg17/cx132", { recursive: true });
+  await writeFile("test-results/readonly-pg17/cx132/metadata.json", JSON.stringify({ source: "synthetic handler + database fixture", realKakaoCacheTested: false, metadata: meta, shortLinkCacheControl: "no-store", tokenInBotRedirect: false }, null, 2));
   const serialized = JSON.stringify(meta);
   for (const forbidden of ["PRIVATE-", "777777", String(links[0].token_nonce), String(links[0].token_hash), doc, version, "#", "synthetic-test-key"])
     expect(serialized).not.toContain(forbidden);
@@ -683,4 +685,16 @@ it("CX-132 defaults OFF and rejects malformed codes before database access", asy
   vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", company);
   await expect(resolveDocumentShortLink("bad", "fixture")).rejects.toMatchObject({ status: 404 });
   expect(mocks.db).not.toHaveBeenCalled();
+});
+
+it("CX-132 hides metadata when public entry is disabled and preserves legacy lead previews", async () => {
+  await brandedShare(); const id = String(links[0].preview_id);
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "false");
+  expect(await readDocumentSharePreview(id)).toBeNull();
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", "");
+  vi.stubEnv("INDUSTRY_BASKETS", "true"); vi.stubEnv("INDUSTRY_BASKETS_COMPANY_IDS", company);
+  const legacy = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, idempotencyKey: "90000000-0000-4000-8000-000000000001" });
+  expect(legacy.publicUrl).toMatch(/^\/q\/[0-9a-f-]{36}#/);
+  const previewId = legacy.publicUrl.split("/")[2].split("#")[0];
+  expect(await readDocumentSharePreview(previewId)).toMatchObject({ title: "합성 회사 · 합성 견적" });
 });
