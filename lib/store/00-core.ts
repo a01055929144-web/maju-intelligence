@@ -51,3 +51,9 @@ export async function supabaseRequest<T>(path: string, init: RequestInit = {}): 
 export function isProductionStoreConfigured() {
   return Boolean(getSupabaseConfig());
 }
+
+export const DEFAULT_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
+
+export function getDefaultCompanyId() {
+  return process.env.CUSTOMER_COMPANY_ID || DEFAULT_COMPANY_ID;
+}

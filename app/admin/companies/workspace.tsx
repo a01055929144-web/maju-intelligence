@@ -13,12 +13,14 @@ import { formatNumber } from "@/domains/shared/money";
 import { formatPhoneNumber } from "@/lib/phone";
 import { copyText } from "@/lib/copy-text";
 import { CompanyKindPanel } from "./company-kind-panel";
+import { DistributorIndustryManager } from "./distributor-industry-manager";
 import type { CompanyKind, DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation, UploadHistoryItem } from "@/lib/store";
 import { useTableSort } from "@/lib/use-table-sort";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 type Props = {
   defaultCompanyId: string;
+  distributorIndustryCompanyIds: string[];
   initialCompanies: ManagedCompanyAccount[];
   initialSelectedCompanyId?: string;
   holdModuleCompanyIds: string[];
@@ -59,7 +61,7 @@ const emptyCompany: ManagedCompanyAccountInput = {
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
-export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds, initialCompanies, initialSelectedCompanyId, source }: Props) {
+export function AdminCompaniesWorkspace({ defaultCompanyId, distributorIndustryCompanyIds, holdModuleCompanyIds, initialCompanies, initialSelectedCompanyId, source }: Props) {
   const initialCompany = initialCompanies.find((company) => company.id === initialSelectedCompanyId) || initialCompanies[0];
   const initialForm = initialCompany ? { ...initialCompany, customerPassword: "" } : emptyCompany;
   const [companies, setCompanies] = useState(initialCompanies);
@@ -1009,6 +1011,8 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
           ) : null}
 
           {selectedCompany ? <CompanyKindPanel companyId={selectedCompany.id} companyName={selectedCompany.name} kind={selectedCompany.companyKind} onChanged={(kind) => setCompanies((list) => list.map((c) => (c.id === selectedCompany.id ? { ...c, companyKind: kind } : c)))} /> : null}
+
+          {selectedCompany && distributorIndustryCompanyIds.includes(selectedCompany.id) ? <DistributorIndustryManager companyId={selectedCompany.id} companyName={selectedCompany.name} /> : null}
 
           <div className="grid gap-4 md:grid-cols-2" id="company-editor">
             <Field label="고객사명" required value={form.name} onChange={(value) => update("name", value)} />

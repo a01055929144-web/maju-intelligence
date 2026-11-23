@@ -24,6 +24,10 @@ declare
   key constant uuid := gen_random_uuid();
   lines constant jsonb := jsonb_build_array(jsonb_build_object('productId',product,'quantity',2));
   placed jsonb;
+  linked jsonb;
+  link_key uuid := gen_random_uuid();
+  owner_member constant uuid := '40000000-0000-4000-8000-000000000001';
+  link_token constant text := repeat('a', 64);
   batch jsonb;
   max_lines jsonb;
   rejected_lines jsonb;
@@ -67,11 +71,21 @@ begin
     perform public.place_store_account_order(company, current_date - 1, lines, gen_random_uuid(), null, null, '', account, owner_user);
     raise exception 'past cutoff accepted';
   exception when raise_exception then if sqlerrm <> 'Delivery date unavailable' then raise; end if; end;
+  begin
+    perform public.place_store_member_order(link_token, current_date - 1, lines, gen_random_uuid(),
+      null, null, '', account, owner_member, owner_user);
+    raise exception 'link path accepted past cutoff';
+  exception when raise_exception then if sqlerrm <> 'Delivery date unavailable' then raise; end if; end;
   for rejected_lines in select payload from (values ('[]'::jsonb), (max_lines || lines)) as rejected(payload) loop
     rejected_key := gen_random_uuid();
     begin
       perform public.place_store_account_order(company, '2099-01-05', rejected_lines, rejected_key, null, null, '', account, owner_user);
       raise exception 'out-of-range line count accepted';
+    exception when raise_exception then if sqlerrm <> 'Invalid order request' then raise; end if; end;
+    begin
+      perform public.place_store_member_order(link_token, '2099-01-05', rejected_lines, rejected_key,
+        null, null, '', account, owner_member, owner_user);
+      raise exception 'link path accepted out-of-range line count';
     exception when raise_exception then if sqlerrm <> 'Invalid order request' then raise; end if; end;
     if exists (select 1 from public.store_orders o where o.company_id = company and o.idempotency_key = rejected_key)
       or exists (select 1 from public.company_notifications n where n.company_id = company and n.idempotency_key = rejected_key::text)
@@ -83,6 +97,12 @@ begin
   placed := public.place_store_account_order(company, '2099-01-05', lines, key, null, null, '', account, owner_user);
   if placed->>'knownTotal' <> '2400' or placed <> public.place_store_account_order(
     company, '2099-01-05', lines, key, null, null, '', account, owner_user) then raise exception 'total or replay'; end if;
+  linked := public.place_store_member_order(link_token, '2099-01-05', lines, link_key,
+    null, null, '', account, owner_member, owner_user);
+  if linked->'knownTotal' is distinct from placed->'knownTotal'
+    or linked is distinct from public.place_store_member_order(link_token, '2099-01-05', lines, link_key,
+      null, null, '', account, owner_member, owner_user)
+  then raise exception 'link and account total or replay mismatch'; end if;
   if (select count(*) from public.company_notifications n where n.company_id = company and n.notification_type = 'new_order'
     and n.order_id = (placed->>'id')::uuid and n.idempotency_key = key::text) <> 1 then raise exception 'new order notification'; end if;
   if exists (select 1 from public.store_order_cart_lines(company, account, owner_user)) then raise exception 'ordered cart lines remain'; end if;
