@@ -2,6 +2,8 @@ import { parseDocument, type DocumentContent, type DocumentVersion, type Catalog
 import { documentRequest } from "./document-client";
 
 export type ExtensionMode = "keep" | "latest";
+export type ExtensionPolicy = { customerLinked: boolean; allowedModes: ExtensionMode[]; canAddProducts: boolean;
+  reason: "company_common_keep_only" | "customer_prices_available" };
 export type ExtensionReview = {
   documentId: string;
   revision: number;
@@ -14,6 +16,17 @@ export type ExtensionReview = {
   lines: { key: string; name: string; source: "catalog" | "base" | "promotion"; promiseUntil: string | null;
     before: number | null; calculated: number; price: number; difference: number; profitRate: number | null; belowThreshold: boolean; manual: boolean }[];
 };
+
+export async function readDocumentExtensionPolicy(companyId: string, id: string): Promise<ExtensionPolicy> {
+  const { result } = await documentRequest<ExtensionPolicy>(companyId, "extension-policy", { id });
+  if (!result || typeof result.customerLinked !== "boolean" || typeof result.canAddProducts !== "boolean" ||
+    !Array.isArray(result.allowedModes) || result.allowedModes.some(mode => !["keep", "latest"].includes(mode)) ||
+    !["company_common_keep_only", "customer_prices_available"].includes(result.reason) ||
+    result.customerLinked !== result.canAddProducts ||
+    JSON.stringify(result.allowedModes) !== JSON.stringify(result.customerLinked ? ["keep", "latest"] : ["keep"]))
+    throw new Error("문서의 연장 가능 방식을 확인하지 못했습니다. 다시 시도해 주세요.");
+  return result;
+}
 
 /** CX-120 integration boundary. Never substitute the old company catalog or calculate prices in the browser. */
 export async function reviewDocumentExtension(companyId: string, input: {

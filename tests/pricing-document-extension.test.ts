@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { reviewDocumentExtension, publishDocumentExtension, readDocumentExtensionCatalog } from "../lib/pricing/document-extension-client";
+import { reviewDocumentExtension, publishDocumentExtension, readDocumentExtensionCatalog, readDocumentExtensionPolicy } from "../lib/pricing/document-extension-client";
 import { documentExtensionEnabled } from "../lib/pricing/document-extension-feature";
+import { documentRequestError } from "../lib/pricing/document-request-error";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -11,6 +12,18 @@ it("defaults OFF and requires both flag and verified company allowlist", () => {
   vi.stubEnv("PRICING_DOCUMENT_EXTENSION_ENABLED", "true");
   expect(documentExtensionEnabled("a")).toBe(true);
   expect(documentExtensionEnabled("b")).toBe(false);
+});
+
+it("explains that a company-common sheet can only keep published products and prices", () => {
+  const error = new Error('Supabase request failed: 400 {"code":"P0001","message":"extension_common_new_price_required"}');
+  expect(documentRequestError(error, true)).toMatchObject({ status: 400, code: "extension_common_new_price_required",
+    message: expect.stringContaining("기존 품목과 가격 그대로") });
+});
+
+it("accepts only an explicit server extension policy", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ result: { customerLinked: false,
+    allowedModes: ["keep"], canAddProducts: false, reason: "company_common_keep_only" } })));
+  await expect(readDocumentExtensionPolicy("company", "document")).resolves.toMatchObject({ allowedModes: ["keep"], canAddProducts: false });
 });
 
 it("never falls back to old catalog or ordinary publish on unavailable server contract", async () => {

@@ -13,9 +13,9 @@ vi.mock("../lib/auth", () => ({
   getCustomerOperationalName: () => "합성",
 }));
 vi.mock("../lib/store", () => ({ getSupabaseConfig: () => null, supabaseRequest: (path: string, init?: RequestInit) => databaseRequest(path, init) }));
-import { POST } from "../app/api/pricing-documents/route";
+import { GET, POST } from "../app/api/pricing-documents/route";
 import { documentRequest } from "../lib/pricing/document-client";
-import { reviewDocumentExtension, publishDocumentExtension, readDocumentExtensionCatalog } from "../lib/pricing/document-extension-client";
+import { reviewDocumentExtension, publishDocumentExtension, readDocumentExtensionCatalog, readDocumentExtensionPolicy } from "../lib/pricing/document-extension-client";
 import type { DocumentDraft } from "../domains/pricing/document";
 
 const company = "10000000-0000-4000-8000-000000000001";
@@ -37,6 +37,7 @@ function literal(value: unknown): string {
     (typeof value === "object" ? "::jsonb" : "");
 }
 const parameters: Record<string, string[]> = {
+  pricing_document_extension_policy_v1: ["p_company", "p_actor", "p_manager", "p_document"],
   pricing_document_extension_review_v1: ["p_company", "p_actor", "p_manager", "p_document", "p_expected", "p_mode", "p_valid_until", "p_stage", "p_content", "p_token_hash"],
   pricing_document_extension_catalog_v1: ["p_company", "p_actor", "p_manager", "p_document", "p_expected", "p_mode", "p_product_ids"],
   pricing_document_extension_save_v1: ["p_company", "p_actor", "p_manager", "p_document", "p_expected", "p_mode", "p_content"],
@@ -67,7 +68,8 @@ describe.skipIf(process.env.CX121_API_PG17 !== "true")("CX-121 real POST handler
       throw new Error("Disposable loopback CX121 database required");
     const folder = mkdtempSync(join(tmpdir(), "cx121-api-"));
     const root = "docs/sql-drafts/";
-    for (const file of ["2026-11-20-CX-121-document-extension.sql", "2026-11-20-CX-121-document-extension.down.sql"])
+    for (const file of ["2026-11-20-CX-121-document-extension.sql", "2026-11-20-CX-121-document-extension.down.sql",
+      "2026-11-23-CX-121-company-common-extension.sql", "2026-11-23-CX-121-company-common-extension.down.sql"])
       writeFileSync(join(folder, file), readFileSync(root + file));
     const fixture = readFileSync(root + "2026-11-20-CX-121-document-extension.pg17.test.sql", "utf8");
     const prefix = fixture.slice(0, fixture.indexOf("do $$ declare r jsonb;"));
@@ -85,9 +87,10 @@ describe.skipIf(process.env.CX121_API_PG17 !== "true")("CX-121 real POST handler
     vi.stubEnv("PRICING_DOCUMENT_EXTENSION_COMPANY_IDS", company + "," + other);
     vi.stubEnv("LEAD_DOCUMENT_SHARING_ENABLED", "false");
     vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
-      if (!url.startsWith("/api/pricing-documents?") || init?.method !== "POST") throw new Error("Unexpected HTTP fixture request");
-      return POST(new NextRequest("https://synthetic.test" + url, { ...init,
-        headers: { ...init.headers, origin: "https://synthetic.test" } }));
+      if (!url.startsWith("/api/pricing-documents?")) throw new Error("Unexpected HTTP fixture request");
+      const request = new NextRequest("https://synthetic.test" + url, { ...init,
+        headers: { ...init?.headers, origin: "https://synthetic.test" } });
+      return init?.method === "POST" ? POST(request) : GET(request);
     });
   }, 30000);
   afterAll(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
@@ -133,5 +136,47 @@ describe.skipIf(process.env.CX121_API_PG17 !== "true")("CX-121 real POST handler
     await mkdir("test-results/readonly-pg17/cx121-api", { recursive: true });
     await writeFile("test-results/readonly-pg17/cx121-api/result.json", JSON.stringify(observed, null, 2));
     expect(observed, "ordinary publish must not create a version without the extension review token").toMatchObject({ ordinaryPublishStatus: 409, versions: 2, extensionReceipts: 1 });
+  }, 30000);
+
+  it("keeps a company-common published promotion price while rejecting customer-dependent prices", async () => {
+    const commonDocument = "40000000-0000-4000-8000-000000000002";
+    const commonVersion = "50000000-0000-4000-8000-000000000002";
+    const commonShare = "60000000-0000-4000-8000-000000000002";
+    const commonOrder = "70000000-0000-4000-8000-000000000002";
+    const promotion = "31000000-0000-4000-8000-000000000001";
+    const content = { kind: "sheet", title: "이번 달 단가표", companyName: "합성 유통", contact: "", recipient: "공용", footer: "",
+      validUntil: "2026-11-30", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
+      lines: [{ productId, displayName: "대파 행사", brand: "", spec: "1kg", unit: "봉", price: 900, taxType: "exempt", visible: true,
+        promotionId: promotion, startsOn: "2026-01-01", endsOn: "2099-12-31", remaining: 100, badge: "행사" }] };
+    query("insert into pricing_promotions(id,company_id,product_id,display_name,starts_on,ends_on,price,tax_type,badge,stock,per_store_limit,revision) values (" +
+      [promotion, company, productId, "공용 행사", "2026-01-01", "2099-12-31", 700, "exempt", "행사", 100, 10, 2].map(literal).join(",") + ")");
+    query("insert into pricing_documents(id,company_id,owner_key,kind,revision,content) values (" +
+      [commonDocument, company, "a".repeat(64), "sheet", 1, content].map(literal).join(",") + ")");
+    query("insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values (" +
+      [commonVersion, company, commonDocument, 1, 1, content].map(literal).join(",") + ")");
+    query("insert into pricing_document_share_links values (" + [commonShare, company, commonDocument, commonVersion].map(literal).join(",") + ")");
+    query("insert into store_orders values (" + [commonOrder, company, commonVersion].map(literal).join(",") + ")");
+
+    await expect(reviewDocumentExtension(company, { id: commonDocument, expected: 1, mode: "latest", validUntil: "2099-12-31", stage: "start" }))
+      .rejects.toThrow();
+    await expect(readDocumentExtensionPolicy(company, commonDocument)).resolves.toEqual({ customerLinked: false,
+      allowedModes: ["keep"], canAddProducts: false, reason: "company_common_keep_only" });
+    await expect(readDocumentExtensionPolicy(company, documentId)).resolves.toEqual({ customerLinked: true,
+      allowedModes: ["keep", "latest"], canAddProducts: true, reason: "customer_prices_available" });
+    const start = await reviewDocumentExtension(company, { id: commonDocument, expected: 1, mode: "keep", validUntil: "2099-12-31", stage: "start" });
+    expect(start.lines[0]).toMatchObject({ source: "promotion", before: 900, calculated: 900, price: 900, difference: 0 });
+    await expect(readDocumentExtensionCatalog(company, { id: commonDocument, expected: 1, mode: "keep" }, { productIds: [productId] }))
+      .rejects.toThrow();
+    const saved = (await documentRequest<DocumentDraft>(company, "extension-save", {
+      id: commonDocument, expected: 1, mode: "keep", content: start.content,
+    }, true)).result;
+    const review = await reviewDocumentExtension(company, { id: commonDocument, expected: saved.revision, mode: "keep",
+      validUntil: start.content.validUntil, stage: "review", content: saved.content });
+    const published = await publishDocumentExtension(company, { id: commonDocument, expected: saved.revision, mode: "keep", token: review.token,
+      idempotencyKey: "80000000-0000-4000-8000-000000000002" });
+    expect(published.content.lines[0].price).toBe(900);
+    expect(query("select content#>>'{lines,0,price}' from pricing_document_versions where id=" + literal(commonVersion))).toBe("900");
+    expect(query("select document_version_id from pricing_document_share_links where id=" + literal(commonShare))).toBe(commonVersion);
+    expect(query("select document_version_id from store_orders where id=" + literal(commonOrder))).toBe(commonVersion);
   }, 30000);
 });
