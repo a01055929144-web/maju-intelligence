@@ -20,6 +20,7 @@ export type DocumentScope = {
   actorName?: string;
   documentVatEnabled?: boolean;
   qrDisplayEnabled?: boolean;
+  orderFooterEnabled?: boolean;
 };
 export interface PricingDocumentsRepository {
   request<T>(scope: DocumentScope, action: string, payload: object): Promise<T>;
@@ -35,6 +36,12 @@ function extensionToken(value: unknown) {
 export function pricingDocuments(repository: PricingDocumentsRepository) {
   return {
     read<T>(scope: DocumentScope, action: string, payload: object) {
+      if (action === "order-footer") {
+        if (!scope.orderFooterEnabled) throw new DocumentSendError("주문 설정 표시를 사용할 수 없습니다.", 404);
+        const customerId = "customerId" in payload ? payload.customerId : undefined;
+        if (customerId != null && customerId !== "" && !isId(customerId)) throw new PricingInputError("매장을 확인해 주세요.");
+        return repository.request<T>(scope, action, { ...(customerId ? { customerId } : {}) });
+      }
       if (action === "qr-display") {
         if (!scope.qrDisplayEnabled) throw new DocumentSendError("QR 표시 설정을 사용할 수 없습니다.", 404);
         if (!("id" in payload) || !isId(payload.id)) throw new PricingInputError("문서를 확인해 주세요.");

@@ -8,7 +8,7 @@ import { NextRequest } from "next/server";
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), db: vi.fn() }));
 vi.mock("../lib/auth", () => ({ getRequestAuthScope: mocks.auth, getCustomerOperationalName: () => "" }));
 vi.mock("../lib/feature-flags", () => ({ isFeatureEnabled: () => true }));
-vi.mock("../lib/pricing/feature", () => ({ priceSheetsEnabled: () => true, documentQrDisplayEnabled: () => false }));
+vi.mock("../lib/pricing/feature", () => ({ priceSheetsEnabled: () => true, documentQrDisplayEnabled: () => false, documentOrderFooterEnabled: () => false }));
 vi.mock("../lib/store", () => ({
   getSupabaseConfig: () => ({ url: "https://synthetic.supabase.test", serviceRoleKey: "synthetic-service-role" }),
   supabaseRequest: mocks.db,
