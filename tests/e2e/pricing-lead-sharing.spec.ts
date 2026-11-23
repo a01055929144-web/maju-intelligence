@@ -259,11 +259,15 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await (await paperDownload).saveAs(cx128AArtifacts + "/cx128-a-" + kind + "-" + width + "-export.png");
   expect(qrWrites).toHaveLength(12); expect(publicInputs).toHaveLength(linkRequests);
   expect(JSON.stringify(version())).toBe(savedVersion);
-  let signupReady = false, intentReady = false;
+  let signupReady = false, intentReady = false, publicOrderFooterFailure = false;
   const publicViewer = await browser.newPage({ viewport: { width, height: 900 } });
   await publicViewer.route("**/api/pricing-documents/public", route => publicRevoked
     ? route.fulfill({ status: 404, json: { message: "공유 문서를 사용할 수 없습니다." } })
     : route.fulfill({ json: { document: publicDocumentOutput(version()), expiresAt: publicExpiry(), acceptanceAvailable: false,
+      orderFooter: publicOrderFooterFailure ? { status: "unavailable" } : { status: "available", items: [
+        { key: "next_day_cutoff_time", label: "주문 마감", place: "footer", value: "전날 23:59 (권역·매장별 예외)" },
+        { key: "delivery_weekdays", label: "배송 요일", place: "footer", value: "권역·매장별 확인" },
+      ] },
       orderEntry: { available: signupReady, companyName: content!.companyName, title: content!.title, version: 1 } } }));
   await publicViewer.route("**/api/pricing-documents/order-intent", route => {
     expect(route.request().postDataJSON()).toEqual({ token });
@@ -272,6 +276,16 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   });
   await publicViewer.goto(new URL(publicUrl, page.url()).href);
   await expect(publicViewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible();
+  const publicPolicy = publicViewer.getByRole("region", { name: "현재 주문·배송 기준", exact: true });
+  await expect(publicPolicy).toContainText("전날 23:59"); await expect(publicPolicy).toContainText("권역·매장별 확인");
+  await expect(publicViewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
+  publicOrderFooterFailure = true; await publicViewer.reload();
+  await expect(publicPolicy).toContainText("주문·배송 설정을 확인하지 못했습니다");
+  await expect(publicViewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
+  publicOrderFooterFailure = false; await publicPolicy.getByRole("button", { name: "주문·배송 설정 다시 확인", exact: true }).click();
+  await expect(publicPolicy).toContainText("전날 23:59");
+  expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
+  await publicViewer.screenshot({ path: cx128AArtifacts + "/cx129-public-" + kind + "-" + width + ".png", fullPage: true });
   const order = publicViewer.getByRole("region", { name: "공개 문서 주문 안내" });
   await expect(order.getByRole("button", { name: "주문 연결 준비 중", exact: true })).toBeDisabled();
   signupReady = true;

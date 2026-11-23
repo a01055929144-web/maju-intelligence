@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ORDER_FOOTER_KEYS, type PublicOrderFooter } from "@/domains/pricing/document-order-footer";
 import type { PublicDocumentOutput } from "@/domains/pricing/document-share";
 import { koreaDay } from "@/domains/pricing/document";
 import { PublicMemberCatalog, PublicSavedCart, PublicShoppingRows } from "./public-document-shopping";
@@ -21,6 +22,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const [document, setDocument] = useState<PublicDocumentOutput | null>(null);
   const [message, setMessage] = useState("문서를 확인하고 있습니다.");
   const [expiresAt, setExpiresAt] = useState("");
+  const [orderFooter, setOrderFooter] = useState<PublicOrderFooter | null>(null);
   const [inquiry, setInquiry] = useState<Inquiry | null>(null);
   const [orderGuidanceAvailable, setOrderGuidanceAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -72,13 +74,13 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   }, [acceptance, draftStorageKey, member, orderEntry, orderBusy, quantities, shopping]);
   const load = useCallback(async () => {
     const current = ++sequence.current;
-    setDocument(null); setInquiry(null); setOrderGuidanceAvailable(false); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setQuantities({}); setQuery(""); setView("table"); setBusy(true); setMessage("문서를 확인하고 있습니다.");
+    setDocument(null); setOrderFooter(null); setInquiry(null); setOrderGuidanceAvailable(false); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setQuantities({}); setQuery(""); setView("table"); setBusy(true); setMessage("문서를 확인하고 있습니다.");
     try {
       const token = embeddedToken ?? window.location.hash.slice(1);
       if (!token || token.length > 200) throw new Error("공유 링크를 확인해 주세요. 담당자에게 새 링크를 요청해 주세요.");
       const response = await fetch("/api/pricing-documents/public", { method: "POST", cache: "no-store",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-      const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean; orderEntry?: OrderEntry; inquiry?: Inquiry; orderGuidanceAvailable?: boolean };
+      const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean; orderEntry?: OrderEntry; inquiry?: Inquiry; orderFooter?: PublicOrderFooter; orderGuidanceAvailable?: boolean };
       if (!response.ok || !result.document) throw new Error(result.message || "문서를 확인하지 못했습니다. 다시 시도해 주세요.");
       if (!result.expiresAt || !Number.isFinite(Date.parse(result.expiresAt))) throw new Error("링크 유효기간을 확인하지 못했습니다. 다시 시도해 주세요.");
       if (sequence.current === current && result.orderEntry?.shopping && result.orderEntry.cartScope) {
@@ -93,6 +95,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
         new URLSearchParams(window.location.search).get("view") === "cart") setView("cart");
       if (sequence.current === current) {
         setOrderGuidanceAvailable(result.orderGuidanceAvailable === true);
+        setOrderFooter(result.orderFooter ?? null);
         const contact = result.inquiry;
         setInquiry(contact?.status === "available" && typeof contact.phone === "string" &&
           (/^0\d{8,10}$/.test(contact.phone) || /^1[568]\d{6}$/.test(contact.phone)) && typeof contact.label === "string"
@@ -241,6 +244,13 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
         ))}</ul> : <EmptyState bare className="p-4" message={keyword ? "검색에 맞는 품목이 없습니다." : "표시 가능한 품목이 없습니다."} />}
       </section>}
     </div>)}
+    {safeDocument && orderFooter && !embedded && <section aria-label="현재 주문·배송 기준" className="space-y-2 rounded border bg-white p-4 text-sm print:hidden">
+      <h2 className="font-semibold">현재 주문·배송 기준</h2>
+      {orderFooter.status === "available" ? orderFooter.items.filter(item => (ORDER_FOOTER_KEYS as readonly string[]).includes(item.key)).map(item => <p key={item.key}>{item.label} · {item.value}</p>) : <>
+        <p role="status">주문·배송 설정을 확인하지 못했습니다. 발행 회사에 확인해 주세요.</p>
+        <Button variant="outline" className="min-h-[44px]" onClick={() => void load()}>주문·배송 설정 다시 확인</Button>
+      </>}
+    </section>}
     {safeDocument && inquiry && !embedded && <section aria-label="발행 회사 문의" className="space-y-2 print:hidden">
       {inquiry.status === "available" ? <>
         <p className="break-words">{[safeDocument.companyName, inquiry.label && inquiry.label !== safeDocument.companyName ? inquiry.label : ""].filter(Boolean).join(" · ")}<span className={expiredGuidance ? "block text-[24px] font-semibold" : ""}>{expiredGuidance ? "" : " · "}{formatKoreanPhoneNumber(inquiry.phone)}</span></p>

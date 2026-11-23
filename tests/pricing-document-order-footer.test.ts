@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ request: vi.fn(), enabled: vi.fn(), eligibility: vi.fn() }));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.request }));
 vi.mock("../lib/pricing/store-delivery-eligibility", () => ({ storeAddressVerificationEnabled: mocks.enabled, getStoreDeliveryEligibility: mocks.eligibility }));
-import { readDocumentOrderFooter } from "../lib/pricing/document-order-footer";
+import { readDocumentOrderFooter, readPublicDocumentOrderFooter } from "../lib/pricing/document-order-footer";
 import { documentOrderFooterEnabled } from "../lib/pricing/feature";
 import { orderFooterNotice, withOrderFooter } from "../domains/pricing/document-order-footer";
 import { pricingDocuments } from "../application/pricing/documents";
@@ -80,4 +80,14 @@ it("overlays only chosen order fields without mutating stored content or adding 
   const result = withOrderFooter(saved, current);
   expect(result[0].value).toBe("전날 23:59"); expect(result[2]).toBe(saved[2]); expect(JSON.stringify(saved)).toBe(frozen);
   expect(withOrderFooter([saved[2]], current)).toEqual([saved[2]]);
+});
+
+it("adds only allowlisted current public policy and degrades without exposing read errors", async () => {
+  vi.stubEnv("FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS", "other");
+  expect(await readPublicDocumentOrderFooter(company)).toBeUndefined(); expect(mocks.request).not.toHaveBeenCalled();
+  vi.stubEnv("FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS", company);
+  const result = await readPublicDocumentOrderFooter(company);
+  expect(result).toEqual({ status: "available", items: await readDocumentOrderFooter(scope) });
+  mocks.request.mockRejectedValue(new Error("PRIVATE-ERROR-CANARY"));
+  expect(await readPublicDocumentOrderFooter(company)).toEqual({ status: "unavailable" });
 });
