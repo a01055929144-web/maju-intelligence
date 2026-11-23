@@ -36,6 +36,19 @@ create table public.company_distributor_industries (
 create index company_distributor_industries_category_idx
   on public.company_distributor_industries (industry_category_id, company_id);
 
+create function public.admin_list_distributor_industries(p_company uuid)
+returns jsonb language plpgsql stable security definer set search_path = public, pg_temp as $$
+declare categories jsonb; assigned_ids uuid[];
+begin
+  if p_company is null or not exists (select 1 from public.companies where id = p_company) then raise exception 'company_not_found'; end if;
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'displayName', display_name, 'status', status)
+    order by lower(display_name), id), '[]'::jsonb) into categories from public.distributor_industry_categories;
+  select coalesce(array_agg(industry_category_id order by industry_category_id), '{}'::uuid[]) into assigned_ids
+    from public.company_distributor_industries where company_id = p_company;
+  return jsonb_build_object('companyId', p_company, 'categories', categories,
+    'assignedCategoryIds', to_jsonb(assigned_ids));
+end $$;
+
 create function public.preview_company_distributor_industries(p_company uuid, p_category_ids uuid[])
 returns jsonb language plpgsql stable security definer set search_path = public, pg_temp as $$
 declare before_ids uuid[]; after_ids uuid[]; invalid_count integer; active_connections integer; affected_stores integer;
@@ -127,11 +140,13 @@ end $$;
 alter table public.distributor_industry_categories enable row level security;
 alter table public.company_distributor_industries enable row level security;
 revoke all on table public.distributor_industry_categories, public.company_distributor_industries from public, anon, authenticated, service_role;
-revoke all on function public.preview_company_distributor_industries(uuid, uuid[]),
+revoke all on function public.admin_list_distributor_industries(uuid),
+  public.preview_company_distributor_industries(uuid, uuid[]),
   public.preview_distributor_industry_category_impact(uuid),
   public.admin_save_distributor_industry_category(uuid, text, text, text, text),
   public.admin_set_company_distributor_industries(uuid, uuid[], text, text) from public, anon, authenticated;
-grant execute on function public.preview_company_distributor_industries(uuid, uuid[]),
+grant execute on function public.admin_list_distributor_industries(uuid),
+  public.preview_company_distributor_industries(uuid, uuid[]),
   public.preview_distributor_industry_category_impact(uuid),
   public.admin_save_distributor_industry_category(uuid, text, text, text, text),
   public.admin_set_company_distributor_industries(uuid, uuid[], text, text) to service_role;
