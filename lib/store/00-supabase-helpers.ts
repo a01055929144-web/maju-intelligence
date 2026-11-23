@@ -128,3 +128,22 @@ export async function supabaseStorageRequest<T>(path: string, init: RequestInit 
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
+
+export async function upsertCompany(companyId: string, name: string) {
+  await supabaseRequest<Array<{ id: string }>>("companies?on_conflict=id", {
+    method: "POST",
+    headers: {
+      // 호출부의 기본 이름은 새 회사 생성용 폴백일 뿐입니다. 기존 회사와 충돌할 때
+      // merge하면 고객이 설정한 회사명이 "마주식자재"로 되돌아가므로 기존 행은 보존합니다.
+      Prefer: "resolution=ignore-duplicates,return=representation"
+    },
+    body: JSON.stringify([
+      {
+        id: companyId,
+        name,
+        status: "active",
+        updated_at: new Date().toISOString()
+      }
+    ])
+  });
+}
