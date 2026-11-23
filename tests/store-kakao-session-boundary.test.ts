@@ -91,7 +91,7 @@ describe("Kakao-first profile retry", () => {
     routeMocks.delivery.mockResolvedValue(undefined);
     vi.clearAllMocks();
     const proof = { authUserId: "30000000-0000-4000-8000-000000000001", expiresAt: 9999999999,
-      returnTo: "/pricing-document#opaque", stage: "profile", token: "a".repeat(43) };
+      returnTo: "/pricing-document#opaque", stage: "profile", termsAcceptedAt: "2026-11-23T00:00:00.000Z", token: "a".repeat(43) };
     routeMocks.getProof.mockImplementation(async (options?: { consume?: boolean }) => {
       if (options?.consume) routeMocks.consume();
       return proof;
@@ -116,14 +116,14 @@ describe("Kakao-first profile retry", () => {
     expect(routeMocks.testOrdering).toHaveBeenCalledWith(company, "synthetic-store");
   }, 15_000);
 
-  it("requires a separate delivery detail before any profile or business lookup", async () => {
+  it("keeps delivery detail optional while requiring a searched base address", async () => {
+    routeMocks.business.mockResolvedValue({ failedNumbers: new Set(), results: new Map([["1234567890", { label: "정상" }]]) });
     const { POST } = await import("../app/api/store/accounts/activate/route");
     const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
       body: JSON.stringify({ termsAccepted: true, store: { address: "서울시 강남구 테헤란로 1",
         businessRegistrationNumber: "1234567890", phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
-    expect(response.status).toBe(400);
-    expect(routeMocks.business).not.toHaveBeenCalled();
-    expect(routeMocks.complete).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(routeMocks.complete).toHaveBeenCalledWith(expect.objectContaining({ baseAddress: "서울시 강남구 테헤란로 1", addressDetail: "" }));
   });
 
   it("keeps numberless onboarding OFF until the company flag and SQL are ready", async () => {
