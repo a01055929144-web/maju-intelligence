@@ -297,7 +297,7 @@ for (const width of [1280, 390]) {
     await expect(preview).toContainText("행별 적용일");
     await expect(preview.getByRole("cell", { name: "2026-11-04", exact: true })).toBeVisible();
     await page.getByRole("button", { name: /^② 열 정렬/ }).click();
-    if (width === 390) await expect(page.getByRole("textbox", { name: "합성 상품 품목명", exact: true }).locator("xpath=ancestor::li[1]")).toContainText("이번 매입가 300원");
+    if (width === 390) await expect(page.getByRole("textbox", { name: "합성 상품 품목명", exact: true }).locator("xpath=ancestor::li[1]")).toContainText(/이번 매입가\s*300원/);
     else await expect(page.getByRole("cell", { name: "300원", exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
     const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
@@ -702,7 +702,7 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   const productRow = (name: string) => page.getByRole("textbox", { name: `${name} 품목명`, exact: true }).locator(width === 390 ? "xpath=ancestor::li[1]" : "xpath=ancestor::tr[1]");
   const expectCurrentCost = async (name: string, cost: number) => {
     const row = productRow(name);
-    if (width === 390) await expect(row).toContainText(`현재 매입가 ${cost}원`);
+    if (width === 390) await expect(row).toContainText(new RegExp(`현재 매입가\\s*${cost}원`));
     else await expect(row.locator('[data-col="current"]')).toContainText(`${cost}원`);
   };
   await expectCurrentCost("합성 상품", 150);
@@ -801,7 +801,7 @@ for (const width of [1440, 390]) test(`receipt correction keeps its audit revisi
   await expect.poll(() => corrections.length).toBe(3);
   expect(corrections[2]).toMatchObject({ action: "delete", reason: "잘못 추가한 줄 삭제" });
   await page.getByRole("button", { name: "전체", exact: true }).click();
-  if (width === 390) await expect(page.getByRole("textbox", { name: "합성 상품 품목명", exact: true }).locator("xpath=ancestor::li[1]")).toContainText("현재 매입가 100원");
+  if (width === 390) await expect(page.getByRole("textbox", { name: "합성 상품 품목명", exact: true }).locator("xpath=ancestor::li[1]")).toContainText(/현재 매입가\s*100원/);
   else await expect(page.getByRole("cell", { name: "100원", exact: true }).first()).toBeVisible();
   expect(dateWrites).toEqual([]); expect(writes).toEqual([]); expect(receipts).toEqual([]); expect(pricingCommands).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
