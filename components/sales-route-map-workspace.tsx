@@ -5,6 +5,7 @@ import { QuickRegisterDrawer } from "@/components/map/quick-register-drawer";
 import { copyText } from "@/lib/copy-text";
 import { leadLayerColor } from "@/domains/route/map-layer-colors";
 import { DEFAULT_LEAD_SEARCH_RADIUS_KM, useLeadRadiusState } from "@/components/map/use-lead-radius-state";
+import { useMapMobilePanelsState } from "@/components/map/use-map-mobile-panels-state";
 import { useAllLeadsState } from "@/components/map/use-all-leads-state";
 import { useMapSalesAreaState } from "@/components/map/use-map-sales-area-state";
 import { useMapFullscreen } from "@/components/map/use-map-fullscreen";
@@ -334,9 +335,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [mainMapRouteEvents, setMainMapRouteEvents] = useState<StaffLocationEvent[]>([]);
   const [mainMapRouteLoading, setMainMapRouteLoading] = useState(false);
   const [mainMapRouteError, setMainMapRouteError] = useState("");
-  const [statsExpanded, setStatsExpanded] = useState(false);
-  const [mobileMapControlsOpen, setMobileMapControlsOpen] = useState(false);
-  const [mobileSalesAreaOpen, setMobileSalesAreaOpen] = useState(false);
+  const {
+    statsExpanded,
+    setStatsExpanded,
+    mobileMapControlsOpen,
+    setMobileMapControlsOpen,
+    mobileSalesAreaOpen,
+    setMobileSalesAreaOpen
+  } = useMapMobilePanelsState();
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const { isFullscreen, toggleFullscreen, workspaceRef } = useMapFullscreen(() => setStatsExpanded(false));
   const { mapAreaRef, mapHeaderHeightPx, mapHeaderRef, recomputeMapHeaderOffset } = useMapHeaderOffset();
