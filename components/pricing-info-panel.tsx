@@ -1,4 +1,6 @@
 "use client";
+import { useDocumentOrderFooter } from "./use-document-order-footer";
+import { ORDER_FOOTER_KEYS, withOrderFooter } from "@/domains/pricing/document-order-footer";
 import { formatMoneyInput, formatWon } from "@/domains/shared/money";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Notice } from "@/components/ui/notice";
@@ -23,14 +25,14 @@ export function formatBusinessNumber(value: string) {
 }
 
 /** 회사 정보 값 → 문서에 넣을 수 있는 줄 목록. 주소는 사업장 주소가 없으면 출발지 주소를 씁니다. */
-export function buildInfoCandidates(profile: Profile): Candidate[] {
+export function buildInfoCandidates(profile: Profile, orderInfo?: DocumentInfoItem[]): Candidate[] {
   const v = profile.values || {};
   const days = Array.isArray(v.delivery_weekdays) ? (v.delivery_weekdays as number[]).filter((d) => d >= 0 && d <= 6).sort().map((d) => WEEKDAYS[d]).join("·") : "";
   const cutoff = text(v.next_day_cutoff_time).slice(0, 5);
   const minimum = typeof v.first_order_minimum_won === "number" && v.first_order_minimum_won > 0 ? formatWon(v.first_order_minimum_won) : "";
   const methods = Array.isArray(v.payment_methods) ? (v.payment_methods as string[]).join("·") : "";
   const address = [text(v.business_address), text(v.business_address_detail)].filter(Boolean).join(" ") || text(profile.company?.originAddress);
-  return [
+  const candidates: Candidate[] = [
     { editor: "phone", field: "main_phone", key: "main_phone", label: "대표 연락처", place: "header", value: formatPhoneNumber(text(v.main_phone)), placeholder: "010-0000-0000" },
     { editor: "none", key: "business_number", label: "사업자번호", place: "header", value: formatBusinessNumber(text(profile.company?.businessRegistrationNumber)) },
     { editor: "text", field: "business_address", key: "business_address", label: "주소", place: "header", value: address, placeholder: "도로명 주소" },
@@ -44,6 +46,10 @@ export function buildInfoCandidates(profile: Profile): Candidate[] {
     { editor: "cycle", field: "payment_cycle", key: "payment_cycle", label: "결제 조건", place: "footer", value: text(v.payment_cycle) },
     { editor: "methods", field: "payment_methods", key: "payment_methods", label: "결제 방식", place: "footer", value: methods }
   ];
+  return orderInfo ? candidates.map(item => {
+    const current = orderInfo.find(row => row.key === item.key);
+    return current ? { ...item, value: current.value, editor: "none" as const } : item;
+  }) : candidates;
 }
 
 function initialDraft(candidate: Candidate, values: Record<string, unknown>): Record<string, unknown> {
@@ -61,7 +67,8 @@ function initialDraft(candidate: Candidate, values: Record<string, unknown>): Re
  * 11/4: 오른쪽 '보여줄 정보' — 회사 정보에서 골라 넣고 빼기. 비었거나 고칠 값은 그 자리에서 입력하면
  * 회사 정보에 바로 저장되고 문서에도 체크됩니다(회사 정보 화면을 오가지 않음).
  */
-export function PricingInfoPanel({ companyId, content, editable, onContent }: {
+export function PricingInfoPanel({ companyId, content, editable, onContent, orderFooterAvailable = false }: {
+  readonly orderFooterAvailable?: boolean;
   readonly companyId: string;
   readonly content: DocumentContent;
   readonly editable: boolean;
@@ -75,7 +82,9 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   const [message, setMessage] = useState("");
   const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
   const [basisBusy, setBasisBusy] = useState(false);
-  const display = parseDisplay(content.display);
+  const orderFooter = useDocumentOrderFooter(companyId, content.customerId, orderFooterAvailable);
+  const savedDisplay = parseDisplay(content.display);
+  const display = { ...savedDisplay, info: withOrderFooter(savedDisplay.info, orderFooter.items) };
   const latest = useRef(content);
   latest.current = content;
 
@@ -157,7 +166,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     if (!current.companyName.trim() && profile.company?.name) onContent({ ...current, companyName: profile.company.name.slice(0, 100) });
   }, [profile, editable]);
 
-  const candidates = profile ? buildInfoCandidates(profile) : [];
+  const candidates = profile ? buildInfoCandidates(profile, orderFooter.items) : [];
   const setDisplay = (patch: Partial<typeof display>) => onContent({ ...content, display: { ...display, ...patch } });
   const isOn = (key: string) => display.info.some((item) => item.key === key);
 
@@ -279,7 +288,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
             <span aria-hidden className="cursor-grab select-none pt-1 text-slate-400">⠿</span>
             <div className="min-w-0 flex-1 space-y-0.5">
               <input aria-label="정보 이름" className="w-full rounded border border-transparent px-1 text-xs font-bold hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={30} onChange={(e) => updateItem(item.key, { label: e.target.value })} value={item.label} />
-              <input aria-label={`${item.label} 문서에 표시할 값`} className="w-full rounded border border-transparent px-1 text-xs text-slate-700 hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={200} onChange={(e) => updateItem(item.key, { value: e.target.value })} value={item.value} />
+              <input aria-label={`${item.label} 문서에 표시할 값`} className="w-full rounded border border-transparent px-1 text-xs text-slate-700 hover:border-slate-200 focus:border-teal-500" disabled={!editable || orderFooterAvailable && (ORDER_FOOTER_KEYS as readonly string[]).includes(item.key)} maxLength={200} onChange={(e) => updateItem(item.key, { value: e.target.value })} value={item.value} />
             </div>
             {editable ? (
               <div className="flex shrink-0 flex-col items-center text-[11px] text-slate-500">
@@ -319,6 +328,8 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   return (
     <aside aria-label="보여줄 정보" className="min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-4 xl:sticky xl:top-24">
       {confirmDialog}
+      {orderFooterAvailable ? <p className="text-sm">주문 마감·배송 요일은 실제 주문 설정을 따릅니다. 매장 미지정 시 권역·매장별로 확인해 주세요.</p> : null}
+      {orderFooter.error ? <Notice kind="error">{orderFooter.error}</Notice> : null}
       <div>
         <h2 className="text-sm font-black text-slate-900">보여줄 정보</h2>
         <p className="mt-0.5 text-xs text-slate-500">끌어서 위쪽·아래쪽과 순서를 바꾸세요. 문서에서 고친 값은 이 문서에만 쓰이고 회사 정보는 바뀌지 않습니다.</p>

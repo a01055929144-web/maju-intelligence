@@ -37,3 +37,11 @@ Owner Domain `pricing`(문서) / Related `store`(공개 화면). **이미 게시
 - 기능 OFF(대표 회사 allowlist)로 넣고 기존 화면 유지 → 대표 확인 후 전환.
 - Ponytail · e2e 1440/390 · 인쇄 · 가로 스크롤 0. CX-121 연장 화면(#1109)과 파일 겹침 확인.
 - 와이어프레임: 컨트롤타워가 05 캔버스에 3단계 보드 추가(필요 시).
+
+## 11/23 CX-129 하단 주문 설정 출처 통일 (09 한 건)
+
+- 주문 마감은 매장 예외 → 실제 배송 권역 → store_order_settings 순서로 각 필드를 해석한다. 배송 요일은 매장 예외 → 권역이며 회사 정보 값으로 대체하지 않는다. 주소 검증이 켜진 회사는 실제 주문의 getStoreDeliveryEligibility를 재사용한다.
+- 매장 미지정 공통 문서는 회사 마감과 ‘권역·매장별 확인’을 표시한다. 여러 권역의 요일을 임의 합치지 않는다. 거래처 전용 QR을 넣으면 그 매장 문맥을 사용하고 공개 QR은 공통 안내를 사용한다.
+- 기존 표시 항목 중 주문 마감·배송 요일만 읽기 시 덮어 그린다. DB 스키마·게시 버전·가격·링크·QR 저장값은 바꾸지 않는다. 조회 실패는 확인 안내, 인쇄/PNG는 실패 상태에서 차단한다.
+- FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS의 인증 회사 목록이 비면 OFF. 기존 OFF 응답과 화면을 유지한다. 운영 환경 등록·ON·DB 적용·배포 없음.
+- 범위: 기존 pricing-documents 읽기 경계, pricing-info-panel, 공통 PageContent/preview/workspace, QR의 선택 매장 식별자, 전용 작은 formatter/읽기 helper/hook 및 관련 시험. 회사 설정·관리자·주문 RPC 파일은 수정하지 않는다. CX-129의 3단계 화면 개편은 다음 한 건이다.

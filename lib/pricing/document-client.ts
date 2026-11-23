@@ -3,7 +3,7 @@ export async function documentRequest<T>(
   action: string,
   payload: Record<string, unknown> = {},
   write = false,
-): Promise<{ result: T; manager: boolean; qrDisplayAvailable?: boolean; archiveAvailable?: boolean }> {
+): Promise<{ result: T; manager: boolean; qrDisplayAvailable?: boolean; orderFooterAvailable?: boolean; archiveAvailable?: boolean }> {
   const params = new URLSearchParams({ companyId, action });
   if (!write)
     for (const [key, value] of Object.entries(payload))
@@ -19,7 +19,7 @@ export async function documentRequest<T>(
         }
       : { cache: "no-store" },
   );
-  let body: { result: T; manager: boolean; qrDisplayAvailable?: boolean; archiveAvailable?: boolean; message?: string };
+  let body: { result: T; manager: boolean; qrDisplayAvailable?: boolean; orderFooterAvailable?: boolean; archiveAvailable?: boolean; message?: string };
   try { body = await response.json(); }
   catch { throw new Error("문서 응답을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요."); }
   if (!response.ok)

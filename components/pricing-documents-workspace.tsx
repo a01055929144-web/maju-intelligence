@@ -113,6 +113,7 @@ export function PricingDocumentsWorkspace({
   const [extension, setExtension] = useState<{ mode: ExtensionMode; initial: ExtensionReview } | null>(null);
   const [extensionReview, setExtensionReview] = useState<ExtensionReview | null>(null);
   const extensionRetry = useRef<string | null>(null);
+  const [orderFooterAvailable, setOrderFooterAvailable] = useState(false);
   const [qrDisplayAvailable, setQrDisplayAvailable] = useState(false);
   const [taxMismatchCount, setTaxMismatchCount] = useState(0);
   /* 11/4: 같은 데이터를 문서(A4 종이)로 보거나 표로 봅니다. 기본은 문서 보기. */
@@ -139,6 +140,7 @@ export function PricingDocumentsWorkspace({
       }
       return documentRequest<T>(companyId, action, payload).then(r => {
         setQrDisplayAvailable(r.qrDisplayAvailable === true);
+        setOrderFooterAvailable(r.orderFooterAvailable === true);
         return r.result;
       });
     },
@@ -1231,7 +1233,7 @@ export function PricingDocumentsWorkspace({
                 </>
                 )}
               </div>
-              {docView === "doc" ? <PricingInfoPanel companyId={companyId} content={draft.content} editable={editable} onContent={change} /> : (
+              {docView === "doc" ? <PricingInfoPanel orderFooterAvailable={orderFooterAvailable} companyId={companyId} content={draft.content} editable={editable} onContent={change} /> : (
               <aside className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-3 xl:sticky xl:top-24">
                 <h2 className="text-sm font-black text-slate-900">문서 설정</h2>
                 <div className="grid gap-2">
@@ -1347,6 +1349,7 @@ export function PricingDocumentsWorkspace({
             canManageLinks={manager && storeLinksEnabled && !leadContext}
             publicSharingAvailable={publicSharingAvailable && !leadContext}
             openPublicQr={openPublicQr}
+            orderFooterAvailable={orderFooterAvailable}
             qrDisplayAvailable={qrDisplayAvailable}
             qrDisplayEditable={manager || preview.content.kind === "quote"}
             onQrSaved={(previousRevision, revision, settings) => {

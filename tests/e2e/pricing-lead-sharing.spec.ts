@@ -22,6 +22,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   const companyId = "00000000-0000-4000-8000-000000000001", customerId = "80000000-0000-4000-8000-000000000001";
   let releaseOtherVersions: (() => void) | undefined, denyVersionRead = false;
   const product = { id: "30000000-0000-4000-8000-000000000001", name: "합성 공개 품목", displayName: "합성 공개 품목", brand: "합성 브랜드", spec: "18L", unit: "통", price: 1000, taxType: "exempt" };
+  let failOrderFooter = false;
   let publishedRevision = 0;
   let qrSettings = { position: "bottom-left", size: "normal" }, failQrSave = true;
   const qrWrites: unknown[] = [];
@@ -63,6 +64,11 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       // Deliberately replay an old document's response for the new selection.
       result = published ? [version()] : [];
     }
+    if (action === "order-footer") {
+      if (failOrderFooter) return route.fulfill({ status: 503, json: { message: "합성 주문 설정 읽기 실패" } });
+      result = [{ key: "next_day_cutoff_time", label: "주문 마감", place: "footer", value: url.searchParams.get("customerId") === customerId ? "당일 18:30" : "전날 23:59 (권역·매장별 예외)" },
+        { key: "delivery_weekdays", label: "배송 요일", place: "footer", value: url.searchParams.get("customerId") === customerId ? "화·목" : "권역·매장별 확인" }];
+    }
     if (action === "qr-display") result = { id: documentId, revision, settings: qrSettings };
     if (action === "save-qr-display") {
       expect(b.id).toBe(documentId); expect(b.expected).toBe(revision); expect(b).not.toHaveProperty("content");
@@ -72,7 +78,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       result = { id: documentId, previousRevision, revision, settings: qrSettings };
     }
     if (action === "save") { content = b.content; documentId = b.id; revision++; result = draft(); }
-    if (action === "publish") { publishedRevision = revision; published = true; publishedContent = structuredClone(content!); result = version(); }
+    if (action === "publish") { publishedRevision = revision; published = true; publishedContent = structuredClone(content!); publishedContent.display = { ...DEFAULT_DISPLAY, ...publishedContent.display, info: [{ key: "next_day_cutoff_time", label: "주문 마감", place: "footer", value: "전날 00:00" }, { key: "delivery_weekdays", label: "배송 요일", place: "footer", value: "월" }] }; result = version(); }
     if (action === "prepare-share" && b.leadId === null) {
       publicInputs.push(b); expect(b).not.toHaveProperty("ttlDays");
       expect(b.documentId).toBe(documentId); expect(b.documentVersionId).toBe(versionId);
@@ -101,7 +107,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     }
     if (action === "revoke-share") { revoked = true; result = { shareLinkId, revoked: true }; }
     expect(url.pathname).not.toContain("store");
-    return route.fulfill({ json: { result, manager: true, qrDisplayAvailable: true } });
+    return route.fulfill({ json: { result, manager: true, qrDisplayAvailable: true, orderFooterAvailable: true } });
   });
   const publicHandler = async (route: Route) => {
     expect(route.request().method()).toBe("POST"); expect(route.request().postDataJSON()).toEqual({ token });
@@ -134,7 +140,14 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.goto("/revenue/pricing/documents");
   await page.getByRole(isPhone(page) ? "listitem" : "row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   await expect(page.getByRole("region", { name: "리드 문서 공유", exact: true })).toHaveCount(0);
+  failOrderFooter = true;
   await (await toolbarAction(page, "미리보기·인쇄")).click();
+  const failedFooterPreview = page.getByRole("dialog", { name: "미리보기", exact: true });
+  await expect(failedFooterPreview.getByRole("alert")).toContainText("주문 설정을 불러오지 못했습니다");
+  await failedFooterPreview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
+  await expect(failedFooterPreview.getByRole("alert")).toContainText("주문 설정을 불러오지 못했습니다");
+  expect(printed).toBe(0);
+  failOrderFooter = false;
   await expect(page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "주문 링크 QR 만들기", exact: true })).toHaveCount(0);
   await page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
   await (await toolbarAction(page, "공개 링크·QR · 버전 1")).click();
@@ -180,6 +193,11 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(preview.getByRole("button", { name: "공개 링크 복사", exact: true })).toBeVisible();
   expect(orderLinks).toBe(0); expect(deliveryRecords.size).toBe(0); expect(contactRecords.size).toBe(0);
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
+  for (const surface of [".pricing-online", ".pricing-paper"]) {
+    await expect(preview.locator(surface).first().locator("footer")).toContainText("전날 23:59");
+    await expect(preview.locator(surface).first().locator("footer")).toContainText("권역·매장별 확인");
+    await expect(preview.locator(surface).first().locator("footer")).not.toContainText("전날 00:00");
+  }
   const savedVersion = JSON.stringify(version());
   const linkRequests = publicInputs.length;
   const qr = preview.locator(".pricing-paper footer img").first();
@@ -291,6 +309,10 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await preview.getByRole("button", { name: "선택 거래처 QR 생성", exact: true }).click();
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
   await expect(preview.locator(".pricing-paper").first().getByRole("img", { name: "합성 QR 매장 주문 링크 QR", exact: true })).toBeVisible();
+  for (const surface of [".pricing-online", ".pricing-paper"]) {
+    await expect(preview.locator(surface).first().locator("footer")).toContainText("당일 18:30");
+    await expect(preview.locator(surface).first().locator("footer")).toContainText("화·목");
+  }
   await preview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
   await expect.poll(() => printed).toBe(2);
   const qrDownload = page.waitForEvent("download");

@@ -1,3 +1,4 @@
+import { readDocumentOrderFooter } from "./document-order-footer";
 import { readDocumentQrDisplay, saveDocumentQrDisplay } from "./document-qr-display";
 import type { DocumentQrDisplay } from "../../domains/pricing/document";
 import { createHash, randomBytes } from "crypto";
@@ -130,6 +131,7 @@ async function recordDocumentSend(scope: DocumentScope, input: DocumentSendInput
 
 export const pricingDocumentsRepository: PricingDocumentsRepository = {
   async request<T>(scope: DocumentScope, action: string, payload: object): Promise<T> {
+    if (action === "order-footer") return readDocumentOrderFooter(scope, (payload as { customerId?: string }).customerId) as Promise<T>;
     if (action === "qr-display") return readDocumentQrDisplay(scope, (payload as { id: string }).id) as Promise<T>;
     if (action === "save-qr-display") return saveDocumentQrDisplay(scope, payload as { id: string; expected: number; settings: DocumentQrDisplay }) as Promise<T>;
     if (action === "save-promotion" && "expected" in payload && payload.expected === 0) {

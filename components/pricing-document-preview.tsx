@@ -13,6 +13,9 @@ import {
   type DocumentVersion,
   type DocumentOutput,
 } from "@/domains/pricing/document";
+import { useDocumentOrderFooter } from "./use-document-order-footer";
+import { withOrderFooter } from "@/domains/pricing/document-order-footer";
+import type { DocumentInfoItem } from "@/domains/pricing/document";
 import { documentRequest } from "@/lib/pricing/document-client";
 import { PricingDocumentOrderQr, type DocumentOrderQr } from "./pricing-document-order-qr";
 import { Button } from "./ui/button";
@@ -41,6 +44,7 @@ export function PageContent({
   online = false,
   fontScale = 1,
   qrDisplay,
+  orderInfo,
 }: {
   data: DocumentOutput;
   page: number;
@@ -50,6 +54,7 @@ export function PageContent({
   online?: boolean;
   fontScale?: number;
   qrDisplay?: DocumentQrDisplay;
+  orderInfo?: DocumentInfoItem[];
 }) {
   const accent =
     data.theme === "blue"
@@ -57,7 +62,8 @@ export function PageContent({
       : data.theme === "green"
         ? "#047857"
         : "#1f2937";
-  const display = parseDisplay(data.display);
+  const savedDisplay = parseDisplay(data.display);
+  const display = { ...savedDisplay, info: withOrderFooter(savedDisplay.info, orderInfo) };
   const headerInfo = display.info.filter((item) => item.place === "header");
   const footerInfo = display.info.filter((item) => item.place === "footer");
   const footerType = documentFooterTypography(display, fontScale);
@@ -213,6 +219,7 @@ export function PricingDocumentPreview({
   canManageLinks = false,
   publicSharingAvailable = false,
   openPublicQr = false,
+  orderFooterAvailable = false,
   qrDisplayAvailable = false,
   qrDisplayEditable = false,
   onQrSaved,
@@ -227,6 +234,7 @@ export function PricingDocumentPreview({
   canManageLinks?: boolean;
   publicSharingAvailable?: boolean;
   openPublicQr?: boolean;
+  orderFooterAvailable?: boolean;
   qrDisplayAvailable?: boolean;
   qrDisplayEditable?: boolean;
   onQrSaved?: (previousRevision: number, revision: number, settings: DocumentQrDisplay) => void;
@@ -236,6 +244,7 @@ export function PricingDocumentPreview({
     [busy, setBusy] = useState(false),
     [day, setDay] = useState(koreaDay());
   const [qr, setQr] = useState<DocumentOrderQr | null>(null);
+  const orderFooter = useDocumentOrderFooter(companyId, qr?.audience === "public" ? undefined : qr?.customerId ?? version.content.customerId, orderFooterAvailable);
   const qrSettingsAvailable = qrDisplayAvailable && version.version > 0 && Boolean(companyId);
   const [qrSettings, setQrSettings] = useState(() => documentQrDisplay(version.content.display?.qr));
   const [savedQrSettings, setSavedQrSettings] = useState<DocumentQrDisplay | null>(null);
@@ -280,6 +289,7 @@ export function PricingDocumentPreview({
   }, [current.content.validUntil, day]);
   const prepare = useCallback(async () => {
     await qrRead.current;
+    await orderFooter.ready.current;
     const latest = refreshedDocumentVersion(version, refresh ? await refresh() : version);
     if (!alive.current) throw new Error("미리보기를 다시 열어 주세요.");
     flushSync(() => {
@@ -290,7 +300,7 @@ export function PricingDocumentPreview({
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
     return latest;
-  }, [refresh, version]);
+  }, [refresh, version, orderFooter.ready]);
   const printDocument = useCallback(async () => {
     autoPrinted.current = true;
     setBusy(true); setError("");
@@ -337,16 +347,16 @@ export function PricingDocumentPreview({
         <Button className="min-h-[44px]" disabled={busy || qrRevision === null || !qrDisplayEditable || JSON.stringify(qrSettings) === JSON.stringify(savedQrSettings)} onClick={() => void saveQrSettings()} type="button" variant="outline">QR 표시 설정 저장</Button>
         <p role={qrMessage ? "status" : undefined} aria-label={qrMessage ? "QR 표시 설정 저장 결과" : undefined} className="text-sm">{qrMessage || (qrDisplayEditable ? "선택 후 저장하면 다음에 문서를 열어도 같은 표시를 사용합니다." : "표시 설정은 대표·관리자 또는 견적 작성자에게 요청해 주세요.")}</p>
       </div> : null}
-      {error && (
+      {(error || orderFooter.error) && (
         <p role="alert" className="pricing-no-print text-red-700">
-          {error} 같은 버튼으로 다시 시도하거나 미리보기를 닫고 버전을 다시 선택해 주세요.
+          {error || orderFooter.error} 같은 버튼으로 다시 시도하거나 미리보기를 닫고 버전을 다시 선택해 주세요.
         </p>
       )}
       <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
         <div className="pricing-no-print">
           <h3 className="mb-2 font-semibold">온라인 · 휴대폰</h3>
           <div className="pricing-online max-w-[390px] rounded-2xl border bg-white p-3 shadow">
-            <PageContent data={output} page={1} pages={1} qr={qr} qrDisplay={qrSettings} online />
+            <PageContent data={output} page={1} pages={1} qr={qr} qrDisplay={qrSettings} orderInfo={orderFooter.items} online />
           </div>
         </div>
         <div className="min-w-0">
@@ -365,7 +375,7 @@ export function PricingDocumentPreview({
                       data={data}
                       fontScale={fontScale}
                       qr={qr}
-                      qrDisplay={qrSettings}
+                      qrDisplay={qrSettings} orderInfo={orderFooter.items}
                       page={i + 1}
                       pages={pages.length}
                       start={pages
