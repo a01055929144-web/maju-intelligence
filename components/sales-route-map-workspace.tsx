@@ -9,7 +9,7 @@ import { MapExplorerTabs, MapLayerControl, MapLayerLegend, type MapPanelMode } f
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, } from "react";
 import { areaLabelMatchesSigungu, phoneDigitsMatch, summarizeMultiFilter } from "@/lib/map-filter-multi";
 import { AlertTriangle, CalendarDays, Check, CheckCircle2, Columns2, Columns3, Copy, ExternalLink, Eye, EyeOff, Gauge, GripVertical, Layers, Loader2, ListFilter, Maximize2, Minimize2, MapPin, MapPinned, MessageSquareText, Navigation, Phone, Radar, RefreshCw, Ruler, Search, Square, Star, Store, Target, Truck, UserRound, Utensils, X, type LucideIcon } from "lucide-react";
@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SearchInput } from "@/components/ui/search-input";
-import { NOTICE_TOAST_MS } from "@/components/ui/notice";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { customerLocationChip, customerLocationNote, customerLocationState } from "@/domains/route/map-customer-notice";
 import { MapFilterChipsRow, MapLeadFilterStrip } from "@/components/map/map-filters-bar";
@@ -44,7 +43,7 @@ import {
   type PermitLeadType
 } from "@/domains/lead/map-filters";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
-import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
+import { STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
 import { nextLeadLayerSelection } from "@/lib/map-layer-selection";
 import { getMapLeadReminderLabel } from "@/lib/map-lead-workflow";
@@ -63,6 +62,9 @@ export { RouteMetric, vehicleColorForId };
 import { FullRouteNavigateAction, getRouteStopAddress, NavigateMenu, RouteWorkspaceGuide, type CourseSummary, type MarkerViewMode, type WorkspaceView } from "@/components/map/route-planner";
 export { FullRouteNavigateAction, getRouteStopAddress, NavigateMenu };
 export type { CourseSummary };
+import { useLiveVehicleFeed } from "@/components/map/use-live-vehicle-feed";
+import { useMapHistorySync } from "@/components/map/use-map-history-sync";
+import { useMapHeaderOffset } from "@/components/map/use-map-header-offset";
 import { useMapLocalPersistence } from "@/components/map/use-map-local-persistence";
 import { localStoreKeys, QUOTE_DRAFT_UPDATED_EVENT } from "@/components/map/local-store-keys";
 import { buildOutboundItemNotes, quoteDraftId, readQuoteDraft, type QuoteDraft, type QuoteSubject } from "@/components/map/quote-draft";
@@ -311,9 +313,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       // 브라우저 저장소가 차단돼도 기본값(거래처만 표시)으로 지도를 사용할 수 있어야 합니다.
     }
   }, []);
-  const [liveVehicleLocations, setLiveVehicleLocations] = useState<StaffVehicleLocation[]>(staffVehicleLocations);
+  const { justConnectedVehicle, liveVehicleConnectionError, liveVehicleLocations, todayCompletions } = useLiveVehicleFeed({ churnRiskCompanyId, staffVehicleLocations });
   const [vehicleMasterRecords, setVehicleMasterRecords] = useState<VehicleMaster[]>(vehicleMasterVehicles);
-  const [liveVehicleConnectionError, setLiveVehicleConnectionError] = useState("");
   const [vehicleAnalysis, setVehicleAnalysis] = useState<{
     completions: DeliveryCompletionEvent[];
     events: StaffLocationEvent[];
@@ -336,58 +337,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
-  // 지도 탭에서 검색/필터/신규 리드 반경 바가 1024px 이상에서 지도 위 카드로 표시됩니다(lg:absolute).
-  // "신규 리드 반경"을 켜면 이 카드에 한 줄이 더 늘어나 높이가 커지는데, 지도 오른쪽 위
-  // MapControls(내 위치 버튼)의 세로 위치가 고정값이면 늘어난 카드와 겹칩니다.
-  //
-  // 이 카드(mapHeaderRef)는 위쪽 KPI/이탈 위험 알림 블록을 건너뛰고 항상 지도 영역의 부모
-  // 기준 top-2에 뜨는데(lg:absolute), MapControls는 지도 영역 자신(mapAreaRef)의 top을
-  // 기준으로 위치합니다 — 두 기준점이 서로 다른 조상이라, 카드 높이만으로 오프셋을 계산하면
-  // KPI 패널이 펼쳐져 있거나 이탈 위험 알림 배너가 떠 있을 때 실제 카드 아래쪽 가장자리와
-  // MapControls 위치가 어긋납니다. getBoundingClientRect()로 카드의 실제 화면 아래쪽 가장자리와
-  // 지도 영역의 실제 화면 위쪽 가장자리를 직접 비교해 그 차이를 오프셋으로 써서, 위에 어떤 블록이
-  // 얼마나 있든 항상 카드 바로 아래에 오도록 합니다.
-  const mapHeaderRef = useRef<HTMLElement>(null);
-  const mapAreaRef = useRef<HTMLDivElement>(null);
-  const [mapHeaderHeightPx, setMapHeaderHeightPx] = useState(0);
-  const recomputeMapHeaderOffset = useCallback(() => {
-    const headerNode = mapHeaderRef.current;
-    const areaNode = mapAreaRef.current;
-    if (!headerNode || !areaNode) return;
-    const headerRect = headerNode.getBoundingClientRect();
-    const areaRect = areaNode.getBoundingClientRect();
-    // 시안 ⑫부터 필터 줄은 지도 위에 겹치지 않는 고정 줄입니다. 겹칠 때(예전 배치·특수 화면)만
-    // 그만큼 + 여백을 주고, 겹치지 않으면 0이라 패널·컨트롤이 지도 영역 맨 위에 붙습니다.
-    const overlap = headerRect.bottom - areaRect.top;
-    setMapHeaderHeightPx(overlap > 1 ? Math.round(overlap + 16) : 0);
-  }, []);
-  useEffect(() => {
-    const headerNode = mapHeaderRef.current;
-    const areaNode = mapAreaRef.current;
-    if (!headerNode || !areaNode || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(recomputeMapHeaderOffset);
-    observer.observe(headerNode);
-    observer.observe(areaNode);
-    recomputeMapHeaderOffset();
-    // 2026-09-07 피드백("우측 패널 위쪽에 위치하는데 짤려서 안보임") 대응: ResizeObserver는 헤더
-    // 카드(mapHeaderRef) 자신의 "크기"가 변할 때만 반응합니다. 그런데 이 오프셋 계산은 크기가 아니라
-    // "화면상 실제 위치"(getBoundingClientRect)를 봅니다 — 창 크기 변경처럼 두 요소의 크기는 그대로여도
-    // 화면 위치/레이아웃이 바뀌는 경우까지는 ResizeObserver가 못 잡아, 헤더 카드(z-20, 항상 위)가
-    // 계산이 어긋난 채로 좌우 패널(z-10)의 위쪽을 가려버리는 문제가 있었습니다. window resize에도
-    // 다시 계산하도록 보강합니다.
-    window.addEventListener("resize", recomputeMapHeaderOffset);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", recomputeMapHeaderOffset);
-    };
-  }, [recomputeMapHeaderOffset]);
-  // 위 ResizeObserver/resize 리스너로도 놓칠 수 있는 나머지 경우(폰트 로딩으로 인한 리플로우,
-  // 리드 필터 줄이 늘어나는 등rowspan 변화가 있는 렌더 등)를 보강하기 위해, 커밋될 때마다(매 렌더
-  // 이후) 오프셋을 다시 계산합니다. recomputeMapHeaderOffset은 getBoundingClientRect 두 번 읽는 정도라
-  // 가볍고, 값이 그대로면 setState가 리렌더를 유발하지 않아 무한 루프로 이어지지 않습니다.
-  useLayoutEffect(() => {
-    recomputeMapHeaderOffset();
-  });
+  const { mapAreaRef, mapHeaderHeightPx, mapHeaderRef, recomputeMapHeaderOffset } = useMapHeaderOffset();
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [detailLeadId, setDetailLeadId] = useState("");
@@ -941,77 +891,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const gradeCounts = useMemo(() => countGrades(gradeBaseStores), [gradeBaseStores]);
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
   const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
-  // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘(최근 20시간) 안에 배송완료로
-  // 기록된 거래처 id 목록입니다. 라이브 차량 위치와 같은 폴링 주기를 타도록 같은 요청에
-  // completions=true를 얹어, 새 폴링을 따로 만들지 않고 한 번에 최신 상태를 받아옵니다.
-  // (이 블록이 예전에 병합 과정에서 두 벌로 중복 선언돼 빌드가 깨졌던 것을 여기서 하나로 정리했습니다.)
-  const [todayCompletions, setTodayCompletions] = useState<DeliveryCompletionEvent[]>([]);
-  // 2026-09-07 피드백("모바일로 접속했는데 PC는 새로고침해야 불이 들어와 — 실시간 연동이 필요해,
-  // 접속하면 아래에서 팝업이 뜨거나 화면이 조금 강하게 보여졌으면 좋겠어" + 후속 피드백 "속도는
-  // 빠를수록 좋은 거야"): 폴링 주기를 15초→8초→4초로 줄여 체감 지연을 최소화했고(기사 앱의 위치
-  // 전송 최소 간격도 함께 8초로 단축, mobile-location-reporter.tsx 참고), 이전 폴링에는 없던
-  // 차량(기사)이 새로 나타나면 화면 하단에 "OOO 기사님이 접속했습니다" 배너를 몇 초간 띄워
-  // 새로고침 없이도 바로 눈에 띄게 합니다.
-  const knownVehicleIdsRef = useRef<Set<string> | null>(null);
-  const hasRealtimeVehicleRef = useRef(staffVehicleLocations.some((location) => location.displayState === "realtime"));
-  const [justConnectedVehicle, setJustConnectedVehicle] = useState<{ at: number; label: string } | null>(null);
-  useEffect(() => {
-    setLiveVehicleLocations(staffVehicleLocations);
-  }, [staffVehicleLocations]);
-  useEffect(() => {
-    let cancelled = false;
-    let toastTimer: number | undefined;
-    const load = async () => {
-      try {
-        const params = new URLSearchParams({ completions: "true", date: getTmsServiceDateKey() });
-        if (churnRiskCompanyId) params.set("companyId", churnRiskCompanyId);
-        const response = await fetchWithTimeout(`/api/staff/location?${params.toString()}`, { cache: "no-store" }, 8000);
-        const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; error?: string; locations?: StaffVehicleLocation[] } | null;
-        if (!response.ok) throw new Error(payload?.error || "라이브 차량 위치를 불러오지 못했습니다.");
-        if (!cancelled && response.ok && Array.isArray(payload?.locations)) {
-          setLiveVehicleConnectionError("");
-          setLiveVehicleLocations(payload.locations);
-          hasRealtimeVehicleRef.current = payload.locations.some((location) => location.displayState === "realtime");
-          const activeIds = new Set(payload.locations.filter((location) => !location.isStale).map((location) => location.id));
-          const previousIds = knownVehicleIdsRef.current;
-          // 첫 폴링(previousIds === null)에서는 이미 접속해 있던 차량까지 전부 "새로 접속"으로
-          // 오탐하지 않도록 알림 없이 기준선만 세웁니다. 그다음 폴링부터 새로 나타난 차량만 알립니다.
-          if (previousIds) {
-            const newlyConnected = payload.locations.find((location) => !location.isStale && !previousIds.has(location.id));
-            if (newlyConnected) {
-              const label = newlyConnected.driverName || newlyConnected.deliveryVehicle || "기사";
-              setJustConnectedVehicle({ at: Date.now(), label });
-              if (toastTimer) window.clearTimeout(toastTimer);
-              toastTimer = window.setTimeout(() => setJustConnectedVehicle(null), NOTICE_TOAST_MS);
-            }
-          }
-          knownVehicleIdsRef.current = activeIds;
-        }
-        if (!cancelled && response.ok && Array.isArray(payload?.completions)) setTodayCompletions(payload.completions);
-      } catch (error) {
-        // 마지막 정상 좌표는 유지하되 통신 실패를 명확히 표시합니다. 다음 4초 폴링이 성공하면 자동 복구됩니다.
-        if (!cancelled) setLiveVehicleConnectionError(error instanceof Error ? error.message : "라이브 차량 연결이 지연되고 있습니다.");
-      }
-    };
-    void load();
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") void load();
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    let timer = window.setTimeout(function poll() {
-      if (document.visibilityState === "visible") void load();
-      timer = window.setTimeout(
-        poll,
-        getStaffMapPollIntervalMs(hasRealtimeVehicleRef.current)
-      );
-    }, getStaffMapPollIntervalMs(hasRealtimeVehicleRef.current));
-    return () => {
-      cancelled = true;
-      if (toastTimer) window.clearTimeout(toastTimer);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearTimeout(timer);
-    };
-  }, [churnRiskCompanyId]);
   const completedStoreIdsToday = useMemo(() => new Set(todayCompletions.map((completion) => completion.customerId)), [todayCompletions]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(
@@ -1479,86 +1358,23 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setPreviewStoreId("");
     setSelectedId("");
   };
-  // 2026-10-25: 담당자 선택·거래처 상세를 주소(URL)에 남겨 브라우저/휴대폰 뒤로가기로 이전 화면에 돌아오게 합니다.
-  // 상태 → 주소 동기화는 값이 실제로 달라졌을 때만 pushState하므로, 뒤로가기로 돌아온 직후에는 다시 쌓이지 않습니다.
-  const historySyncMountedRef = useRef(false);
-  const detailHistoryPushedRef = useRef(false);
-  // 패널(3분할·담당자·거래처·신규·영업·지도만)과 지도 위 미리보기 카드도 뒤로가기로 되돌립니다.
-  const panelBaselineRef = useRef<MapPanelMode | null>(null);
-  const lastSyncedPanelRef = useRef<MapPanelMode>(mapPanelMode);
-  useEffect(() => {
-    if (typeof window === "undefined" || initialView === "leads") return;
-    if (!historySyncMountedRef.current) return;
-    const params = new URLSearchParams(window.location.search);
-    // 상세를 닫을 때, 방금 상세를 열면서 쌓은 기록이면 새 기록을 쌓지 않고 한 칸 뒤로 갑니다.
-    // (닫은 뒤 뒤로가기를 누르면 상세가 다시 열리는 혼란 방지)
-    if (!selectedId && params.has("detail") && detailHistoryPushedRef.current) {
-      detailHistoryPushedRef.current = false;
-      window.history.back();
-      return;
-    }
-    if (vehicleFilterId !== "all") params.set("staff", vehicleFilterId);
-    else params.delete("staff");
-    if (selectedId) params.set("detail", selectedId);
-    else params.delete("detail");
-    if (panelBaselineRef.current === null && mapPanelMode !== lastSyncedPanelRef.current && !params.has("panel")) {
-      panelBaselineRef.current = lastSyncedPanelRef.current;
-    }
-    if (panelBaselineRef.current !== null && mapPanelMode !== panelBaselineRef.current) params.set("panel", mapPanelMode);
-    else params.delete("panel");
-    lastSyncedPanelRef.current = mapPanelMode;
-    const hadPin = params.has("pin");
-    const pin = previewStoreId ? `s:${previewStoreId}` : previewLeadId ? `l:${previewLeadId}` : "";
-    if (pin) params.set("pin", pin);
-    else params.delete("pin");
-    const next = `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}${window.location.hash}`;
-    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (next !== current) {
-      // 미리보기 카드끼리 바꿀 때는 기록을 늘리지 않습니다(뒤로가기 한 번이면 카드가 닫힘).
-      const onlyPinChanged = hadPin && Boolean(pin) && next.replace(/[?&]pin=[^&#]*/, "") === current.replace(/[?&]pin=[^&#]*/, "");
-      if (onlyPinChanged) window.history.replaceState(null, "", next);
-      else window.history.pushState(null, "", next);
-      detailHistoryPushedRef.current = Boolean(selectedId);
-    }
-  }, [initialView, mapPanelMode, previewLeadId, previewStoreId, selectedId, vehicleFilterId]);
-  useEffect(() => {
-    if (typeof window === "undefined" || initialView === "leads") return;
-    const applyFromLocation = () => {
-      const params = new URLSearchParams(window.location.search);
-      detailHistoryPushedRef.current = false;
-      const view = params.get("view");
-      setActiveView(view === "customers" || view === "course" || view === "history" ? view : "map");
-      setVehicleFilterId(params.get("staff") || "all");
-      setSelectedId(params.get("detail") || "");
-      setSelectedLiveVehicleId("");
-      const pin = params.get("pin") || "";
-      setPreviewStoreId(pin.startsWith("s:") ? pin.slice(2) : "");
-      setPreviewLeadId(pin.startsWith("l:") ? pin.slice(2) : "");
-      setMapFocusId("");
-      const panel = params.get("panel");
-      const panelModes: MapPanelMode[] = ["split", "driver", "customer", "newLead", "salesLead", "map"];
-      if (panel && panelModes.includes(panel as MapPanelMode)) {
-        lastSyncedPanelRef.current = panel as MapPanelMode;
-        setMapPanelMode(panel as MapPanelMode);
-      } else if (panelBaselineRef.current) {
-        lastSyncedPanelRef.current = panelBaselineRef.current;
-        setMapPanelMode(panelBaselineRef.current);
-      }
-    };
-    // 저장된 패널 모드 복원(위쪽 effect)이 첫 기록으로 쌓이지 않도록 기준값을 맞춥니다.
-    try {
-      const savedMode = normalizeStoredMapPanelMode(window.localStorage.getItem(MAP_PANEL_MODE_STORAGE_KEY));
-      if (savedMode) lastSyncedPanelRef.current = savedMode;
-    } catch {
-      // 저장소 차단 시 기본값 유지
-    }
-    applyFromLocation();
-    historySyncMountedRef.current = true;
-    window.addEventListener("popstate", applyFromLocation);
-    return () => window.removeEventListener("popstate", applyFromLocation);
-    // 최초 1회만 등록합니다. setState 함수는 안정적이라 의존성에서 뺍니다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialView]);
+  useMapHistorySync({
+    initialView,
+    mapPanelMode,
+    panelModeStorageKey: MAP_PANEL_MODE_STORAGE_KEY,
+    previewLeadId,
+    previewStoreId,
+    selectedId,
+    setActiveView,
+    setMapFocusId,
+    setMapPanelMode,
+    setPreviewLeadId,
+    setPreviewStoreId,
+    setSelectedId,
+    setSelectedLiveVehicleId,
+    setVehicleFilterId,
+    vehicleFilterId
+  });
 
   const selectLiveVehicle = (location: StaffVehicleLocation) => {
     const matchingGroup = deliveryVehicles.find((vehicle) => liveVehicleMatchesDeliveryGroup(location, vehicle));

@@ -12,6 +12,7 @@ const leadListSortSource = readFileSync("components/map/lead-list-sort.ts", "utf
 // M3b: 필터 상태·저장 필터 호출은 훅 파일로 옮겨졌다(화면 문구는 지도 파일에 그대로).
 const filterPopoverSource = readFileSync("components/map/map-filter-popover.tsx", "utf8");
 const filterHookSource = readFileSync("components/map/use-map-filters.ts", "utf8");
+const liveVehicleFeedSource = readFileSync("components/map/use-live-vehicle-feed.ts", "utf8");
 const shellSource = readFileSync("components/customer-app-shell.tsx", "utf8");
 const sidebarSource = readFileSync("components/app-sidebar.tsx", "utf8");
 const deliveryProofSource = readFileSync("components/mobile-delivery-proof-panel.tsx", "utf8");
@@ -89,9 +90,10 @@ describe("PC map workspace layout", () => {
   });
 
   it("polls vehicle locations with the KST TMS service date contract", () => {
-    expect(workspaceSource).toContain('import { getTmsServiceDateKey } from "@/domains/delivery/service-date"');
-    expect(workspaceSource).toContain('new URLSearchParams({ completions: "true", date: getTmsServiceDateKey() })');
+    expect(liveVehicleFeedSource).toContain('import { getTmsServiceDateKey } from "@/domains/delivery/service-date"');
+    expect(liveVehicleFeedSource).toContain('new URLSearchParams({ completions: "true", date: getTmsServiceDateKey() })');
     expect(workspaceSource).not.toContain("function localDateKey(");
+    expect(liveVehicleFeedSource).not.toContain("function localDateKey(");
   });
 });
 

@@ -21,6 +21,17 @@ route, delivery (담당자/차량 배정 표시)
 - `components/sales-transaction-matcher.tsx`, `components/sales-transaction-table.tsx`
 - `app/api/customers/**`, `app/api/customer-attachments/**`, `app/api/customer-operations/**`
 
+### CX-111 수동 좌표 저장 선행 API 예외 (2026-11-22)
+
+- `.env.example`: 전역 기본 OFF와 회사 allowlist 환경변수 이름만 문서화한다.
+- `lib/feature-modules.ts`: 기존 기능 플래그 모음에 CX-111의 전역 OFF + 회사 allowlist 판정 한 개만 추가한다.
+- `.github/workflows/ci.yml`: 기존 PostgreSQL 17 검증 job에 CX-111 SQL 초안 시험 실행 한 줄만 추가한다.
+- `tests/customer-manual-coordinate-feature.test.ts`, `tests/customer-manual-coordinate-route.test.ts`: 기본 OFF·회사 제한과 인증 회사/역할/담당 거래처 경계를 검증한다.
+- `docs/sql-drafts/2026-11-22-CX-111-customer-manual-coordinate.sql`, `.down.sql`, `.pg17.test.sql`: 좌표 변경과 감사 기록을 한 트랜잭션으로 보장하는 적용 전 SQL·되돌림·PG17 계약 시험이다.
+- `docs/work-orders/db-approval/2026-11-22-CX-111-customer-manual-coordinate.md`: 운영 미적용, 기본 OFF, 승인·적용 순서와 되돌림 경계를 기록한다.
+
+이 예외는 지도 UI와 `lib/store.ts`를 포함하지 않는다. SQL 운영 적용과 기능 활성화 전에는 API가 404를 반환한다.
+
 ## Data Flow
 
 | Source | Used For |

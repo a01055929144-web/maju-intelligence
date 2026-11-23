@@ -1,11 +1,13 @@
 import type { DocumentScope } from "@/application/pricing/documents";
 import { DocumentSendError } from "@/domains/pricing/document-send";
+import { documentOrderFooterEnabled } from "./document-order-footer-feature";
+import type { PublicOrderFooter } from "@/domains/pricing/document-order-footer";
 import { orderFooterNotice } from "@/domains/pricing/document-order-footer";
 import { supabaseRequest } from "@/lib/store";
 import { getStoreDeliveryEligibility, storeAddressVerificationEnabled } from "./store-delivery-eligibility";
 
 type Rule = { cutoff_days_before?: number | null; cutoff_time?: string | null; delivery_weekdays?: number[] | null };
-export async function readDocumentOrderFooter(scope: DocumentScope, customerId?: string) {
+export async function readDocumentOrderFooter(scope: Pick<DocumentScope, "companyId" | "orderFooterEnabled">, customerId?: string) {
   if (!scope.orderFooterEnabled) throw new DocumentSendError("주문 설정 표시를 사용할 수 없습니다.", 404);
   const company = encodeURIComponent(scope.companyId);
   const settings = await supabaseRequest<Rule[]>(
@@ -35,4 +37,11 @@ export async function readDocumentOrderFooter(scope: DocumentScope, customerId?:
   info[1].value = !customerId ? "권역·매장별 확인" : weekdays?.length && weekdays.length <= 7 && weekdays.every(day => Number.isInteger(day) && day >= 0 && day <= 6)
     ? Array.from(new Set(weekdays)).sort((a,b) => a-b).map(day => ["일","월","화","수","목","금","토"][day]).join("·") : "배송 설정 확인 필요";
   return info;
+}
+
+/** Caller must first validate the public token/company/expiry/revocation boundary. */
+export async function readPublicDocumentOrderFooter(companyId: string): Promise<PublicOrderFooter | undefined> {
+  if (!documentOrderFooterEnabled(companyId)) return undefined;
+  try { return { status: "available", items: await readDocumentOrderFooter({ companyId, orderFooterEnabled: true }) }; }
+  catch { return { status: "unavailable" }; }
 }

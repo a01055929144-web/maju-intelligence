@@ -297,7 +297,7 @@ for (const width of [1280, 390]) {
     await expect(preview).toContainText("행별 적용일");
     await expect(preview.getByRole("cell", { name: "2026-11-04", exact: true })).toBeVisible();
     await page.getByRole("button", { name: /^② 열 정렬/ }).click();
-    await expect(page.getByRole("spinbutton", { name: "합성 상품 변경 후 매입가 수정" })).toHaveValue("300");
+    await expect(page.getByRole("cell", { name: "300원", exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
     const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
     await expect(review).toContainText("2026-11-04 · 1행");
@@ -495,7 +495,7 @@ test("different suppliers on the same product and day require an explicit source
   await expect(choice.getByRole("option", { name: /B매입처.*220원/ })).toHaveCount(1);
   await choice.selectOption("2");
   await align.click();
-  await expect(page.getByRole("spinbutton", { name: "합성 상품 변경 후 매입가 수정" })).toHaveValue("150");
+  await expect(page.getByRole("cell", { name: "150원", exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
@@ -580,11 +580,8 @@ test("unresolved catalog mapping reports source rows and never guesses an ID", a
 test("date rollout blocks direct v1 cost changes without leaving a stale price date", async ({ page }) => {
   const { writes, receipts, dateWrites } = await purchaseUpload(page);
   await expect(page.getByText("날짜별 저장을 사용 중입니다.", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "전체", exact: true }).click();
-  await page.getByRole("button", { name: "수정", exact: true }).click();
-  await page.getByRole("spinbutton", { name: "합성 상품 변경 후 매입가 수정" }).fill("200");
-  await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "직접 원가 수정을 저장할 수 없습니다" })).toBeVisible();
+  await expect(page.getByRole("spinbutton", { name: "합성 상품 변경 후 매입가 수정" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^③ 저장/ })).toBeDisabled();
   expect(writes).toHaveLength(0); expect(receipts).toHaveLength(0); expect(dateWrites).toHaveLength(0);
 });
 
@@ -663,11 +660,11 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   await expect(nav.getByRole("button", { name: "인상 1", exact: true })).toBeVisible();
   await expect(nav.getByRole("button", { name: "인하 1", exact: true })).toBeVisible();
   // CC-72: 기존 상품과 이름이 비슷한 새 상품(합성 상품 5)은 줄마다 "새 상품 맞음"을 골라야 저장된다.
-  await expect(page.getByRole("button", { name: "③ 저장 (4건)", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^③ 저장/ })).toBeDisabled();
   await nav.getByRole("button", { name: /^신규/ }).click();
   const notDuplicate = page.getByRole("button", { name: "새 상품 맞음" });
   while (await notDuplicate.count()) await notDuplicate.first().click();
-  await page.getByRole("button", { name: "③ 저장 (4건)", exact: true }).click();
+  await page.getByRole("button", { name: /^③ 저장/ }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("원본 거래 6행"); await expect(review).toContainText("가격 반영 보류 1그룹");
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
@@ -684,10 +681,10 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   await page.unroute(deniedRoute);
   await page.getByRole("button", { name: "목록 새로고침", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "관리자에게 권한" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "③ 저장 (4건)", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^③ 저장/ })).toBeEnabled();
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
-  await expect(page.getByRole("region", { name: "매입가 저장 결과" })).toContainText("현재 매입가 변경 4품목 / 이력만 1품목");
+  await expect(page.getByRole("region", { name: "매입가 저장 결과" })).toContainText("현재 매입가 변경 3품목 / 이력만 2품목");
   await expect(nav.getByRole("button", { name: "매입 이력", exact: true })).toHaveAttribute("aria-pressed", "true");
   expect(dateWrites).toHaveLength(2); expect(dateWrites[1]).toEqual(dateWrites[0]);
   const rows = dateWrites[1].rows;
@@ -695,15 +692,16 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
     [2, 150, 1, 150, 15, 165], [3, 80, 2, 160, 16, 176], [4, 100, 3, 300, 30, 330],
     [5, 120, 4, 480, 48, 528], [6, 130, 5, 650, 65, 715], [7, 90, 6, 540, 54, 594]
   ]);
-  expect(rows.filter(row => row.priceSelected)).toHaveLength(4); expect(rows.filter(row => row.priceHeld)).toHaveLength(1);
+  expect(rows.filter(row => row.priceSelected)).toHaveLength(3); expect(rows.filter(row => row.priceHeld)).toHaveLength(2);
+  expect(rows[2]).toMatchObject({ cost: 100, priceSelected: false, priceHeld: true });
   expect(rows[4].priceSelected).toBe(false);
   expect(rows[4].rawValues[5]).toBe("130");
   expect(rows[5]).toMatchObject({ productId: "20000000-0000-4000-8000-000000000005", unit: "병", spec: "750ml" });
   await nav.getByRole("button", { name: "전체", exact: true }).click();
   const productRow = (name: string) => page.getByRole("textbox", { name: `${name} 품목명`, exact: true }).locator("xpath=ancestor::tr[1]");
-  await expect(productRow("합성 상품").getByRole("cell", { name: "150원", exact: true })).toBeVisible();
-  await expect(productRow("합성 상품 2").getByRole("cell", { name: "80원", exact: true })).toBeVisible();
-  await expect(productRow("합성 상품 5").getByRole("cell", { name: "90원", exact: true })).toBeVisible();
+  await expect(productRow("합성 상품").locator('[data-col="current"]')).toContainText("150원");
+  await expect(productRow("합성 상품 2").locator('[data-col="current"]')).toContainText("80원");
+  await expect(productRow("합성 상품 5").locator('[data-col="current"]')).toContainText("90원");
   await nav.getByRole("button", { name: "매입 이력", exact: true }).click();
   const history = page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]");
   await expect(history).toContainText(`직전 업로드 묶음 · ${dateWrites[1].receiptDate} · 합성-구매일.csv · 원본 6행 · 저장 완료`);
@@ -716,9 +714,9 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   await expect(page.getByRole("status").filter({ hasText: "원본 거래를 함께 복구했습니다" })).toBeVisible();
   expect(dateWrites[2]).toMatchObject({ action: "restore", batchId: dateWrites[0].batchId });
   await page.getByRole("button", { name: "전체", exact: true }).click();
-  await expect(productRow("합성 상품").getByRole("cell", { name: "100원", exact: true })).toBeVisible();
-  await expect(productRow("합성 상품 2").getByRole("cell", { name: "100원", exact: true })).toBeVisible();
-  await expect(productRow("합성 상품 5").getByRole("cell", { name: "0원", exact: true })).toBeVisible();
+  await expect(productRow("합성 상품").locator('[data-col="current"]')).toContainText("100원");
+  await expect(productRow("합성 상품 2").locator('[data-col="current"]')).toContainText("100원");
+  await expect(productRow("합성 상품 5").locator('[data-col="current"]')).toContainText("0원");
   await page.getByRole("button", { name: "매입 이력", exact: true }).click();
   await expect(page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]")).toContainText("조회 조건에 맞는 매입 기록이 없습니다");
   expect(registration).toEqual({ imports: 1, standards: 1 });

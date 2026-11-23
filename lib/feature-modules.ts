@@ -77,6 +77,15 @@ export function areStructuredFieldRecordsEnabled(companyId?: string | null, valu
   return Boolean(companyId && getStructuredFieldRecordsEnabledCompanyIds(value).has(companyId));
 }
 
+/** CX-111: 원자 저장 RPC가 운영 승인·적용된 회사만 수동 좌표 저장을 엽니다. */
+export function areManualCustomerCoordinatesEnabled(
+  companyId?: string | null,
+  enabled = process.env.CUSTOMER_MANUAL_COORDINATE_ENABLED || "",
+  companies = process.env.CUSTOMER_MANUAL_COORDINATE_ENABLED_COMPANY_IDS || ""
+) {
+  return isExplicitlyEnabled(enabled) && Boolean(companyId && getHoldModulesEnabledCompanyIds(companies).has(companyId));
+}
+
 export const CORE_LEADS_HREF = "/leads?type=permit";
 /** 로그인 · 작업공간 선택 뒤 첫 화면 = 오늘 할 일 (2026-11-03 대표 결정) */
 export const CORE_HOME_HREF = "/dashboard";
