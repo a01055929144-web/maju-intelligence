@@ -28,7 +28,7 @@ for (const width of [1440, 390]) {
           hasMore: false,
           items: [{
             id: "link-1", kind: "document", customerName: "제이에스리테일 1호점",
-            documentTitle: "11월 행사 단가표", documentVersion: 3, url: "https://store.example.test/link-1",
+            documentTitle: "11월 행사 단가표", documentVersion: 3, documentValidUntil: "2026-12-31", url: "https://store.example.test/link-1",
             issuedAt: "2026-11-22T08:00:00.000Z", expiresAt: "2026-12-22T08:00:00.000Z", revokedAt: null,
             canOrder: true, viewCount: 2, lastViewedAt: "2026-11-22T09:00:00.000Z",
             orderCount: 1, interest: "관심", stage: "열람"
@@ -38,6 +38,10 @@ for (const width of [1440, 390]) {
     });
 
     await page.goto("/revenue/pricing/links");
+    await expect(page.getByLabel("문서별")).toBeVisible();
+    await page.getByLabel("열람 0").check();
+    await expect(page.getByRole("button", { name: "제이에스리테일 1호점" })).toHaveCount(0);
+    await page.getByLabel("열람 0").uncheck();
     await page.getByRole("button", { name: "제이에스리테일 1호점" }).click();
     const detail = page.getByRole("region", { name: "매장 링크 상세" });
     await expect(detail.getByText("보이는 품목 · 가격 출처")).toBeVisible();

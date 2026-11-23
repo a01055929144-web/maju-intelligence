@@ -232,7 +232,7 @@ export async function GET(request: NextRequest) {
               id: string;
               document_id: string;
               version: number;
-              content: { title?: string };
+              content: { title?: string; validUntil?: string };
             }[]
           >(
             `pricing_document_versions?company_id=eq.${encodeURIComponent(company)}&id=in.(${versionIds.join(",")})&select=id,document_id,version,content`,
@@ -267,6 +267,7 @@ export async function GET(request: NextRequest) {
             kind: link.document_version_id === null ? "catalog" : "document",
             documentTitle: link.document_version_id === null ? "전체 상품" : version?.content.title ?? "문서",
             documentVersion: version?.version ?? null,
+            documentValidUntil: version?.content.validUntil ?? null,
             url: shortShareLinksEnabled(company) && link.short_code
               ? `${storePublicBase()}/s/${link.short_code}`
               : `${storePublicBase()}/store#${issueStoreLinkToken(link.id, link.token_nonce).token}`,
@@ -446,20 +447,18 @@ export async function POST(request: NextRequest) {
         body.action === "create" ? { ...links[0] } : { links },
       );
     }
-    if (!isId(body.id)) throw new Error("링크를 확인해 주세요.");
+    const ids = body.action === "revoke-batch" ? body.ids : [body.id];
+    if (!Array.isArray(ids) || ids.length < 1 || ids.length > 100 || !ids.every(isId) || new Set(ids).size !== ids.length)
+      throw new Error("링크를 확인해 주세요.");
     const managedLinks = await supabaseRequest<
-      { document_version_id: string | null }[]
+      { id: string; document_version_id: string | null; revoked_at: string | null }[]
     >(
-      `storefront_links?company_id=eq.${company}&id=eq.${body.id}&select=document_version_id&limit=1`,
+      `storefront_links?company_id=eq.${company}&id=in.(${ids.join(",")})&select=id,document_version_id,revoked_at&limit=100`,
     );
     if (
-      !managedLinks.length ||
-      (managedLinks[0].document_version_id !== null &&
-        !(
-          await accessibleVersions(company, actor, [
-            managedLinks[0].document_version_id,
-          ])
-        ).size)
+      managedLinks.length !== ids.length ||
+      (await accessibleVersions(company, actor, managedLinks.flatMap(link => link.document_version_id ? [link.document_version_id] : []))).size !==
+        new Set(managedLinks.flatMap(link => link.document_version_id ? [link.document_version_id] : [])).size
     )
       throw new Error("링크를 찾지 못했습니다.");
     if (body.action === "mark-sent") {
@@ -480,16 +479,23 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json({ saved: true });
     }
-    if (body.action === "revoke" || body.action === "set-ordering") {
+    if (body.action === "revoke" || body.action === "revoke-batch" || body.action === "set-ordering") {
       const patch =
-        body.action === "revoke"
-          ? { revoked_at: new Date().toISOString(), can_order: false }
+        body.action === "revoke" || body.action === "revoke-batch"
+          ? { revoked_at: new Date().toISOString() }
           : { can_order: body.canOrder === true };
       const rows = await supabaseRequest<{ id: string }[]>(
-        `storefront_links?company_id=eq.${encodeURIComponent(company)}&id=eq.${body.id}&select=id`,
+        `storefront_links?company_id=eq.${encodeURIComponent(company)}&id=in.(${ids.join(",")})&select=id`,
         { method: "PATCH", body: JSON.stringify(patch) },
       );
-      if (!rows.length) throw new Error("링크를 찾지 못했습니다.");
+      if (rows.length !== ids.length) throw new Error("링크를 찾지 못했습니다.");
+      const newlyRevoked = managedLinks.filter(link => !link.revoked_at);
+      if ((body.action === "revoke" || body.action === "revoke-batch") && newlyRevoked.length) await supabaseRequest("admin_audit_logs", {
+        method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(newlyRevoked.map(link => ({
+          company_id: company, action: "storefront_link_revoked", target_type: "storefront_link", target_id: link.id,
+          actor_user_id: isId(actorUserId) ? actorUserId : null, metadata: { actorName: actorName.slice(0, 100), revokedAt: patch.revoked_at },
+        }))),
+      });
       return NextResponse.json({ saved: true });
     }
     throw new Error("링크 요청을 확인해 주세요.");

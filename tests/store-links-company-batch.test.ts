@@ -231,6 +231,34 @@ it("continues the company cursor with the same tenant and strict ID ordering", a
     `company_id=eq.${company}&id=gt.${after}`,
   );
 });
+it("revokes selected company links without deleting or changing ordering and records the actor", async () => {
+  const second = "00000000-0000-4000-8000-000000000004";
+  mocks.db.mockImplementation(async (path: string, options?: { method?: string; body?: string }) => {
+    if (path.startsWith("storefront_links?") && !options) return [
+      { id: customer, document_version_id: version, revoked_at: null },
+      { id: second, document_version_id: version, revoked_at: null },
+    ];
+    if (path.startsWith("pricing_document_versions?")) return [{ id: version, document_id: version }];
+    if (path.startsWith("pricing_documents?")) return [{ id: version, kind: "sheet", owner_key: "owner" }];
+    if (path.startsWith("storefront_links?") && options?.method === "PATCH") {
+      expect(JSON.parse(options.body || "{}")).toEqual({ revoked_at: expect.any(String) });
+      return [{ id: customer }, { id: second }];
+    }
+    if (path === "admin_audit_logs") {
+      const logs = JSON.parse(options?.body || "[]");
+      expect(logs).toHaveLength(2);
+      expect(logs[0]).toMatchObject({ action: "storefront_link_revoked", metadata: { actorName: "대표" } });
+      return [];
+    }
+    throw new Error(`Unexpected query ${path}`);
+  });
+  const response = await POST(new NextRequest("http://localhost/api/pricing-store-links", {
+    method: "POST", headers: { origin: "http://localhost" },
+    body: JSON.stringify({ companyId: company, action: "revoke-batch", ids: [customer, second] }),
+  }));
+  expect(response.status).toBe(200);
+  expect(mocks.db.mock.calls.some(([path]) => String(path).includes("DELETE"))).toBe(false);
+});
 it("rejects another author's quote before invoking issuance RPC", async () => {
   mocks.db.mockImplementation(async (path: string) => {
     if (path.startsWith("normalized_customers?")) return [{ id: customer }];
