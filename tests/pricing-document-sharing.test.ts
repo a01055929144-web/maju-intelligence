@@ -15,7 +15,9 @@ import { pricingDocumentsRepository } from "../lib/pricing/documents-repository"
 import { POST as publicPost } from "../app/api/pricing-documents/public/route";
 import { PUT as saveSalesKitPut } from "../app/api/sales-kit/route";
 import { POST as privatePost } from "../app/api/pricing-documents/route";
-import { getPublicDocumentOrderContext } from "../lib/pricing/document-share";
+import { generateMetadata as previewMetadata } from "../app/q/[previewId]/page";
+import { GET as shortLinkGet } from "../app/s/[code]/route";
+import { getPublicDocumentOrderContext, readDocumentSharePreview, resolveDocumentShortLink } from "../lib/pricing/document-share";
 import { issueDocumentShareToken, verifyDocumentShareToken } from "../lib/pricing/document-share-token";
 import { issueStoreLinkToken } from "../lib/pricing/store-link-token";
 import { publicDocumentOrderGuidanceEnabled } from "../lib/pricing/public-document-order-feature";
@@ -35,6 +37,7 @@ let publishedNumber = 2;
 const seen: string[] = [];
 
 beforeEach(() => {
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", "");
   vi.clearAllMocks(); links = []; sends = []; actions = []; seen.length = 0; owner = actor; merged = archived = failInsert = failBinding = false; limit = "allowed"; stock = 2;
   inquiryBody = null; inquiryFailure = false; orderFooterFailure = false; publishedNumber = 2;
   mocks.capability.mockReturnValue(false);
@@ -618,4 +621,66 @@ it("reads no policy for OFF companies, invalid tokens or revoked links", async (
   links[0].revoked_at = new Date().toISOString();
   expect((await publicPost(request({ token: token(prepared.publicUrl) }))).status).toBe(404);
   expect(seen.some(path => path.startsWith("store_order_settings?"))).toBe(false);
+});
+
+// CX-132: same issuance/authorization boundary; no operating short-code DDL prerequisite.
+async function brandedShare() {
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", company);
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  return service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+}
+const openShort = (code: string, userAgent = "Mozilla/5.0") => shortLinkGet(new Request(`https://fixture.test/s/${code}`,
+  { headers: { "user-agent": userAgent, "x-forwarded-for": "192.0.2.1" } }), { params: Promise.resolve({ code }) });
+
+it("CX-132 issues an opaque code once, keeps prices/version and supports original fragment links", async () => {
+  const result = await brandedShare(), frozen = JSON.stringify({ links, content });
+  expect(result.publicUrl).toMatch(/^\/s\/[0-9a-f]{32}$/);
+  expect(links[0].preview_title).toBe("합성 회사 합성 견적 · MAJU");
+  const again = await brandedShare(); expect(again).toEqual(result);
+  const response = await openShort(result.publicUrl.slice(3));
+  expect(response.status).toBe(302); expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  const original = new URL(response.headers.get("location")!);
+  expect(original.pathname).toBe("/pricing-document"); expect(original.search).toBe("");
+  const opened = await publicPost(request({ token: original.hash.slice(1) }));
+  expect(opened.status).toBe(200); expect((await opened.json()).document.lines[0].price).toBe(1000);
+  expect(JSON.stringify({ links, content })).toBe(frozen);
+  expect(sends).toEqual([]); expect(actions).toEqual([]);
+});
+
+it("CX-132 Kakao/Twitter bots receive token-free OG/Twitter metadata only", async () => {
+  const result = await brandedShare(), code = result.publicUrl.slice(3);
+  for (const userAgent of ["KAKAOTALK-SCRAP/1.0", "Twitterbot/1.0"]) {
+    const response = await openShort(code, userAgent), location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe(`/q/${links[0].preview_id}`); expect(location.hash).toBe(""); expect(location.search).toBe("");
+  }
+  const meta = await previewMetadata({ params: Promise.resolve({ previewId: String(links[0].preview_id) }) });
+  expect(meta).toMatchObject({ title: "합성 회사 합성 견적 · MAJU", referrer: "no-referrer", robots: { index: false, follow: false },
+    openGraph: { title: "합성 회사 합성 견적 · MAJU", description: expect.stringContaining("가입 전 단가표 확인") },
+    twitter: { title: "합성 회사 합성 견적 · MAJU", description: expect.stringContaining("간편 주문") } });
+  const serialized = JSON.stringify(meta);
+  for (const forbidden of ["PRIVATE-", "777777", String(links[0].token_nonce), String(links[0].token_hash), doc, version, "#", "synthetic-test-key"])
+    expect(serialized).not.toContain(forbidden);
+});
+
+it.each(["revoked", "expired", "other-company", "archived", "rotated-key", "rate-limited"])("CX-132 denies %s short links without redirecting", async state => {
+  const result = await brandedShare();
+  if (state === "revoked") links[0].revoked_at = "2026-11-23";
+  if (state === "expired") links[0].expires_at = "2020-01-01T00:00:00Z";
+  if (state === "other-company") links[0].company_id = other;
+  if (state === "archived") archived = true;
+  if (state === "rotated-key") vi.stubEnv("LEAD_DOCUMENT_LINK_SECRET", "synthetic-rotated-secret-longer-than-32-bytes");
+  if (state === "rate-limited") limit = "rate_limited";
+  const response = await openShort(result.publicUrl.slice(3));
+  expect(response.status).toBe(404); expect(response.headers.get("location")).toBeNull();
+  expect(await response.text()).not.toContain("PRIVATE-");
+  if (["revoked", "expired", "other-company"].includes(state))
+    expect(await readDocumentSharePreview(String(links[0].preview_id))).toBeNull();
+});
+
+it("CX-132 defaults OFF and rejects malformed codes before database access", async () => {
+  await expect(resolveDocumentShortLink("a".repeat(32), "fixture")).rejects.toMatchObject({ status: 404 });
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", company);
+  await expect(resolveDocumentShortLink("bad", "fixture")).rejects.toMatchObject({ status: 404 });
+  expect(mocks.db).not.toHaveBeenCalled();
 });

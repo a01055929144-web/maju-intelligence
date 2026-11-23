@@ -37,4 +37,19 @@ export function publicDocumentOutput(version: DocumentVersion, day?: string) {
       price: l.price, taxType: l.taxType, badge: l.badge, endsOn: l.endsOn, remaining: l.remaining })),
   };
 }
+/** Reuse the random preview UUID: UUID-v4 opaque namespace, distinct from 10-character store codes. */
+export function documentShareCode(previewId: string) {
+  if (!isId(previewId)) throw new Error("Invalid document preview");
+  return previewId.replaceAll("-", "").toLowerCase();
+}
+export function documentSharePreviewId(code: string) {
+  if (!/^[0-9a-f]{32}$/.test(code)) return null;
+  const id = [code.slice(0, 8), code.slice(8, 12), code.slice(12, 16), code.slice(16, 20), code.slice(20)].join("-");
+  return isId(id) ? id : null;
+}
+export function brandedDocumentSharePreview(input: { companyName: string; title: string }) {
+  return { title: `${input.companyName.trim().slice(0, 80) || "유통사"} ${input.title.trim().slice(0, 70) || "단가표"} · MAJU`,
+    description: "가입 전 단가표 확인 · 가입 후 식자재 단가 비교와 간편 주문을 MAJU에서 시작하세요." };
+}
+
 export type PublicDocumentOutput = ReturnType<typeof publicDocumentOutput>;

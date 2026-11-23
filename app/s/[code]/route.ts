@@ -18,6 +18,16 @@ function unavailable() {
 
 export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
+  if (/^[0-9a-f]{32}$/.test(code)) {
+    try {
+      const requester = `${request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"}:${request.headers.get("user-agent") || ""}`;
+      const { resolveDocumentShortLink } = await import("@/lib/pricing/document-share");
+      const link = await resolveDocumentShortLink(code, requester);
+      // Crawlers receive only the token-free metadata URL; humans use the original fragment route.
+      const target = isSharePreviewBot(request.headers.get("user-agent") || "") ? link.previewPath : link.documentPath;
+      return NextResponse.redirect(new URL(target, request.url), { status: 302, headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow" } });
+    } catch { return unavailable(); }
+  }
   if (!shortShareLinksGloballyEnabled() || !process.env.STORE_LINK_SECRET || !isShortShareCode(code)) return unavailable();
   const userAgent = request.headers.get("user-agent") || "";
   const identity = `${request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"}:${userAgent}`;
