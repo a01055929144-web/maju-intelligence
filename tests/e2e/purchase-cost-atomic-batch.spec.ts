@@ -134,7 +134,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
     if ((options.mixed || options.blankUnit || options.newProducts) && route.request().method() === "GET") {
       const params = new URL(route.request().url()).searchParams;
       const rows = params.has("productId") ? historyRows.filter(row => row.product_catalog_id === params.get("productId")) : historyRows;
-      return route.fulfill({ json: params.has("summary") ? { summary: summarizePurchaseHistory(rows) } : { rows, hasMore: false, canCorrect: true } });
+      return route.fulfill({ json: params.has("summary") ? { summary: summarizePurchaseHistory(rows), canCorrect: true } : { rows, hasMore: false, canCorrect: true } });
     }
     return route.fulfill({ json: { summary: [], saved: receipts.at(-1)?.lines.length || 0 } });
   });
@@ -767,7 +767,7 @@ for (const width of [1440, 390]) test(`receipt correction keeps its audit revisi
       return route.fulfill({ json: { ok: true } });
     }
     const params = new URL(route.request().url()).searchParams;
-    return route.fulfill({ json: params.has("summary") ? { summary: summarizePurchaseHistory(rows) } : { rows, hasMore: false, canCorrect: true } });
+    return route.fulfill({ json: params.has("summary") ? { summary: summarizePurchaseHistory(rows), canCorrect: true } : { rows, hasMore: false, canCorrect: true } });
   });
   await page.getByRole("button", { name: "매입 이력", exact: true }).click();
   const history = page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]");
@@ -798,6 +798,36 @@ for (const width of [1440, 390]) test(`receipt correction keeps its audit revisi
   expect(corrections[2]).toMatchObject({ action: "delete", reason: "잘못 추가한 줄 삭제" });
   await page.getByRole("button", { name: "전체", exact: true }).click();
   await expect(page.getByRole("cell", { name: "100원", exact: true }).first()).toBeVisible();
+  expect(dateWrites).toEqual([]); expect(writes).toEqual([]); expect(receipts).toEqual([]); expect(pricingCommands).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+for (const width of [1440, 390]) test(`purchase history shows upload and two prior dates for a large batch at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const { dateWrites, writes, receipts, pricingCommands } = await purchaseUpload(page);
+  const rows: PurchaseHistoryRow[] = Array.from({ length: 456 }, (_, index) => [
+    { receipt_date: "2026-11-20", unit_cost_ex_vat: 120 + index },
+    { receipt_date: "2026-11-19", unit_cost_ex_vat: 110 + index },
+    { receipt_date: "2026-11-18", unit_cost_ex_vat: 100 + index }
+  ]).flat().map((row, index) => ({ ...row, id: `history-${index}`, product_catalog_id: `product-${Math.floor(index / 3)}`,
+    line_key: `line-${Math.floor(index / 3)}`, product_name: `대용량 품목 ${Math.floor(index / 3) + 1}`, spec: "1kg", unit: "봉", supplier_name: "합성 매입처", quantity: 1 }));
+  rows.push({ ...rows[0], id: "history-extra", unit_cost_ex_vat: 121 });
+  await page.route("**/api/price-sheets/receipts*", route => {
+    const params = new URL(route.request().url()).searchParams;
+    const selected = params.has("productId") ? rows.filter((row) => row.product_catalog_id === params.get("productId")) : rows;
+    return route.fulfill({ json: params.has("summary") ? { summary: summarizePurchaseHistory(selected), canCorrect: false } : { rows: selected, hasMore: false, canCorrect: false } });
+  });
+  await page.route("**/api/price-sheets/costs/date-batches*", route => route.fulfill({ json: { enabled: true, historyOnlyDefaultEnabled: true, maxRows: 5000,
+    latestBatch: { id: "batch-large", status: "completed", recalcRunId: null, rowCount: 1369, historyOnlyProductCount: 456,
+      sourceFileName: "합성-1369행.xlsx", receiptDate: "2026-11-20" }, undatedPrices: [] } }));
+  await page.reload();
+  await page.getByRole("button", { name: "매입 이력", exact: true }).click();
+  const history = page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]");
+  const first = history.getByRole("button", { name: "대용량 품목 1", exact: true }).locator("xpath=ancestor::tr[1]");
+  await expect(history).toContainText("원본 1,369행");
+  await expect(first).toContainText("2026-11-20"); await expect(first).toContainText("120원 · 121원");
+  await expect(first).toContainText("2026-11-19"); await expect(first).toContainText("110원");
+  await expect(first).toContainText("2026-11-18"); await expect(first).toContainText("100원");
   expect(dateWrites).toEqual([]); expect(writes).toEqual([]); expect(receipts).toEqual([]); expect(pricingCommands).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

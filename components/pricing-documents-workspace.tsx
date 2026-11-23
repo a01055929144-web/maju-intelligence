@@ -113,6 +113,7 @@ export function PricingDocumentsWorkspace({
   const [extension, setExtension] = useState<{ mode: ExtensionMode; initial: ExtensionReview } | null>(null);
   const [extensionReview, setExtensionReview] = useState<ExtensionReview | null>(null);
   const extensionRetry = useRef<string | null>(null);
+  const [qrDisplayAvailable, setQrDisplayAvailable] = useState(false);
   const [taxMismatchCount, setTaxMismatchCount] = useState(0);
   /* 11/4: 같은 데이터를 문서(A4 종이)로 보거나 표로 봅니다. 기본은 문서 보기. */
   const [docView, setDocView] = useState<"doc" | "table">("doc"),
@@ -136,7 +137,10 @@ export function PricingDocumentsWorkspace({
         if (!draft) return Promise.reject(new Error("연장할 문서를 다시 선택해 주세요."));
         return readDocumentExtensionCatalog(companyId, { id: draft.id, expected: draft.revision, mode: extension.mode }, payload).then(result => result as T);
       }
-      return documentRequest<T>(companyId, action, payload).then(r => r.result);
+      return documentRequest<T>(companyId, action, payload).then(r => {
+        setQrDisplayAvailable(r.qrDisplayAvailable === true);
+        return r.result;
+      });
     },
     [companyId, extension?.mode, draft?.id, draft?.revision],
   );
@@ -1343,6 +1347,12 @@ export function PricingDocumentsWorkspace({
             canManageLinks={manager && storeLinksEnabled && !leadContext}
             publicSharingAvailable={publicSharingAvailable && !leadContext}
             openPublicQr={openPublicQr}
+            qrDisplayAvailable={qrDisplayAvailable}
+            qrDisplayEditable={manager || preview.content.kind === "quote"}
+            onQrSaved={(previousRevision, revision, settings) => {
+              setDraft(current => current?.id === preview.documentId && current.revision === previousRevision
+                ? { ...current, revision, content: { ...current.content, display: { ...parseDisplay(current.content.display), qr: settings } } } : current);
+            }}
           refresh={() => refreshPreview(preview)}
         />
           </div>

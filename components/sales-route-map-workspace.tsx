@@ -1,13 +1,14 @@
 "use client";
+import { QuickRegisterDrawer } from "@/components/map/quick-register-drawer";
 import { copyText } from "@/lib/copy-text";
-import { leadLayerColor, listTabColor, MAP_LAYER_COLORS } from "@/domains/route/map-layer-colors";
+import { leadLayerColor } from "@/domains/route/map-layer-colors";
+import { MapExplorerTabs, MapLayerControl, MapLayerLegend, type MapPanelMode } from "@/components/map/map-layer-controls";
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, } from "react";
-import { DriverSelectField } from "@/components/driver-select-field";
 import { areaLabelMatchesSigungu, phoneDigitsMatch, summarizeMultiFilter } from "@/lib/map-filter-multi";
 import {
   AlertTriangle,
@@ -63,7 +64,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
-import { LoadingState } from "@/components/ui/state";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SearchInput } from "@/components/ui/search-input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -98,28 +98,14 @@ import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/l
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
 import { nextLeadLayerSelection } from "@/lib/map-layer-selection";
 import { getMapLeadReminderLabel } from "@/lib/map-lead-workflow";
-import type {
-  ChurnRiskCustomer,
-  DeliveryCompletionEvent,
-  DeliveryVehicle,
-  PermitLeadActionItem,
-  PermitLeadItem,
-  PossibleDuplicateCustomer,
-  RoutePlan,
-  RoutePlanStop,
-  StaffInvitation,
-  StaffLocationEvent,
-  StaffVehicleLocation
-} from "@/lib/store";
+import type { ChurnRiskCustomer, DeliveryCompletionEvent, DeliveryVehicle, PermitLeadActionItem, PermitLeadItem, RoutePlan, RoutePlanStop, StaffInvitation, StaffLocationEvent, StaffVehicleLocation } from "@/lib/store";
 import type { VehicleMaster, } from "@/domains/delivery/vehicle-master";
 import type { RouteOrderLinkStatus } from "@/application/route/today-route-order-projection";
 import { getTmsServiceDateKey } from "@/domains/delivery/service-date";
 import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
 import { leadDocumentEntryHref, type LeadDocumentEntryAccess } from "@/domains/lead/document-entry";
 import { formatStoreAreaPyeong, STORE_AREA_RANGE_OPTIONS } from "@/domains/lead/store-area";
-import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { formatPhoneNumber } from "@/lib/phone";
 import {
   clamp,
   estimateFuelCostWon,
@@ -153,7 +139,7 @@ import { useLatestRequest } from "@/hooks/use-latest-request";
 // 옛 경로 다시 내보내기(다른 화면이 워크스페이스에서 가져오던 이름).
 export { getLeadConfidence, permitGradeToneClassName };
 export type { StoreRow };
-import { StoreEdit, StoreHistoryItem, StoreAttachment, FuelPriceByType, resolveDisplayIndustry, withPermitLeadCompanyQuery, normalizePhoneNumber } from "@/components/map/map-place-helpers";
+import { StoreEdit, StoreHistoryItem, StoreAttachment, FuelPriceByType, resolveDisplayIndustry, withPermitLeadCompanyQuery } from "@/components/map/map-place-helpers";
 // M4b: 지도 거래처 상세·빠른 카드는 열 때만 내려받는다(components/map/map-place-detail.tsx). 옛 경로 이름은 그대로 내보낸다.
 export const StoreQuickCard = dynamic(() => import("@/components/map/map-place-detail").then((m) => m.StoreQuickCard));
 const StoreDetail = dynamic(() => import("@/components/map/map-place-detail").then((m) => m.StoreDetail));
@@ -168,12 +154,7 @@ const DeliveryAssignmentPanel = dynamic(() => import("@/components/map/vehicle-l
 const LiveVehicleStatusPanel = dynamic(() => import("@/components/map/vehicle-layer").then((m) => m.LiveVehicleStatusPanel));
 const VehicleAnalysisModal = dynamic(() => import("@/components/map/vehicle-layer").then((m) => m.VehicleAnalysisModal));
 
-const CustomerAttachmentUploadPanel = dynamic(
-  () => import("@/components/customer-attachment-upload-panel").then((module) => module.CustomerAttachmentUploadPanel),
-  { loading: () => <LoadingState label="첨부 기능을 준비하는 중입니다." /> }
-);
 type GradeFilter = "all" | RevenueGrade;
-type MapPanelMode = "split" | "driver" | "customer" | "newLead" | "salesLead" | "map";
 
 export type PermitLeadActionKind = "call" | "dm" | "visit" | "hold" | "exclude" | "quote" | "sms" | "talktalk" | "email" | "fax" | "status";
 export type BulkLeadActionBusy = PermitLeadActionKind | "quoteFollowUp" | "";
@@ -3438,350 +3419,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 // 지도 검색에서 찾은 미등록 매장을 화면을 떠나지 않고 그 자리에서 바로 등록할 수 있게 하는 패널입니다.
 // 상호명만 있으면 저장할 수 있고(사업자등록번호는 나중에 서류로 보완), 저장에 성공하면 같은 패널 안에서
 // 바로 사업자등록증·신분증·적재위치 파일을 업로드할 수 있도록 이어집니다.
-function QuickRegisterDrawer({
-  driverOptions,
-  onAddDriver,
-  onAddVehicle,
-  onClose,
-  onRegistered,
-  result,
-  vehicleOptions
-}: {
-  driverOptions?: string[];
-  onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
-  onAddVehicle?: (vehicleName: string) => Promise<{ ok: boolean; message?: string }>;
-  onClose: () => void;
-  onRegistered: () => void;
-  result: ExternalBusinessResult;
-  vehicleOptions?: string[];
-}) {
-  const [customerName, setCustomerName] = useState(result.name);
-  const [address, setAddress] = useState(result.roadAddress || result.address);
-  const [phone, setPhone] = useState(formatPhoneNumber(result.phone));
-  const [industry, setIndustry] = useState(result.industry);
-  const [deliveryManager, setDeliveryManager] = useState("");
-  const [deliveryVehicle, setDeliveryVehicle] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [createdCustomer, setCreatedCustomer] = useState<{ id: string; name: string; assignmentNotice?: string } | null>(null);
-  // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 서버가 상호명이 같은 기존 거래처를
-  // 발견하면 바로 저장하지 않고 이 상태에 그 목록을 담아 확인창을 띄웁니다. 사용자가 "그래도 등록"을
-  // 선택해야만 confirmDuplicate: true로 다시 요청을 보내 실제로 저장합니다.
-  const [duplicateMatches, setDuplicateMatches] = useState<PossibleDuplicateCustomer[] | null>(null);
-  // 2026-08-31 에러 처리/복원력 감사 후속: 카카오 검색 결과로 채워진 값을 그대로 두거나(=아직
-  // 손대지 않음) 이미 등록을 마쳤다면 이탈 경고를 띄우지 않고, 사용자가 실제로 뭔가 고치거나
-  // 담당자/배송차를 지정했을 때만(=저장 안 하고 나가면 다시 입력해야 함) 경고합니다.
-  const isDraftDirty =
-    !createdCustomer &&
-    (customerName !== (result.name || "") ||
-      address !== (result.roadAddress || result.address || "") ||
-      phone !== (result.phone || "") ||
-      industry !== (result.industry || "") ||
-      Boolean(deliveryManager) ||
-      Boolean(deliveryVehicle));
-  useUnsavedChangesWarning(isDraftDirty);
-
-  async function saveCustomer(confirmDuplicate = false) {
-    if (!customerName.trim() || isSaving) return;
-
-    setIsSaving(true);
-    setSaveError("");
-
-    try {
-      const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
-      const response = await fetchWithTimeout("/api/customers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address,
-          businessStatus: "확인 필요",
-          companyId: companyId || undefined,
-          confirmDuplicate,
-          customerName,
-          deliveryManager: deliveryManager || undefined,
-          deliveryVehicle: deliveryVehicle || undefined,
-          industry: industry || "미분류",
-          kakaoPlaceUrl: result.kakaoPlaceUrl,
-          phone: normalizePhoneNumber(phone),
-          validateBusinessNumber: false
-        })
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.message || "거래처 등록에 실패했습니다.");
-      if (payload?.possibleDuplicate) {
-        setDuplicateMatches(payload.duplicateMatches || []);
-        return;
-      }
-
-      const customerId = String(payload?.customer?.id || "");
-      if (!customerId) throw new Error("거래처는 저장됐지만 ID를 확인하지 못했습니다. 거래처 관리에서 확인해주세요.");
-
-      setCreatedCustomer({ id: customerId, name: customerName, assignmentNotice: payload?.assignmentNotice });
-      onRegistered();
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "거래처 등록에 실패했습니다.");
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <>
-      <button aria-label="빠른 등록 닫기" className="fixed inset-0 z-40 bg-slate-950/45" onClick={onClose} type="button" />
-      <aside className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-[480px] flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <header className="maju-card-header border-b px-4 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-xs font-black text-teal-700">지도 검색 · 빠른 등록</p>
-              <h3 className="mt-1 truncate text-xl font-black text-slate-950">{createdCustomer ? `${createdCustomer.name} 등록 완료` : "거래처로 등록"}</h3>
-              <p className="mt-1 text-xs font-bold text-slate-500">
-                {createdCustomer ? "서류를 업로드하면 바로 사용할 수 있습니다." : "이름과 주소만 있으면 바로 저장할 수 있습니다."}
-              </p>
-            </div>
-            <button
-              aria-label="닫기"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-rose-50 hover:text-rose-700"
-              onClick={onClose}
-              type="button"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-4">
-          {createdCustomer ? (
-            <div className="space-y-4">
-              <CustomerAttachmentUploadPanel customerId={createdCustomer.id} customerName={createdCustomer.name} />
-              {createdCustomer.assignmentNotice ? (
-                <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-bold text-teal-800">
-                  {createdCustomer.assignmentNotice}
-                </div>
-              ) : null}
-              <button className="maju-button-primary flex h-11 w-full items-center justify-center gap-2 text-sm" onClick={onClose} type="button">
-                <Check className="h-4 w-4" />
-                완료
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3 rounded-md border border-slate-200 bg-white p-4">
-              <label className="block space-y-1.5">
-                <span className="text-xs font-black text-slate-500">상호명 (필수)</span>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setCustomerName(event.target.value)}
-                  value={customerName}
-                />
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-black text-slate-500">주소</span>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setAddress(event.target.value)}
-                  value={address}
-                />
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-black text-slate-500">연락처</span>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setPhone(formatPhoneNumber(event.target.value))}
-                  value={phone}
-                />
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-black text-slate-500">업종</span>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setIndustry(event.target.value)}
-                  value={industry}
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-black text-slate-500">담당자</span>
-                  <DriverSelectField driverOptions={driverOptions || []} onAddDriver={onAddDriver} onChange={setDeliveryManager} value={deliveryManager} />
-                </label>
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-black text-slate-500">배송차</span>
-                  <DriverSelectField
-                    driverOptions={vehicleOptions || []}
-                    entityLabel="배송차"
-                    onAddDriver={onAddVehicle}
-                    onChange={setDeliveryVehicle}
-                    value={deliveryVehicle}
-                  />
-                </label>
-              </div>
-              <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-blue-800">
-                사업자등록번호는 지금 없어도 됩니다. 저장 후 사업자등록증을 업로드해 보완할 수 있습니다.
-              </p>
-              {saveError ? <p className="text-xs font-bold text-rose-600">{saveError}</p> : null}
-              <button
-                className="maju-button-primary flex h-11 w-full items-center justify-center gap-2 text-sm disabled:opacity-60"
-                disabled={!customerName.trim() || isSaving}
-                onClick={() => saveCustomer()}
-                type="button"
-              >
-                {isSaving ? "저장 중" : "거래처로 등록"}
-              </button>
-            </div>
-          )}
-        </div>
-      </aside>
-      {duplicateMatches ? (
-        <ConfirmDialog
-          cancelLabel="취소"
-          confirmLabel="그래도 등록"
-          message={`이름이 같은 거래처가 이미 있습니다.\n${duplicateMatches.map((match) => `· ${match.customerName}${match.address ? ` (${match.address})` : ""}`).join("\n")}\n\n그래도 새 거래처로 등록하시겠습니까?`}
-          onCancel={() => setDuplicateMatches(null)}
-          onConfirm={() => {
-            setDuplicateMatches(null);
-            saveCustomer(true);
-          }}
-          title="중복 의심 거래처"
-          tone="default"
-        />
-      ) : null}
-    </>
-  );
-}
-
-function MapExplorerTabs({
-  active,
-  counts,
-  onSelect
-}: {
-  readonly active: MapPanelMode;
-  readonly counts: { customers: number; drivers: number; newLeads: number; salesLeads: number };
-  readonly onSelect: (mode: MapPanelMode) => void;
-}) {
-  const tabs = [
-    { count: counts.drivers, label: "담당자", color: "drivers" as const, value: "driver" as const },
-    { count: counts.customers, label: "거래처", color: "customers" as const, value: "customer" as const },
-    { count: counts.newLeads, label: "신규", color: "new" as const, value: "newLead" as const },
-    { count: counts.salesLeads, label: "영업", color: "sales" as const, value: "salesLead" as const }
-  ];
-  return (
-    <nav aria-label="지도 통합 탐색" className="grid shrink-0 grid-cols-4 gap-1 border-b border-slate-200 bg-slate-50 p-1.5">
-      {tabs.map((tab) => (
-        <button
-          aria-current={active === tab.value ? "page" : undefined}
-          className={`min-w-0 rounded-md px-1.5 py-1.5 text-xs font-bold transition ${
-            active === tab.value ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:bg-white hover:text-slate-900"
-          }`}
-          key={tab.value}
-          onClick={() => onSelect(tab.value)}
-          style={active === tab.value ? { color: listTabColor(tab.color) } : undefined}
-          type="button"
-        >
-          <span className="block truncate">{tab.label}{" "}</span>
-          <span className="mt-0.5 block text-xs font-semibold tabular-nums opacity-70">{tab.count.toLocaleString()}</span>
-        </button>
-      ))}
-    </nav>
-  );
-}
-
-function MapLayerControl({
-  className,
-  counts,
-  customersOn,
-  headerOffsetPx,
-  markerViewMode,
-  onSelectLeadLayer,
-  onSelectMarkerMode,
-  onToggleCustomers,
-  showAllLeadsOnMap,
-  typeFilter
-}: {
-  readonly className: string;
-  readonly customersOn: boolean;
-  readonly onToggleCustomers: () => void;
-  readonly counts: {
-    activeVehicles: number;
-    customers: number;
-    newLeads: number;
-    salesLeads: number;
-  };
-  readonly headerOffsetPx: number;
-  readonly markerViewMode: MarkerViewMode;
-  readonly onSelectLeadLayer: (type: PermitLeadType) => void;
-  readonly onSelectMarkerMode: () => void;
-  readonly showAllLeadsOnMap: boolean;
-  readonly typeFilter: "all" | PermitLeadType;
-}) {
-  // 시안 ⑫ 레이어 바: 색 점 + 이름 + 건수의 둥근 버튼. 켜짐은 실선, 꺼짐은 점선·흐린 글자.
-  const layerButtonClass = (active: boolean) =>
-    `flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs transition ${
-      active ? "border border-slate-400 bg-white text-slate-900" : "border border-dashed border-slate-300 bg-slate-50 text-slate-400 hover:text-slate-600"
-    }`;
-  const newOn = showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "new");
-  const salesOn = showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "sales");
-  const vehicleOn = markerViewMode === "vehicle";
-
-  return (
-    <div
-      aria-label="지도 레이어"
-      className={`pointer-events-auto absolute left-3 z-10 hidden max-w-[calc(100%-1.5rem)] items-center gap-1 overflow-x-auto rounded-[10px] bg-white p-1 shadow-[0_2px_8px_rgba(15,23,42,.12)] lg:flex ${className}`}
-      style={{ top: headerOffsetPx ? `${headerOffsetPx + 12}px` : "0.75rem" }}
-    >
-      <button aria-pressed={customersOn} className={layerButtonClass(customersOn)} onClick={onToggleCustomers} title="거래처 레이어 켜기 또는 끄기" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: MAP_LAYER_COLORS.customer }} />
-        거래처 {counts.customers}
-      </button>
-      <button aria-pressed={newOn} className={layerButtonClass(newOn)} onClick={() => onSelectLeadLayer("new")} title="신규 리드 레이어 켜기 또는 끄기" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: MAP_LAYER_COLORS.newLead }} />
-        신규 {counts.newLeads}
-      </button>
-      <button aria-pressed={salesOn} className={layerButtonClass(salesOn)} onClick={() => onSelectLeadLayer("sales")} title="영업 리드 레이어 켜기 또는 끄기" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: MAP_LAYER_COLORS.salesLead }} />
-        영업 {counts.salesLeads}
-      </button>
-      <button aria-pressed={vehicleOn} className={layerButtonClass(vehicleOn)} onClick={onSelectMarkerMode} title="거래처 마커를 차량별 또는 등급별로 표시" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-sm" style={{ backgroundColor: MAP_LAYER_COLORS.vehicle }} />
-        차량 {counts.activeVehicles}
-      </button>
-    </div>
-  );
-}
-
-function MapLayerLegend({
-  counts
-}: {
-  readonly counts: {
-    activeVehicles: number;
-    completedCustomers: number;
-    customers: number;
-    newLeads: number;
-    salesLeads: number;
-    staleVehicles: number;
-    lastOperationVehicles: number;
-  };
-}) {
-  return (
-    <div className="pointer-events-none absolute inset-x-2 bottom-2 z-10 flex justify-center sm:inset-x-3 sm:bottom-3 lg:hidden">
-      <div
-        aria-label="지도 마커 범례"
-        className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-xs font-bold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,.16)] backdrop-blur sm:text-[11px] lg:max-w-[calc(100%-640px)] xl:max-w-[calc(100%-700px)]"
-      >
-        <span className="font-black text-slate-500">범례</span>
-        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-white" style={{ backgroundColor: MAP_LAYER_COLORS.customer }} />거래처 {counts.customers}</span>
-        {counts.newLeads > 0 ? (
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded" style={{ backgroundColor: MAP_LAYER_COLORS.newLead }} />신규 리드 {counts.newLeads}</span>
-        ) : null}
-        {counts.salesLeads > 0 ? (
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded" style={{ backgroundColor: MAP_LAYER_COLORS.salesLead }} />영업 리드 {counts.salesLeads}</span>
-        ) : null}
-        <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">🚚</span>실시간 {counts.activeVehicles}</span>
-        {counts.staleVehicles ? <span className="inline-flex items-center gap-1 text-slate-500"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-xs text-white">🚚</span>지연 {counts.staleVehicles}</span> : null}
-        {counts.lastOperationVehicles ? <span className="inline-flex items-center gap-1 text-slate-400"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-300 text-xs text-slate-700">🚚</span>마지막 운행 {counts.lastOperationVehicles}</span> : null}
-        <span className="inline-flex items-center gap-1 text-emerald-700"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">✓</span>오늘 완료 {counts.completedCustomers}</span>
-      </div>
-    </div>
-  );
-}
-
 function CustomerDirectoryView({
   dataRegistrationHref,
   driverOptions,

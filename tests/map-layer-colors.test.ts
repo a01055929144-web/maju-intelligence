@@ -48,18 +48,19 @@ describe("지도 색 기준 한 곳 (48-1b)", () => {
 
 describe("지도 화면이 이 기준을 쓴다 (소스 확인)", () => {
   const workspace = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+  const layerControls = readFileSync("components/map/map-layer-controls.tsx", "utf8"); // D-6 ②: 탭·레이어 바·범례
   const detail = readFileSync("components/map/map-place-detail.tsx", "utf8");
   const kakao = readFileSync("components/kakao-address-map.tsx", "utf8");
   it("색 HEX를 화면 파일에 다시 적지 않는다", () => {
     expect(workspace).not.toContain('"new" ? "#7c3aed" : "#0f766e"'); // 리드 마커 색(차량별 팔레트의 보라는 차량 구분용이라 별개)
     expect(workspace).toContain("markerColor: leadLayerColor(");
-    expect(workspace).toContain("listTabColor(tab.color)");
+    expect(layerControls).toContain("listTabColor(tab.color)");
     expect(kakao).not.toContain('"background:#7c3aed');
     expect(detail).not.toContain("bg-violet-700");
     expect(detail).toContain("MAP_LAYER_COLORS.customer");
   });
   it("레이어 바 거래처는 켜고 끄는 버튼(aria-pressed)이고 꺼 두면 거래처 마커만 뺀다", () => {
-    expect(workspace).toContain("aria-pressed={customersOn}");
+    expect(layerControls).toContain("aria-pressed={customersOn}");
     expect(workspace).toContain('markers.filter((marker) => marker.tone !== "customer")');
     expect(workspace).not.toContain("거래처 레이어(항상 표시)");
   });

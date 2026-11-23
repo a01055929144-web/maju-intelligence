@@ -238,6 +238,18 @@ describe("product field edits", () => {
 });
 
 describe("purchase history", () => {
+  it("shows the upload date and two earlier purchase dates without changing same-day costs", async () => {
+    const { purchaseHistoryMoments } = await import("../domains/pricing/purchase-receipt");
+    expect(purchaseHistoryMoments([
+      { date: "2026-11-20", cost: 120 }, { date: "2026-11-20", cost: 110 },
+      { date: "2026-11-19", cost: 100 }, { date: "2026-11-18", cost: 90 }
+    ], "2026-11-20")).toEqual({
+      upload: { date: "2026-11-20", costs: [120, 110] },
+      recent: { date: "2026-11-19", costs: [100] },
+      previous: { date: "2026-11-18", costs: [90] }
+    });
+  });
+
   it("fills a blank supplier and unit from a single catalog link without counting the same cost twice", async () => {
     const { mergePurchaseHistoryRows, resolvePurchaseHistoryRows, summarizePurchaseHistory } = await import("../domains/pricing/purchase-receipt");
     const receipt = { id: "receipt", product_catalog_id: "p1", line_key: "raw", product_name: "양파", receipt_date: "2026-11-05", spec: "10kg", unit: null, supplier_name: null, quantity: 3, unit_cost_ex_vat: 1200 };

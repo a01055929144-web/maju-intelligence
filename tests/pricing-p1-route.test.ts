@@ -221,3 +221,15 @@ it("gates the new VAT contract on the authenticated company before any write", a
     if (allowed === undefined) delete process.env.PRICING_DOCUMENT_VAT_COMPANY_IDS; else process.env.PRICING_DOCUMENT_VAT_COMPANY_IDS = allowed;
   }
 });
+
+it("gates QR display on the authenticated company and never trusts the query company", async () => {
+  const before = process.env.FEATURE_DOCUMENT_QR_DISPLAY_COMPANY_IDS;
+  const request = () => new NextRequest("http://localhost/api/pricing-documents?companyId=other-company", { method: "POST", body: JSON.stringify({ action: "save-qr-display", id: "10000000-0000-4000-8000-000000000001", expected: 19, settings: { position: "top-right", size: "large" } }) });
+  try {
+    process.env.FEATURE_DOCUMENT_QR_DISPLAY_COMPANY_IDS = "other-company";
+    expect((await POST(request())).status).toBe(404); expect(mocks.request).not.toHaveBeenCalled();
+    process.env.FEATURE_DOCUMENT_QR_DISPLAY_COMPANY_IDS = c;
+    expect((await POST(request())).status).toBe(200);
+    expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ companyId: c, qrDisplayEnabled: true }), "save-qr-display", { id: "10000000-0000-4000-8000-000000000001", expected: 19, settings: { position: "top-right", size: "large" } });
+  } finally { if (before === undefined) delete process.env.FEATURE_DOCUMENT_QR_DISPLAY_COMPANY_IDS; else process.env.FEATURE_DOCUMENT_QR_DISPLAY_COMPANY_IDS = before; }
+});

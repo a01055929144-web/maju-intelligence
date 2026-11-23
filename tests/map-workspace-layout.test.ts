@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const workspaceSource = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+// D-6 ②: 탭·레이어 바·범례는 components/map/map-layer-controls.tsx로 옮겼다.
+const layerControlsSource = readFileSync("components/map/map-layer-controls.tsx", "utf8");
 // M4a: 오른쪽 목록 패널은 components/map/map-side-panel.tsx(정렬 옵션은 lead-list-sort.ts)로 옮겼다.
 const sidePanelSource = readFileSync("components/map/map-side-panel.tsx", "utf8");
 // M4b: 거래처 상세·빠른 카드는 components/map/map-place-detail.tsx(순수 헬퍼는 map-place-helpers.ts)로 옮겼다.
@@ -53,10 +55,10 @@ describe("PC map workspace layout", () => {
   });
 
   it("places working layer controls at the upper-left of the map", () => {
-    expect(workspaceSource).toContain('aria-label="지도 레이어"');
-    expect(workspaceSource).toContain('onSelectLeadLayer("new")');
-    expect(workspaceSource).toContain('onSelectLeadLayer("sales")');
-    expect(workspaceSource).toContain("headerOffsetPx + 12");
+    expect(layerControlsSource).toContain('aria-label="지도 레이어"');
+    expect(layerControlsSource).toContain('onSelectLeadLayer("new")');
+    expect(layerControlsSource).toContain('onSelectLeadLayer("sales")');
+    expect(layerControlsSource).toContain("headerOffsetPx + 12");
   });
 
   it("collapses the assignment panel without changing its selected filter", () => {
@@ -155,8 +157,8 @@ describe("시안 ⑫ 지도 기본 배치", () => {
     const source = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
     expect(source).toContain('useState<MapPanelMode>("split")');
     expect(source).toContain('const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v2"');
-    expect(source).toContain("function MapExplorerTabs(");
-    expect(source).toContain('{ count: counts.drivers, label: "담당자"');
+    expect(layerControlsSource).toContain("function MapExplorerTabs(");
+    expect(layerControlsSource).toContain('{ count: counts.drivers, label: "담당자"');
     expect(source).toContain('${store.deliveryDriver || ""}');
     expect(source).toContain('gradeFilter === "all" || lead.grade === gradeFilter');
     expect(source).toContain('label: "코스"');

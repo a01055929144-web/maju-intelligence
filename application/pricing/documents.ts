@@ -2,6 +2,7 @@ import { calculatePrice } from "../../domains/pricing/price-rules";
 import { DocumentSendError, parseDocumentSend } from "../../domains/pricing/document-send";
 import { parseDocumentShare } from "../../domains/pricing/document-share";
 import {
+  DOCUMENT_QR_POSITIONS, DOCUMENT_QR_SIZES, documentQrDisplay,
   dateField,
   field,
   isId,
@@ -18,6 +19,7 @@ export type DocumentScope = {
   sharingEnabled?: boolean;
   actorName?: string;
   documentVatEnabled?: boolean;
+  qrDisplayEnabled?: boolean;
 };
 export interface PricingDocumentsRepository {
   request<T>(scope: DocumentScope, action: string, payload: object): Promise<T>;
@@ -33,6 +35,11 @@ function extensionToken(value: unknown) {
 export function pricingDocuments(repository: PricingDocumentsRepository) {
   return {
     read<T>(scope: DocumentScope, action: string, payload: object) {
+      if (action === "qr-display") {
+        if (!scope.qrDisplayEnabled) throw new DocumentSendError("QR 표시 설정을 사용할 수 없습니다.", 404);
+        if (!("id" in payload) || !isId(payload.id)) throw new PricingInputError("문서를 확인해 주세요.");
+        return repository.request<T>(scope, action, { id: payload.id });
+      }
       if (
         ![
           "list",
@@ -61,6 +68,15 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
       if (!Number.isSafeInteger(body.expected) || Number(body.expected) < 0)
         throw new PricingInputError("저장 버전을 확인해 주세요.");
       const expected = Number(body.expected);
+      if (action === "save-qr-display") {
+        if (!scope.qrDisplayEnabled) throw new DocumentSendError("QR 표시 설정을 사용할 수 없습니다.", 404);
+        if (expected < 1 || expected >= Number.MAX_SAFE_INTEGER) throw new PricingInputError("저장 버전을 확인해 주세요.");
+        const settings = documentQrDisplay(body.settings);
+        const raw = object(body.settings);
+        if (!(DOCUMENT_QR_POSITIONS as readonly unknown[]).includes(raw.position) || !(DOCUMENT_QR_SIZES as readonly unknown[]).includes(raw.size))
+          throw new PricingInputError("QR 위치와 크기를 확인해 주세요.");
+        return repository.request<T>(scope, action, { id, expected, settings });
+      }
       if (action === "archive") {
         if (!scope.archiveEnabled || expected < 1 || typeof body.archived !== "boolean") throw new PricingInputError("문서 보관을 사용할 수 없습니다.");
         return repository.request<T>(scope, action, { id, expected, archived: body.archived });

@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomerOperationalName, getRequestAuthScope } from "../../../lib/auth";
 import { isFeatureEnabled } from "../../../lib/feature-flags";
-import { priceSheetsEnabled } from "../../../lib/pricing/feature";
+import { priceSheetsEnabled, documentQrDisplayEnabled } from "../../../lib/pricing/feature";
 import { canManagePriceSheets } from "../../../domains/pricing/access";
 import { pricingDocuments } from "../../../application/pricing/documents";
 import { pricingDocumentsRepository } from "../../../lib/pricing/documents-repository";
@@ -75,6 +75,7 @@ async function handle(request: NextRequest, write: boolean) {
       )
       .digest("hex"),
     manager,
+    ...(documentQrDisplayEnabled(auth.companyId) ? { qrDisplayEnabled: true } : {}),
     documentVatEnabled: documentVatEnabled(auth.companyId),
     ...(documentSharingEnabled(auth.companyId) ? { sharingEnabled: true, actorName: resolveLeadContactActorName([getCustomerOperationalName(auth.customerSession), auth.customerSession?.name, auth.adminSession?.name]) } : {}),
     ...(documentArchiveEnabled() ? { archiveEnabled: true } : {}),
@@ -129,7 +130,7 @@ async function handle(request: NextRequest, write: boolean) {
           },
         );
     return NextResponse.json(
-      { result, manager, ...(scope.archiveEnabled ? { archiveAvailable: true } : {}) },
+      { result, manager, ...(scope.qrDisplayEnabled ? { qrDisplayAvailable: true } : {}), ...(scope.archiveEnabled ? { archiveAvailable: true } : {}) },
       { headers: { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" } },
     );
   } catch (error) {
