@@ -18,7 +18,7 @@ export type ExtensionReview = {
 };
 
 export async function readDocumentExtensionPolicy(companyId: string, id: string): Promise<ExtensionPolicy> {
-  const { result } = await documentRequest<ExtensionPolicy>(companyId, "extension-policy", { id });
+  const { result } = await documentRequest<ExtensionPolicy>(companyId, "extension-policy", { id }, true);
   if (!result || typeof result.customerLinked !== "boolean" || typeof result.canAddProducts !== "boolean" ||
     !Array.isArray(result.allowedModes) || result.allowedModes.some(mode => !["keep", "latest"].includes(mode)) ||
     !["company_common_keep_only", "customer_prices_available"].includes(result.reason) ||
