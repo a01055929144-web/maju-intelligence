@@ -24,5 +24,5 @@ export function useDocumentOrderFooter(companyId: string | undefined, customerId
     return () => { active = false; };
   }, [key, companyId, customerId]);
   return { items: !key ? undefined : result?.key === key ? result.items : orderFooterNotice("주문 설정 확인 중"),
-    error: result?.key === key ? result.error : "", ready };
+    error: result?.key === key ? result.error : "", loading: Boolean(key && result?.key !== key), ready };
 }

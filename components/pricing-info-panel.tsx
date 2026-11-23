@@ -83,8 +83,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent, orde
   const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
   const [basisBusy, setBasisBusy] = useState(false);
   const orderFooter = useDocumentOrderFooter(companyId, content.customerId, orderFooterAvailable);
-  const savedDisplay = parseDisplay(content.display);
-  const display = { ...savedDisplay, info: withOrderFooter(savedDisplay.info, orderFooter.items) };
+  const display = parseDisplay(content.display);
   const latest = useRef(content);
   latest.current = content;
 
@@ -288,7 +287,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent, orde
             <span aria-hidden className="cursor-grab select-none pt-1 text-slate-400">⠿</span>
             <div className="min-w-0 flex-1 space-y-0.5">
               <input aria-label="정보 이름" className="w-full rounded border border-transparent px-1 text-xs font-bold hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={30} onChange={(e) => updateItem(item.key, { label: e.target.value })} value={item.label} />
-              <input aria-label={`${item.label} 문서에 표시할 값`} className="w-full rounded border border-transparent px-1 text-xs text-slate-700 hover:border-slate-200 focus:border-teal-500" disabled={!editable || orderFooterAvailable && (ORDER_FOOTER_KEYS as readonly string[]).includes(item.key)} maxLength={200} onChange={(e) => updateItem(item.key, { value: e.target.value })} value={item.value} />
+              <input aria-label={`${item.label} 문서에 표시할 값`} className="w-full rounded border border-transparent px-1 text-xs text-slate-700 hover:border-slate-200 focus:border-teal-500" disabled={!editable || orderFooterAvailable && (ORDER_FOOTER_KEYS as readonly string[]).includes(item.key)} maxLength={200} onChange={(e) => updateItem(item.key, { value: e.target.value })} value={withOrderFooter([item], orderFooter.items)[0].value} />
             </div>
             {editable ? (
               <div className="flex shrink-0 flex-col items-center text-[11px] text-slate-500">
@@ -313,7 +312,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent, orde
           <div className="flex min-h-7 items-center gap-2 text-xs">
             <span className={`shrink-0 font-semibold ${c.value ? "" : "text-slate-400"}`}>{c.label}</span>
             <span className="min-w-0 flex-1 truncate text-slate-500" title={c.value}>{c.value || "회사 정보에 없음"}</span>
-            {editable && c.value ? <button className="shrink-0 font-bold text-teal-700" onClick={() => toggle(c, true)} type="button">+ 넣기</button> : null}
+            {editable && c.value ? <button disabled={orderFooterAvailable && (ORDER_FOOTER_KEYS as readonly string[]).includes(c.key) && (orderFooter.loading || Boolean(orderFooter.error))} className="shrink-0 font-bold text-teal-700" onClick={() => toggle(c, true)} type="button">+ 넣기</button> : null}
             {canEditProfile && !c.value && c.editor !== "none" && editing?.key !== c.key ? <button className="shrink-0 font-bold text-teal-700" onClick={() => { setMessage(""); setEditing({ key: c.key, draft: initialDraft(c, profile?.values || {}) }); }} type="button">+ 입력</button> : null}
           </div>
           {editing?.key === c.key ? editorFor(c) : null}
