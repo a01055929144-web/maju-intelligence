@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { documentSharePreviewId } from "@/domains/pricing/document-share";
+import { documentShareLinkId } from "@/domains/pricing/document-share";
 import { NextResponse } from "next/server";
 import { issueStoreLinkToken } from "@/lib/pricing/store-link-token";
 import { isSharePreviewBot, isShortShareCode, shortShareDevice, shortShareLinksEnabled, shortShareLinksGloballyEnabled } from "@/lib/pricing/short-share-feature";
@@ -14,12 +14,12 @@ const unavailableHeaders = {
 };
 
 function unavailable() {
-  return new NextResponse("사용할 수 없는 매장 링크입니다.", { status: 404, headers: unavailableHeaders });
+  return new NextResponse("사용할 수 없는 공유 링크입니다. 발행 회사에 새 링크를 요청해 주세요.", { status: 404, headers: unavailableHeaders });
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  if (documentSharePreviewId(code)) {
+  if (documentShareLinkId(code)) {
     try {
       const requester = `${request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"}:${request.headers.get("user-agent") || ""}`;
       const { resolveDocumentShortLink } = await import("@/lib/pricing/document-share");

@@ -87,7 +87,7 @@ beforeEach(() => {
       if (failBinding) { failBinding = false; throw new Error("synthetic atomic commit response lost"); }
       return { sendId: saved.id, leadActionId: saved.id, documentId: saved.document_id, documentVersionId: saved.document_version_id };
     }
-    const matches = (r: Row) => Array.from(p.entries()).every(([k, v]) => !v.startsWith("eq.") || r[k] === v.slice(3)) &&
+    const matches = (r: Row) => (!p.has("or") || p.get("or")!.slice(1, -1).split(",").some(part => part === `preview_id.eq.${r.preview_id}` || part === `id.eq.${r.id}`)) && Array.from(p.entries()).every(([k, v]) => !v.startsWith("eq.") || r[k] === v.slice(3)) &&
       Array.from(p.entries()).every(([k, v]) => v !== "is.null" || r[k] == null);
     if (table === "pricing_document_share_links" || table === "pricing_document_sends") {
       const rows = table.endsWith("share_links") ? links : sends;
@@ -702,7 +702,32 @@ it("CX-132 hides metadata when public entry is disabled and preserves legacy lea
 it("CX-132 cannot derive document access from a metadata-only preview ID or tampered short tag", async () => {
   const result = await brandedShare(), seenBefore = mocks.db.mock.calls.length;
   const idOnly = String(links[0].preview_id).replaceAll("-", "");
-  for (const code of [idOnly, idOnly + ".AAAAAAAAAAAAAAAAAAAAAA", result.publicUrl.slice(3).slice(0, -1) + "!"])
+  const signed = result.publicUrl.slice(3), badTag = signed.slice(0, 33) + (signed[33] === "A" ? "B" : "A") + signed.slice(34);
+  for (const code of [idOnly, idOnly + ".AAAAAAAAAAAAAAAAAAAAAA", badTag, signed.slice(0, -1) + "!"])
     await expect(resolveDocumentShortLink(code, "fixture")).rejects.toMatchObject({ status: 404 });
   expect(mocks.db.mock.calls.length).toBe(seenBefore);
+});
+
+it("CX-132 aliases legacy rows without backfilling metadata, replacing links or republishing", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const input = { ...prepare, leadId: null };
+  const old = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, input);
+  expect(links[0].preview_id).toBeNull(); const frozen = JSON.stringify({ links, content });
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", company);
+  const alias = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, input);
+  expect(alias.shareLinkId).toBe(old.shareLinkId); expect(alias.publicUrl).toMatch(/^\/s\/[0-9a-f]{32}\.[A-Za-z0-9_-]{22}$/);
+  expect(JSON.stringify({ links, content })).toBe(frozen);
+  expect((await openShort(alias.publicUrl.slice(3))).status).toBe(302);
+  const bot = await openShort(alias.publicUrl.slice(3), "KAKAOTALK-SCRAP/1.0");
+  expect(bot.headers.get("location")).toBe(`https://fixture.test/q/${links[0].id}`);
+  expect(await readDocumentSharePreview(String(links[0].id))).toMatchObject({ title: "MAJU · 합성 회사 합성 견적" });
+  expect((await publicPost(request({ token: token(old.publicUrl) }))).status).toBe(200);
+  expect(JSON.stringify({ links, content })).toBe(frozen); expect(sends).toEqual([]); expect(actions).toEqual([]);
+});
+
+it("CX-132 refuses ambiguous metadata IDs instead of selecting another share", async () => {
+  await brandedShare();
+  const previewId = String(links[0].preview_id);
+  links.push({ ...links[0], id: previewId, preview_id: null, idempotency_key: "90000000-0000-4000-8000-000000000002" });
+  expect(await readDocumentSharePreview(previewId)).toBeNull();
 });

@@ -38,11 +38,11 @@ export function publicDocumentOutput(version: DocumentVersion, day?: string) {
   };
 }
 /** Reuse the random preview UUID: UUID-v4 opaque namespace, distinct from 10-character store codes. */
-export function documentShareCode(previewId: string) {
-  if (!isId(previewId)) throw new Error("Invalid document preview");
-  return previewId.replaceAll("-", "").toLowerCase();
+export function documentShareCode(shareLinkId: string) {
+  if (!isId(shareLinkId)) throw new Error("Invalid document share");
+  return shareLinkId.replaceAll("-", "").toLowerCase();
 }
-export function documentSharePreviewId(code: string) {
+export function documentShareLinkId(code: string) {
   if (!/^[0-9a-f]{32}\.[A-Za-z0-9_-]{22}$/.test(code)) return null;
   code = code.slice(0, 32);
   const id = [code.slice(0, 8), code.slice(8, 12), code.slice(12, 16), code.slice(16, 20), code.slice(20)].join("-");
