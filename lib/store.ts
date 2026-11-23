@@ -31,7 +31,8 @@ import {
   appUsersRequest,
   companiesRequest,
   isMissingTelegramChatIdColumnError,
-  supabaseStorageRequest
+  supabaseStorageRequest,
+  upsertCompany
 } from "./store/00-supabase-helpers";
 export { supabaseStorageRequest } from "./store/00-supabase-helpers";
 import {
@@ -50,6 +51,7 @@ import {
   SALES_TRANSACTIONS_FETCH_LIMIT
 } from "./store/01-customer-master-select";
 import { isMissingStaffMobileLocationSchemaError, staffStoreRequest } from "./store/01-staff-store-errors";
+export { getExcelMappingPreset, upsertExcelMappingPreset, deleteExcelMappingPreset } from "./store/08-excel-mapping-presets";
 import type { TerritoryResolutionContext } from "./store/08-delivery-territories";
 import { assignCustomerByTerritory, assignCustomerByTerritoryFromContext, getCompanyStaffMemberOptions, getCustomerAssignmentOptionValues, getDeliveryTerritories, loadTerritoryResolutionContext, saveDeliveryTerritory } from "./store/08-delivery-territories";
 export { assignCustomerByTerritory, getCompanyStaffMemberOptions, getCustomerAssignmentOptionValues, getDeliveryTerritories, saveDeliveryTerritory };
@@ -976,130 +978,6 @@ const SALES_QUOTE_PHOTO_BUCKET = CUSTOMER_ATTACHMENT_BUCKET;
 const AUTH_CREDENTIALS_ID = "maju-default";
 
 
-
-export async function getExcelMappingPreset(
-  uploadType: "customer-master" | "sales-analysis",
-  companyId?: string,
-  presetName = "default"
-): Promise<{ persisted: boolean; preset: ExcelMappingPreset | null }> {
-  const id = companyId || getDefaultCompanyId();
-  if (!isProductionStoreConfigured()) return { persisted: false, preset: null };
-
-  const rows = await supabaseRequest<
-    Array<{
-      id: string;
-      company_id: string;
-      erp_name: string | null;
-      mapping: ColumnMapping | null;
-      preset_name: string;
-      upload_type: "customer-master" | "sales-analysis";
-      updated_at: string;
-    }>
-  >(
-    `excel_mapping_presets?select=id,company_id,upload_type,preset_name,erp_name,mapping,updated_at&company_id=eq.${encodeURIComponent(
-      id
-    )}&upload_type=eq.${encodeURIComponent(uploadType)}&preset_name=eq.${encodeURIComponent(presetName)}&limit=1`
-  );
-
-  const row = rows[0];
-  if (!row) return { persisted: true, preset: null };
-
-  return {
-    persisted: true,
-    preset: {
-      id: row.id,
-      companyId: row.company_id,
-      erpName: row.erp_name || undefined,
-      mapping: row.mapping || {},
-      presetName: row.preset_name,
-      uploadType: row.upload_type,
-      updatedAt: row.updated_at
-    }
-  };
-}
-
-export async function upsertExcelMappingPreset(input: {
-  companyId?: string;
-  erpName?: string;
-  mapping: ColumnMapping;
-  presetName?: string;
-  uploadType: "customer-master" | "sales-analysis";
-}): Promise<{ persisted: boolean; preset: ExcelMappingPreset }> {
-  const companyId = input.companyId || getDefaultCompanyId();
-  const presetName = input.presetName || "default";
-  const preset: ExcelMappingPreset = {
-    companyId,
-    erpName: input.erpName,
-    mapping: input.mapping,
-    presetName,
-    uploadType: input.uploadType
-  };
-
-  if (!isProductionStoreConfigured()) return { persisted: false, preset };
-
-  await upsertCompany(companyId, "마주식자재");
-  const rows = await supabaseRequest<
-    Array<{
-      id: string;
-      company_id: string;
-      erp_name: string | null;
-      mapping: ColumnMapping | null;
-      preset_name: string;
-      upload_type: "customer-master" | "sales-analysis";
-      updated_at: string;
-    }>
-  >("excel_mapping_presets?on_conflict=company_id,upload_type,preset_name", {
-    method: "POST",
-    headers: {
-      Prefer: "resolution=merge-duplicates,return=representation"
-    },
-    body: JSON.stringify([
-      {
-        company_id: companyId,
-        erp_name: input.erpName || null,
-        mapping: input.mapping,
-        preset_name: presetName,
-        upload_type: input.uploadType,
-        updated_at: new Date().toISOString()
-      }
-    ])
-  });
-  const row = rows[0];
-
-  return {
-    persisted: true,
-    preset: {
-      id: row.id,
-      companyId: row.company_id,
-      erpName: row.erp_name || undefined,
-      mapping: row.mapping || {},
-      presetName: row.preset_name,
-      uploadType: row.upload_type,
-      updatedAt: row.updated_at
-    }
-  };
-}
-
-export async function deleteExcelMappingPreset(
-  uploadType: "customer-master" | "sales-analysis",
-  companyId?: string,
-  presetName = "default"
-): Promise<{ persisted: boolean }> {
-  const id = companyId || getDefaultCompanyId();
-  if (!isProductionStoreConfigured()) return { persisted: false };
-
-  await supabaseRequest(
-    `excel_mapping_presets?company_id=eq.${encodeURIComponent(id)}&upload_type=eq.${encodeURIComponent(uploadType)}&preset_name=eq.${encodeURIComponent(presetName)}`,
-    {
-      method: "DELETE",
-      headers: {
-        Prefer: "return=minimal"
-      }
-    }
-  );
-
-  return { persisted: true };
-}
 
 export function getFallbackAuthCredentials(): AuthCredentials {
   return {
@@ -14604,25 +14482,6 @@ function countDuplicates(rows: CustomerRow[]) {
   });
 
   return duplicates;
-}
-
-async function upsertCompany(companyId: string, name: string) {
-  await supabaseRequest<Array<{ id: string }>>("companies?on_conflict=id", {
-    method: "POST",
-    headers: {
-      // 호출부의 기본 이름은 새 회사 생성용 폴백일 뿐입니다. 기존 회사와 충돌할 때
-      // merge하면 고객이 설정한 회사명이 "마주식자재"로 되돌아가므로 기존 행은 보존합니다.
-      Prefer: "resolution=ignore-duplicates,return=representation"
-    },
-    body: JSON.stringify([
-      {
-        id: companyId,
-        name,
-        status: "active",
-        updated_at: new Date().toISOString()
-      }
-    ])
-  });
 }
 
 async function getNormalizedCustomersForAnalysis(companyId: string): Promise<CustomerRow[]> {
