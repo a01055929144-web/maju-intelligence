@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { documentShareLinkId } from "@/domains/pricing/document-share";
 import { NextResponse } from "next/server";
 import { issueStoreLinkToken } from "@/lib/pricing/store-link-token";
 import { isSharePreviewBot, isShortShareCode, shortShareDevice, shortShareLinksEnabled, shortShareLinksGloballyEnabled } from "@/lib/pricing/short-share-feature";
@@ -13,11 +14,21 @@ const unavailableHeaders = {
 };
 
 function unavailable() {
-  return new NextResponse("사용할 수 없는 매장 링크입니다.", { status: 404, headers: unavailableHeaders });
+  return new NextResponse("사용할 수 없는 공유 링크입니다. 발행 회사에 새 링크를 요청해 주세요.", { status: 404, headers: unavailableHeaders });
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
+  if (documentShareLinkId(code)) {
+    try {
+      const requester = `${request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"}:${request.headers.get("user-agent") || ""}`;
+      const { resolveDocumentShortLink } = await import("@/lib/pricing/document-share");
+      const link = await resolveDocumentShortLink(code, requester);
+      // Crawlers receive only the token-free metadata URL; humans use the original fragment route.
+      const target = isSharePreviewBot(request.headers.get("user-agent") || "") ? link.previewPath : link.documentPath;
+      return NextResponse.redirect(new URL(target, request.url), { status: 302, headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow" } });
+    } catch { return unavailable(); }
+  }
   if (!shortShareLinksGloballyEnabled() || !process.env.STORE_LINK_SECRET || !isShortShareCode(code)) return unavailable();
   const userAgent = request.headers.get("user-agent") || "";
   const identity = `${request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"}:${userAgent}`;

@@ -3,15 +3,16 @@ import { createHash, randomUUID } from "crypto";
 import type { DocumentScope } from "../../application/pricing/documents";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
 import { parseDocument, isId, koreaDay, visibleDocumentLines, withLivePromotions, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
-import { documentOrderExpiry, publicDocumentLinkExpiry, publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
+import { documentOrderExpiry, publicDocumentLinkExpiry, publicDocumentOutput, brandedDocumentSharePreview, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
 import { getStoreSession } from "../auth";
 import { quoteAcceptanceEnabled } from "./acceptance-feature";
 import { publicDocumentOrderEntryEnabled, publicDocumentShoppingEnabled, publicDocumentSignupEnabled, publicDocumentOrderGuidanceEnabled } from "./public-document-order-feature";
-import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
+import { equalShareHash, issueDocumentShareToken, issueDocumentShortCode, verifyDocumentShortCode, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
 import { industryBasketsEnabled } from "./industry-basket-feature";
 import { documentSharePreview } from "../../domains/pricing/industry-basket";
+import { documentShareBrandingEnabled } from "./document-share-branding-feature";
 import { documentExtensionServerEnabled } from "./document-extension-server";
 
 type ShareRow = {
@@ -39,6 +40,7 @@ function publicUrl(row: ShareRow) {
   const issued = issueDocumentShareToken(row.id, row.token_nonce);
   if (!equalShareHash(issued.hash, row.token_hash))
     throw new DocumentSendError("링크 설정이 변경됐습니다. 기존 링크를 회수하고 새 링크를 준비해 주세요.", 409);
+  if (row.lead_id === null && documentShareBrandingEnabled(row.company_id)) return `/s/${issueDocumentShortCode(row.id)}`;
   return row.preview_id ? `/q/${row.preview_id}#${issued.token}` : `/pricing-document#${issued.token}`;
 }
 async function published(company: string, versionId: string, actor?: string): Promise<DocumentVersion> {
@@ -84,7 +86,9 @@ export async function prepareDocumentShare(scope: DocumentScope, input: PrepareD
   if (!existing && version.content.validUntil < koreaDay()) missing();
   if (input.leadId !== null) await assertLead(scope.companyId, input.leadId);
   const issued = issueDocumentShareToken(id);
-  const preview = industryBasketsEnabled(scope.companyId)
+  const preview = input.leadId === null && documentShareBrandingEnabled(scope.companyId)
+    ? brandedDocumentSharePreview(version.content)
+    : industryBasketsEnabled(scope.companyId)
     ? documentSharePreview({ companyName: version.content.companyName, documentTitle: version.content.title, industry: version.content.industry, validUntil: version.content.validUntil })
     : null;
   const previewId = preview ? randomUUID() : null;
@@ -234,6 +238,37 @@ async function resolvePublicDocument(token: string, requester: string) {
         productId: line.productId, promotionId: line.promotionId ?? null,
       } : null) : [];
   return { row, issuedVersionId, output, items, orderable: version.content.showPrice && !output.expired && output.lines.length > 0 };
+}
+
+/** Metadata is a whitelist; no token, recipient, contact, arbitrary footer or prices. */
+export async function readDocumentSharePreview(previewId: string) {
+  if (!isId(previewId) || !documentSharingEnabled()) return null;
+  previewId = previewId.toLowerCase();
+  const rows = await supabaseRequest<ShareRow[]>(`pricing_document_share_links?or=(preview_id.eq.${previewId},id.eq.${previewId})&select=${shareFields}&limit=2`);
+  if (rows.length !== 1) return null;
+  const row = rows[0];
+  if (!row || !documentSharingEnabled(row.company_id) ||
+    !(industryBasketsEnabled(row.company_id) || (row.lead_id === null && documentShareBrandingEnabled(row.company_id))) ||
+    row.revoked_at || !(Date.parse(row.expires_at) > Date.now()) ||
+    (row.lead_id === null && !publicDocumentOrderEntryEnabled(row.company_id))) return null;
+  const version = await published(row.company_id, row.document_version_id, row.created_by_key);
+  if (version.documentId !== row.document_id) return null;
+  return row.lead_id === null && documentShareBrandingEnabled(row.company_id) ? brandedDocumentSharePreview(version.content)
+    : { title: row.preview_title || "공유 단가표", description: row.preview_description || "MAJU에서 단가표를 확인하세요." };
+}
+
+/** Existing signed public-document verification also governs the new opaque URL. */
+export async function resolveDocumentShortLink(code: string, requester: string) {
+  if (!documentShareBrandingEnabled() || !documentSharingEnabled()) missing();
+  const shareLinkId = verifyDocumentShortCode(code);
+  if (!shareLinkId) missing();
+  const rows = await supabaseRequest<ShareRow[]>(`pricing_document_share_links?id=eq.${shareLinkId}&select=${shareFields}&limit=1`);
+  const row = rows[0];
+  if (!row || row.lead_id !== null || !documentShareBrandingEnabled(row.company_id) || !documentSharingEnabled(row.company_id)) missing();
+  const issued = issueDocumentShareToken(row.id, row.token_nonce);
+  if (!equalShareHash(issued.hash, row.token_hash)) missing();
+  await resolvePublicDocument(issued.token, requester);
+  return { previewPath: `/q/${row.preview_id || row.id}`, documentPath: `/pricing-document#${issued.token}` };
 }
 
 /** 07 server-only handoff: caller-supplied company/customer IDs are never used. */
