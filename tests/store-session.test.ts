@@ -75,10 +75,11 @@ describe("store member session cookie", () => {
   it("keeps Kakao-first onboarding incomplete until the verified identity reaches the profile step", async () => {
     vi.stubEnv("STORE_MEMBER_SESSION_ENABLED", "true");
     const token = "a".repeat(43), returnTo = "/pricing-document#opaque-share-token";
-    await expect(setPublicStoreOwnerKakaoProof(token, returnTo)).resolves.toBe(true);
-    await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ token, returnTo, stage: "kakao" });
-    await expect(setPublicStoreOwnerProfileProof({ authUserId, returnTo, token })).resolves.toBe(true);
-    await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ authUserId, token, returnTo, stage: "profile" });
+    const termsAcceptedAt = new Date().toISOString();
+    await expect(setPublicStoreOwnerKakaoProof(token, returnTo, termsAcceptedAt)).resolves.toBe(true);
+    await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ token, returnTo, termsAcceptedAt, stage: "kakao" });
+    await expect(setPublicStoreOwnerProfileProof({ authUserId, returnTo, token, representativeName: "카카오 점주", termsAcceptedAt })).resolves.toBe(true);
+    await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ authUserId, token, returnTo, representativeName: "카카오 점주", termsAcceptedAt, stage: "profile" });
     expect(state.values.has("maju_store_session")).toBe(false);
   });
 

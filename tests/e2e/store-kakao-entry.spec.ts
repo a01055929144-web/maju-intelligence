@@ -79,18 +79,22 @@ for (const width of [1440, 390]) {
     await context.route("**/api/address-search?**", route => route.fulfill({ json: { results: [{ address: "서울시 중구", postalCode: "04500" }] } }));
     await page.goto(`/store/activate?fixture=store-owner-activation#${intent}`);
     await expect(page.getByLabel("매장명")).toHaveCount(0);
-    const kakao = page.getByRole("button", { name: "카카오로 점주 가입" });
+    await expect(page.getByText("1/2 카카오 인증", { exact: true })).toBeVisible();
+    const kakao = page.getByRole("button", { name: "카카오로 시작 (1분)" });
+    await expect(kakao).toBeDisabled();
+    await page.getByRole("checkbox").check();
     expect((await kakao.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     const [authResponse] = await Promise.all([
       page.waitForResponse(response => { const url = new URL(response.url()); return url.pathname === "/api/auth/kakao/start" && url.searchParams.get("activation") === "1"; }),
       kakao.click()
     ]);
     expect(authResponse.status()).toBe(200);
-    expect(posted[0]).toEqual({ onboardingIntent: intent });
+    expect(posted[0]).toEqual({ onboardingIntent: intent, termsAccepted: true });
     expect(JSON.stringify(posted[0])).not.toMatch(/customerId|storeAccountId|companyId|storeName/);
     const profilePage = await context.newPage();
     await profilePage.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await profilePage.goto("/store/activate?fixture=store-owner-activation&profile=1");
+    await expect(profilePage.getByText("2/2 매장 정보", { exact: true })).toBeVisible();
     await expect(profilePage.getByText(/카카오 계정 인증을 마쳤습니다/)).toBeVisible();
     await expect(profilePage.getByRole("textbox", { name: "이메일", exact: true })).toHaveCount(0);
     await expect(profilePage.getByRole("textbox", { name: "닉네임", exact: true })).toHaveCount(0);
@@ -98,8 +102,10 @@ for (const width of [1440, 390]) {
       ["연락처", "01012345678"], ["매장 주소", "서울시 중구"], ["상세주소", "1층"]] as const) await profilePage.getByLabel(label).fill(value);
     await profilePage.getByRole("button", { name: "주소 검색" }).click();
     await profilePage.getByRole("button", { name: "서울시 중구 (04500)" }).click();
-    await profilePage.getByRole("checkbox").check();
-    const start = profilePage.getByRole("button", { name: "동의하고 매장 개통" });
+    await expect(profilePage.getByRole("checkbox")).toHaveCount(0);
+    await profilePage.reload();
+    await expect(profilePage.getByLabel("매장명")).toHaveValue("새 매장");
+    const start = profilePage.getByRole("button", { name: "매장 등록 완료" });
     expect((await start.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await profilePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
     for (const message of ["이 화면에서 다시 시도", "잠시 후 다시 시도", "처음 제출한 매장 정보와 다릅니다", "문서를 보낸 회사에 매장 연결 확인을 요청"]) {
@@ -111,9 +117,9 @@ for (const width of [1440, 390]) {
       expect(await profilePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
     }
     await start.click();
-    expect(posted[1]).toMatchObject({ termsAccepted: true, store: { storeName: "새 매장",
+    expect(posted[1]).toMatchObject({ store: { storeName: "새 매장",
       representativeName: "새 대표", businessRegistrationNumber: "1234567890", phone: "01012345678", address: "서울시 중구", addressDetail: "1층" } });
-    expect(JSON.stringify(posted[1])).not.toMatch(/customerId|storeAccountId|companyId|onboardingIntent/);
+    expect(JSON.stringify(posted[1])).not.toMatch(/customerId|storeAccountId|companyId|onboardingIntent|termsAccepted/);
   });
 }
 
@@ -388,7 +394,7 @@ for(const width of [1440,390])test(`public signup source returns in store home a
   await page.goto("/store/activate?fixture=store-owner-activation&profile=1");
   for(const [label,value] of [["매장명","합성 공개 가입 매장"],["사업자 대표자명","합성 대표"],["사업자등록번호","1234567890"],["매장 연락처","01012345678"],["매장 주소","합성로 1"],["상세주소","1층"]] as const)await page.getByLabel(label,{exact:true}).fill(value);
   await page.getByRole("button",{name:"주소 검색",exact:true}).click();await page.getByRole("button",{name:"서울특별시 송파구 합성로 1 (00000)",exact:true}).click();
-  await page.getByRole("checkbox").check();await page.getByRole("button",{name:"동의하고 매장 개통",exact:true}).click();
+  await page.getByRole("button",{name:"매장 등록 완료",exact:true}).click();
   await expect(page).toHaveURL(/pricing-document\?continueOrder=1#synthetic-source$/);
   await page.getByRole("link",{name:"매장 홈",exact:true}).click();
   const source=page.getByRole("link",{name:"단가표 · 합성 가입 단가표 문서 확인",exact:true});

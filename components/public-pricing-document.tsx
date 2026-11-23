@@ -30,6 +30,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const [orderEntry, setOrderEntry] = useState<OrderEntry | null>(null);
   const [orderMessage, setOrderMessage] = useState("");
   const [orderBusy, setOrderBusy] = useState(false);
+  const [signupReturned, setSignupReturned] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"table" | "image" | "catalog" | "cart">("table");
@@ -115,6 +116,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   useEffect(() => {
     if ((!shopping && member) || !acceptance || !orderEntry?.available || continuedOrder.current || new URLSearchParams(window.location.search).get("continueOrder") !== "1") return;
     continuedOrder.current = true;
+    setSignupReturned(true);
     window.history.replaceState(null, "", window.location.pathname + window.location.hash);
     void startOrder(shopping);
   }, [acceptance, member, orderEntry, shopping, startOrder]);
@@ -181,6 +183,10 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const companyColor = safeDocument?.theme === "blue" ? "text-blue-700" : safeDocument?.theme === "green" ? "text-emerald-700" : "text-slate-800";
   return <Container className={`mx-auto max-w-[900px] space-y-4 p-4 ${showOrder && !embedded ? (shopping ? "pb-32 print:pb-4" : "max-md:pb-28") : ""}`}>
     {embedded && <h1 className="text-lg font-semibold">공유 문서</h1>}
+    {signupReturned && <section aria-label="가입 완료 안내" className="space-y-1 rounded border bg-emerald-50 p-4 print:hidden">
+      <h2 className="font-bold">내 매장 가입을 마쳤습니다</h2>
+      <p>고객사가 확인하면 전체 상품 가격과 단가 추이가 열립니다. 보통 하루 안에 확인됩니다.</p>
+    </section>}
     {message && <p role="status">{message}</p>}
     {!safeDocument && !busy && message && <Button variant="outline" className="min-h-[44px]" onClick={() => void load()}>다시 확인</Button>}
     {safeDocument?.expired && (shopping || orderGuidanceAvailable) && <section aria-label="기간 지난 단가표" className="space-y-2 rounded border bg-white p-4 print:hidden">
@@ -201,7 +207,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     {safeDocument && shopping && view === "image" && <div className={`print:hidden ${expiredGuidance ? "opacity-50" : ""}`}><PublicDocumentPaperImages document={safeDocument} /></div>}
     {safeDocument && shopping && view === "catalog" && <section aria-label="전체 상품" className="space-y-4 rounded border bg-white p-4 print:hidden">
       <h2 className="text-base font-bold">전체 상품</h2>
-      <p>{member ? "주문 화면에서 연결된 유통사의 상품과 내 단가를 확인할 수 있습니다." : "가입하면 이 유통사의 전체 상품을 볼 수 있습니다."}</p>
+      <p>{member ? "주문 화면에서 연결된 유통사의 상품과 내 단가를 확인할 수 있습니다." : "가입하면 단가 추이 · 전체 상품 · 주문을 이용할 수 있습니다."}</p>
       {member && acceptance && <PublicMemberCatalog token={acceptance.token} />}
       {!member && <div className="grid gap-3 blur-sm" aria-hidden="true">
         {[0, 1, 2].map(row => <div key={row} className="flex justify-between gap-4 border-b pb-3">

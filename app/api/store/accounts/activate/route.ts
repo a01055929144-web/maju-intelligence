@@ -20,30 +20,31 @@ export async function POST(request: NextRequest) {
     store?: { address?: string; addressDetail?: string; businessRegistrationNumber?: string; phone?: string; representativeName?: string; storeName?: string } };
   try { body = await request.json(); } catch { return NextResponse.json({ message: "Invalid request" }, { status: 400 }); }
   if (body.onboardingIntent && !body.store) {
+    if (body.termsAccepted !== true) return NextResponse.json({ message: "Terms acceptance required" }, { status: 400 });
     const context = verifyPublicStoreOwnerOnboardingIntent(body.onboardingIntent);
     if (!context) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
     try {
       const token = randomBytes(32).toString("base64url");
       const prepared = await preparePublicStoreOwnerActivation({ ...context, idempotencyKey: context.nonce, token });
-      if (!(await setPublicStoreOwnerKakaoProof(token, context.returnTo))) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
+      if (!(await setPublicStoreOwnerKakaoProof(token, context.returnTo, new Date().toISOString()))) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       const query = new URLSearchParams({ activation: "1", companyId: context.companyId, store: "1", storeAccountId: prepared.storeAccountId });
       return NextResponse.json({ loginUrl: `/api/auth/kakao/start?${query}`, next: "kakao", termsVersion: STORE_TERMS_VERSION });
     } catch { return NextResponse.json({ message: "Store activation unavailable" }, { status: 503 }); }
   }
-  if (body.termsAccepted === true && body.store && !body.onboardingIntent) {
+  if (body.store && !body.onboardingIntent) {
     const baseAddress = body.store.address?.trim() || "", addressDetail = body.store.addressDetail?.trim() || "";
     const profile = { address: `${baseAddress} ${addressDetail}`.trim(), baseAddress, addressDetail,
       businessRegistrationNumber: body.store.businessRegistrationNumber?.replace(/\D/g, "") || "",
       phone: body.store.phone?.replace(/\D/g, "") || "", representativeName: body.store.representativeName?.trim() || "", storeName: body.store.storeName?.trim() || "" };
     if ((profile.businessRegistrationNumber.length !== 10 && profile.businessRegistrationNumber.length !== 0) ||
       profile.phone.length < 9 || profile.phone.length > 11 || !profile.storeName || profile.storeName.length > 100 ||
-      !profile.representativeName || profile.representativeName.length > 50 || !baseAddress || !addressDetail || addressDetail.length > 100 || profile.address.length > 300) {
+      profile.representativeName.length > 50 || !baseAddress || addressDetail.length > 100 || profile.address.length > 300) {
       return NextResponse.json({ message: "Store profile required" }, { status: 400 });
     }
     let stage = "request";
     try {
       const proof = await getStoreOwnerActivationProof();
-      if (!proof?.authUserId || proof.stage !== "profile" || !proof.returnTo) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
+      if (!proof?.authUserId || proof.stage !== "profile" || !proof.returnTo || !proof.termsAcceptedAt) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       const activation = await getPreparedStoreOwnerActivation(proof.token);
       if (!activation || !activation.publicOnboarding || !publicStoreOwnerOnboardingEnabled(activation.companyId) ||
         !isStoreMemberCompanyAllowlisted(activation.companyId) || !publicOwnerTestAccessAllowed(activation.companyId)) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
@@ -66,11 +67,11 @@ export async function POST(request: NextRequest) {
       stage = "activation";
       const activated = profile.businessRegistrationNumber
         ? await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: profile.businessRegistrationNumber,
-          termsAcceptedAt: new Date().toISOString(), token: proof.token,
+          termsAcceptedAt: proof.termsAcceptedAt, token: proof.token,
           verificationRequestId: `${deliveryTerritoryId ? "public-delivery-v1:" : testNumber ? "test-only:" : ""}${randomUUID()}`,
           verifiedAt: new Date().toISOString(), ...(deliveryTerritoryId ? { deliveryTerritoryId } : {}) })
         : await activatePreopeningStoreOwner({ authUserId: proof.authUserId, deliveryTerritoryId,
-          termsAcceptedAt: new Date().toISOString(), token: proof.token });
+          termsAcceptedAt: proof.termsAcceptedAt, token: proof.token });
       if (testNumber) {
         stage = "test_ordering";
         await preparePublicOwnerTestOrdering(activation.companyId, activated.storeAccountId);

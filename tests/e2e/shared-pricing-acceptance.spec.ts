@@ -243,7 +243,7 @@ for (const width of [1440, 390]) test(`CX-70 switches public document views at $
     return route.fulfill({ json: { lines: [{ id: productId, name: "가입 후 상품", spec: "2kg", unit: "봉", price: 2000 }], hasMore: false } });
   });
   await tabs.getByRole("button", { name: /전체 상품/ }).click();
-  await expect(page.getByRole("region", { name: "전체 상품" })).toContainText("가입하면 이 유통사의 전체 상품을 볼 수 있습니다.");
+  await expect(page.getByRole("region", { name: "전체 상품" })).toContainText("가입하면 단가 추이 · 전체 상품 · 주문을 이용할 수 있습니다.");
   await expect(page.getByText("29,700원", { exact: true }).filter({ visible: true })).toHaveCount(0);
   expect(catalogReads).toBe(0);
   await page.screenshot({ path: info.outputPath(`cx70-catalog-locked-${width}.png`) });
