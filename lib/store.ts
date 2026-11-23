@@ -16,6 +16,7 @@ import {
 export type { RoutePlan, RoutePlanGroup, RoutePlanStop } from "../domains/route/read";
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { readLatestReport, readReportById } from "./analytics/report-read";
+import { readLatestBriefing } from "./analytics/briefing-read";
 import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
 import { getSupabaseConfig, isProductionStoreConfigured, normalizeCompanyKind, supabaseRequest, type CompanyKind, type SupabaseConfig } from "./store/00-core";
 import { accountLoginV2Enabled } from "./account-login-feature";
@@ -8442,23 +8443,7 @@ export async function getReportById(reportId: string, companyId?: string): Promi
 }
 
 export async function getLatestBriefing(companyId?: string) {
-  const [report, customerMaster] = await Promise.all([
-    getLatestReport(companyId),
-    getCustomerMaster(companyId).catch(() => ({ customers: [], source: "empty" as const }))
-  ]);
-  const currentCustomers = customerMaster.customers.length || report.customers;
-
-  return {
-    greeting: "안녕하세요 정두영님.",
-    currentCustomers,
-    weeklyOpportunities: report.newOpportunities,
-    todayRecommendations: Math.min(12, report.leadRecommendations.length),
-    highProbability: report.highProbabilityCount,
-    routeLeads: report.routeLeads,
-    missingRegions: report.missingRegions,
-    healthScore: report.health.total,
-    source: customerMaster.source
-  };
+  return readLatestBriefing(companyId, getLatestReport, getCustomerMaster);
 }
 
 function getEmptyBriefing(source: "empty" | "supabase" = "supabase") {
