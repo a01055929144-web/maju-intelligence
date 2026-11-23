@@ -440,6 +440,16 @@ jobs:
           createdb customer_items_test_ui
           psql --dbname=customer_items_test_ui --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261102-WO-25-customer-items-audit.pg17.test.sql
 
+      - name: Verify CX-111 manual customer coordinate draft on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb customer_manual_coordinate_test
+          psql --dbname=customer_manual_coordinate_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/2026-11-22-CX-111-customer-manual-coordinate.pg17.test.sql
+
       - name: Verify first supplier import to P0 recalculation on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
