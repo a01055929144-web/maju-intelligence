@@ -1,7 +1,6 @@
 import { isTelegramConfigured, sendTelegramMessage } from "../telegram";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "../toss-payments";
-import type { CompanyKind } from "../store";
-import { isProductionStoreConfigured, normalizeCompanyKind, supabaseRequest } from "../store";
+import { isProductionStoreConfigured, normalizeCompanyKind, supabaseRequest, type CompanyKind } from "./00-core";
 
 // ---------------------------------------------------------------------------------------------
 // 2026-09-01 피드백: "결제프로그램도 추가해서 넣고 싶어" — 고객사가 마주 인텔리전스 이용료를 매달
