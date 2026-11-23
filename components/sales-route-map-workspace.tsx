@@ -5,6 +5,7 @@ import { QuickRegisterDrawer } from "@/components/map/quick-register-drawer";
 import { copyText } from "@/lib/copy-text";
 import { leadLayerColor } from "@/domains/route/map-layer-colors";
 import { DEFAULT_LEAD_SEARCH_RADIUS_KM, useLeadRadiusState } from "@/components/map/use-lead-radius-state";
+import { useAllLeadsState } from "@/components/map/use-all-leads-state";
 import { useMapSalesAreaState } from "@/components/map/use-map-sales-area-state";
 import { useMapFullscreen } from "@/components/map/use-map-fullscreen";
 import { MapExplorerTabs, MapLayerControl, MapLayerLegend, type MapPanelMode } from "@/components/map/map-layer-controls";
@@ -404,15 +405,15 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setLeadRadiusError
   } = useLeadRadiusState();
   const [previewLeadId, setPreviewLeadId] = useState("");
-  // "전체 리드 보기" — 반경 검색과 무관하게 활성 신규 리드 전체를 메인 지도에 바로 표시합니다.
-  // 예전에는 신규 리드 탭 안에 별도 지도가 있었는데(같은 데이터를 두 지도에서 따로 관리),
-  // 이제 메인 지도 한 곳에서만 보여주도록 합칩니다(2026-08-20 피드백).
-  // 시안 ⑫: 3분할 기본 화면은 오른쪽 "신규" 목록과 지도 리드 핀을 함께 보여줍니다.
-  const [showAllLeadsOnMap, setShowAllLeadsOnMap] = useState(true);
-  const [allLeadsForMap, setAllLeadsForMap] = useState<PermitLeadItem[]>([]);
-  const [allLeadsLoadState, setAllLeadsLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  // M9: 같은 종류 요청은 마지막 것만 살린다(옛 응답이 새 목록을 덮지 않게).
-  const beginAllLeadsRequest = useLatestRequest();
+  const {
+    showAllLeadsOnMap,
+    setShowAllLeadsOnMap,
+    allLeadsForMap,
+    setAllLeadsForMap,
+    allLeadsLoadState,
+    setAllLeadsLoadState,
+    beginAllLeadsRequest
+  } = useAllLeadsState();
   const beginRadiusRequest = useLatestRequest();
   const {
     mapSalesRegionsConfigured,
