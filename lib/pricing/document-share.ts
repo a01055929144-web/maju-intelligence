@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "crypto";
 import type { DocumentScope } from "../../application/pricing/documents";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
 import { parseDocument, isId, koreaDay, visibleDocumentLines, withLivePromotions, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
-import { documentOrderExpiry, publicDocumentLinkExpiry, publicDocumentOutput, brandedDocumentSharePreview, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
+import { documentOrderExpiry, publicDocumentLinkExpiry, publicDocumentOutput, brandedDocumentSharePreview, type PrepareDocumentShare, type PreparedDocumentShare, type DocumentShareImage } from "../../domains/pricing/document-share";
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
 import { getStoreSession } from "../auth";
@@ -184,7 +184,8 @@ export async function readPublicDocument(token: string, requester: string) {
     } catch { return false; }
   })();
   const orderFooter = row.lead_id === null ? await readPublicDocumentOrderFooter(row.company_id) : undefined;
-  return { document: output, expiresAt: row.expires_at, ...(orderFooter ? { orderFooter } : {}),
+  return { document: output, expiresAt: row.expires_at,
+    ...(row.lead_id === null && documentShareBrandingEnabled(row.company_id) ? { brandingAvailable: true } : {}), ...(orderFooter ? { orderFooter } : {}),
     ...(row.lead_id === null ? { inquiry: await readPublicInquiry(row.company_id),
       orderGuidanceAvailable: publicDocumentOrderGuidanceEnabled(row.company_id) } : {}),
     acceptanceAvailable: Boolean(row.lead_id && row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)),
@@ -193,6 +194,14 @@ export async function readPublicDocument(token: string, requester: string) {
       companyName: output.companyName, title: output.title, version: output.version,
       ...(publicDocumentShoppingEnabled(row.company_id) ? { shopping: true, cartScope: row.id,
         itemKeys: items.map(item => item?.key ?? null) } : {}), ...(member ? { member: true } : {}) } } : {}) };
+}
+
+async function currentDocumentShareHead(row: ShareRow) {
+  if (!documentExtensionServerEnabled(row.company_id)) return row;
+  const id = await supabaseRequest<string | null>("rpc/resolve_pricing_document_link_head_v1", {
+    method: "POST", body: JSON.stringify({ p_share_link: row.id }),
+  });
+  return id && isId(id) ? { ...row, document_version_id: id } : row;
 }
 
 async function resolvePublicDocument(token: string, requester: string) {
@@ -213,12 +222,7 @@ async function resolvePublicDocument(token: string, requester: string) {
   if (row.lead_id === null) {
     if (!publicDocumentOrderEntryEnabled(row.company_id) || row.send_id) missing();
   } else await assertLead(row.company_id, row.lead_id);
-  if (documentExtensionServerEnabled(row.company_id)) {
-    const currentVersionId = await supabaseRequest<string | null>("rpc/resolve_pricing_document_link_head_v1", {
-      method: "POST", body: JSON.stringify({ p_share_link: row.id }),
-    });
-    if (currentVersionId && isId(currentVersionId)) row = { ...row, document_version_id: currentVersionId };
-  }
+  row = await currentDocumentShareHead(row);
   const version = await published(row.company_id, row.document_version_id, row.created_by_key);
   if (version.documentId !== row.document_id) missing();
   const ids = Array.from(new Set(version.content.lines.flatMap(l => l.promotionId ? [l.promotionId] : [])));
@@ -241,7 +245,7 @@ async function resolvePublicDocument(token: string, requester: string) {
 }
 
 /** Metadata is a whitelist; no token, recipient, contact, arbitrary footer or prices. */
-export async function readDocumentSharePreview(previewId: string) {
+export async function readDocumentSharePreview(previewId: string): Promise<{ title: string; description: string; image?: DocumentShareImage } | null> {
   if (!isId(previewId) || !documentSharingEnabled()) return null;
   previewId = previewId.toLowerCase();
   const rows = await supabaseRequest<ShareRow[]>(`pricing_document_share_links?or=(preview_id.eq.${previewId},id.eq.${previewId})&select=${shareFields}&limit=2`);
@@ -251,10 +255,14 @@ export async function readDocumentSharePreview(previewId: string) {
     !(industryBasketsEnabled(row.company_id) || (row.lead_id === null && documentShareBrandingEnabled(row.company_id))) ||
     row.revoked_at || !(Date.parse(row.expires_at) > Date.now()) ||
     (row.lead_id === null && !publicDocumentOrderEntryEnabled(row.company_id))) return null;
-  const version = await published(row.company_id, row.document_version_id, row.created_by_key);
+  const current = await currentDocumentShareHead(row);
+  const version = await published(row.company_id, current.document_version_id, row.created_by_key);
   if (version.documentId !== row.document_id) return null;
-  return row.lead_id === null && documentShareBrandingEnabled(row.company_id) ? brandedDocumentSharePreview(version.content)
-    : { title: row.preview_title || "공유 단가표", description: row.preview_description || "MAJU에서 단가표를 확인하세요." };
+  if (row.lead_id === null && documentShareBrandingEnabled(row.company_id)) {
+    const output = publicDocumentOutput(version);
+    return { ...brandedDocumentSharePreview(version.content), image: { companyName: output.companyName, title: output.title, itemCount: output.lines.length, validUntil: output.validUntil } };
+  }
+  return { title: row.preview_title || "공유 단가표", description: row.preview_description || "MAJU에서 단가표를 확인하세요." };
 }
 
 /** Existing signed public-document verification also governs the new opaque URL. */
