@@ -4,12 +4,13 @@ export { DirectoryStat, OperationalEmptyState } from "@/components/map/customer-
 import { QuickRegisterDrawer } from "@/components/map/quick-register-drawer";
 import { copyText } from "@/lib/copy-text";
 import { leadLayerColor } from "@/domains/route/map-layer-colors";
+import { useMapFullscreen } from "@/components/map/use-map-fullscreen";
 import { MapExplorerTabs, MapLayerControl, MapLayerLegend, type MapPanelMode } from "@/components/map/map-layer-controls";
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MouseEvent, } from "react";
 import { areaLabelMatchesSigungu, phoneDigitsMatch, summarizeMultiFilter } from "@/lib/map-filter-multi";
 import { AlertTriangle, CalendarDays, Check, CheckCircle2, Columns2, Columns3, Copy, ExternalLink, Eye, EyeOff, Gauge, GripVertical, Layers, Loader2, ListFilter, Maximize2, Minimize2, MapPin, MapPinned, MessageSquareText, Navigation, Phone, Radar, RefreshCw, Ruler, Search, Square, Star, Store, Target, Truck, UserRound, Utensils, X, type LucideIcon } from "lucide-react";
@@ -335,8 +336,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [mobileMapControlsOpen, setMobileMapControlsOpen] = useState(false);
   const [mobileSalesAreaOpen, setMobileSalesAreaOpen] = useState(false);
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const workspaceRef = useRef<HTMLDivElement>(null);
+  const { isFullscreen, toggleFullscreen, workspaceRef } = useMapFullscreen(() => setStatsExpanded(false));
   const { mapAreaRef, mapHeaderHeightPx, mapHeaderRef, recomputeMapHeaderOffset } = useMapHeaderOffset();
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
@@ -1454,21 +1454,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     }
   };
 
-
-  useEffect(() => {
-    const handleFullscreenChange = () => setIsFullscreen(document.fullscreenElement === workspaceRef.current);
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
-
-  async function toggleFullscreen() {
-    if (document.fullscreenElement) {
-      await document.exitFullscreen().catch(() => null);
-      return;
-    }
-    setStatsExpanded(false);
-    await workspaceRef.current?.requestFullscreen().catch(() => null);
-  }
 
   useEffect(() => {
     if (!sourceReady) {
