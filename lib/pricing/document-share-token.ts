@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { documentShareCode, documentSharePreviewId } from "../../domains/pricing/document-share";
 import { isId } from "../../domains/pricing/document";
 
 function secret() {
@@ -24,4 +25,16 @@ export function verifyDocumentShareToken(token: string) {
 }
 export function shareRequesterHash(identity: string) {
   return createHmac("sha256", secret()).update(`lead-document-requester-v1:${identity}`).digest("hex");
+}
+
+/** Preview IDs used to be metadata-only; never turn knowledge of an old ID into document access. */
+export function issueDocumentShortCode(previewId: string) {
+  const id = documentShareCode(previewId);
+  const tag = createHmac("sha256", secret()).update(`document-short-v1:${id}`).digest().subarray(0, 16).toString("base64url");
+  return `${id}.${tag}`;
+}
+export function verifyDocumentShortCode(code: string) {
+  const previewId = documentSharePreviewId(code);
+  if (!previewId) return null;
+  return timingSafeEqual(Buffer.from(issueDocumentShortCode(previewId)), Buffer.from(code)) ? previewId : null;
 }

@@ -634,7 +634,7 @@ const openShort = (code: string, userAgent = "Mozilla/5.0") => shortLinkGet(new 
 
 it("CX-132 issues an opaque code once, keeps prices/version and supports original fragment links", async () => {
   const result = await brandedShare(), frozen = JSON.stringify({ links, content });
-  expect(result.publicUrl).toMatch(/^\/s\/[0-9a-f]{32}$/);
+  expect(result.publicUrl).toMatch(/^\/s\/[0-9a-f]{32}\.[A-Za-z0-9_-]{22}$/);
   expect(links[0].preview_title).toBe("MAJU · 합성 회사 합성 견적");
   const again = await brandedShare(); expect(again).toEqual(result);
   const response = await openShort(result.publicUrl.slice(3));
@@ -697,4 +697,12 @@ it("CX-132 hides metadata when public entry is disabled and preserves legacy lea
   expect(legacy.publicUrl).toMatch(/^\/q\/[0-9a-f-]{36}#/);
   const previewId = legacy.publicUrl.split("/")[2].split("#")[0];
   expect(await readDocumentSharePreview(previewId)).toMatchObject({ title: "합성 회사 · 합성 견적" });
+});
+
+it("CX-132 cannot derive document access from a metadata-only preview ID or tampered short tag", async () => {
+  const result = await brandedShare(), seenBefore = mocks.db.mock.calls.length;
+  const idOnly = String(links[0].preview_id).replaceAll("-", "");
+  for (const code of [idOnly, idOnly + ".AAAAAAAAAAAAAAAAAAAAAA", result.publicUrl.slice(3).slice(0, -1) + "!"])
+    await expect(resolveDocumentShortLink(code, "fixture")).rejects.toMatchObject({ status: 404 });
+  expect(mocks.db.mock.calls.length).toBe(seenBefore);
 });

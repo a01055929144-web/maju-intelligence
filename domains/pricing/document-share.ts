@@ -43,7 +43,8 @@ export function documentShareCode(previewId: string) {
   return previewId.replaceAll("-", "").toLowerCase();
 }
 export function documentSharePreviewId(code: string) {
-  if (!/^[0-9a-f]{32}$/.test(code)) return null;
+  if (!/^[0-9a-f]{32}\.[A-Za-z0-9_-]{22}$/.test(code)) return null;
+  code = code.slice(0, 32);
   const id = [code.slice(0, 8), code.slice(8, 12), code.slice(12, 16), code.slice(16, 20), code.slice(20)].join("-");
   return isId(id) ? id : null;
 }

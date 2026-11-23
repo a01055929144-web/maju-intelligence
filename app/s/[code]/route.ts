@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { documentSharePreviewId } from "@/domains/pricing/document-share";
 import { NextResponse } from "next/server";
 import { issueStoreLinkToken } from "@/lib/pricing/store-link-token";
 import { isSharePreviewBot, isShortShareCode, shortShareDevice, shortShareLinksEnabled, shortShareLinksGloballyEnabled } from "@/lib/pricing/short-share-feature";
@@ -18,7 +19,7 @@ function unavailable() {
 
 export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  if (/^[0-9a-f]{32}$/.test(code)) {
+  if (documentSharePreviewId(code)) {
     try {
       const requester = `${request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"}:${request.headers.get("user-agent") || ""}`;
       const { resolveDocumentShortLink } = await import("@/lib/pricing/document-share");
