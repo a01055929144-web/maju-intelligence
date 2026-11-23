@@ -233,3 +233,17 @@ it("gates QR display on the authenticated company and never trusts the query com
     expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ companyId: c, qrDisplayEnabled: true }), "save-qr-display", { id: "10000000-0000-4000-8000-000000000001", expected: 19, settings: { position: "top-right", size: "large" } });
   } finally { if (before === undefined) delete process.env.FEATURE_DOCUMENT_QR_DISPLAY_COMPANY_IDS; else process.env.FEATURE_DOCUMENT_QR_DISPLAY_COMPANY_IDS = before; }
 });
+
+it("reads order footer only for the authenticated allowlisted company", async () => {
+  const previous = process.env.FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS;
+  const customerId = "20000000-0000-4000-8000-000000000001";
+  const request = () => new NextRequest("http://localhost/api/pricing-documents?action=order-footer&companyId=forged&customerId=" + customerId);
+  try {
+    process.env.FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS = "forged";
+    expect((await GET(request())).status).toBe(404); expect(mocks.request).not.toHaveBeenCalled();
+    process.env.FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS = c;
+    const response = await GET(request()); expect(response.status).toBe(200);
+    expect((await response.json()).orderFooterAvailable).toBe(true);
+    expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ companyId: c, orderFooterEnabled: true }), "order-footer", { customerId });
+  } finally { if (previous === undefined) delete process.env.FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS; else process.env.FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS = previous; }
+});

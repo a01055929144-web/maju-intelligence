@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomerOperationalName, getRequestAuthScope } from "../../../lib/auth";
 import { isFeatureEnabled } from "../../../lib/feature-flags";
-import { priceSheetsEnabled, documentQrDisplayEnabled } from "../../../lib/pricing/feature";
+import { priceSheetsEnabled, documentQrDisplayEnabled, documentOrderFooterEnabled } from "../../../lib/pricing/feature";
 import { canManagePriceSheets } from "../../../domains/pricing/access";
 import { pricingDocuments } from "../../../application/pricing/documents";
 import { pricingDocumentsRepository } from "../../../lib/pricing/documents-repository";
@@ -75,6 +75,7 @@ async function handle(request: NextRequest, write: boolean) {
       )
       .digest("hex"),
     manager,
+    ...(documentOrderFooterEnabled(auth.companyId) ? { orderFooterEnabled: true } : {}),
     ...(documentQrDisplayEnabled(auth.companyId) ? { qrDisplayEnabled: true } : {}),
     documentVatEnabled: documentVatEnabled(auth.companyId),
     ...(documentSharingEnabled(auth.companyId) ? { sharingEnabled: true, actorName: resolveLeadContactActorName([getCustomerOperationalName(auth.customerSession), auth.customerSession?.name, auth.adminSession?.name]) } : {}),
@@ -117,6 +118,7 @@ async function handle(request: NextRequest, write: boolean) {
             search,
             archived: request.nextUrl.searchParams.get("archived") === "true",
             id: request.nextUrl.searchParams.get("id"),
+            ...(request.nextUrl.searchParams.get("action") === "order-footer" ? { customerId: request.nextUrl.searchParams.get("customerId") } : {}),
             productIds: request.nextUrl.searchParams
               .get("productIds")
               ?.split(",")
@@ -130,7 +132,7 @@ async function handle(request: NextRequest, write: boolean) {
           },
         );
     return NextResponse.json(
-      { result, manager, ...(scope.qrDisplayEnabled ? { qrDisplayAvailable: true } : {}), ...(scope.archiveEnabled ? { archiveAvailable: true } : {}) },
+      { result, manager, ...(scope.orderFooterEnabled ? { orderFooterAvailable: true } : {}), ...(scope.qrDisplayEnabled ? { qrDisplayAvailable: true } : {}), ...(scope.archiveEnabled ? { archiveAvailable: true } : {}) },
       { headers: { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" } },
     );
   } catch (error) {
