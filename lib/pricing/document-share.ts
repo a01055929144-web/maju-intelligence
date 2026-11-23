@@ -1,3 +1,4 @@
+import { readPublicDocumentOrderFooter } from "./document-order-footer";
 import { createHash, randomUUID } from "crypto";
 import type { DocumentScope } from "../../application/pricing/documents";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
@@ -178,7 +179,8 @@ export async function readPublicDocument(token: string, requester: string) {
       return await hasAllowedStorePortalMembership(session.authUserId, row.company_id);
     } catch { return false; }
   })();
-  return { document: output, expiresAt: row.expires_at,
+  const orderFooter = row.lead_id === null ? await readPublicDocumentOrderFooter(row.company_id) : undefined;
+  return { document: output, expiresAt: row.expires_at, ...(orderFooter ? { orderFooter } : {}),
     ...(row.lead_id === null ? { inquiry: await readPublicInquiry(row.company_id),
       orderGuidanceAvailable: publicDocumentOrderGuidanceEnabled(row.company_id) } : {}),
     acceptanceAvailable: Boolean(row.lead_id && row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)),

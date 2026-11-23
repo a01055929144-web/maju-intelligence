@@ -30,12 +30,13 @@ const prepare = { action: "prepare-share", documentId: doc, documentVersionId: v
 type Row = Record<string, string | number | null>;
 let links: Row[], sends: Row[], actions: Row[], content: DocumentContent, owner: string, merged: boolean, archived: boolean;
 let failInsert: boolean, failBinding: boolean, limit: string, stock: number;
-let inquiryBody: string | null, inquiryFailure: boolean;
+let inquiryBody: string | null, inquiryFailure: boolean, orderFooterFailure: boolean;
+let publishedNumber = 2;
 const seen: string[] = [];
 
 beforeEach(() => {
   vi.clearAllMocks(); links = []; sends = []; actions = []; seen.length = 0; owner = actor; merged = archived = failInsert = failBinding = false; limit = "allowed"; stock = 2;
-  inquiryBody = null; inquiryFailure = false;
+  inquiryBody = null; inquiryFailure = false; orderFooterFailure = false; publishedNumber = 2;
   mocks.capability.mockReturnValue(false);
   mocks.connection.mockResolvedValue(null);
   vi.stubEnv("STORE_PUBLIC_OWNER_ONBOARDING_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS", company);
@@ -54,6 +55,12 @@ beforeEach(() => {
   mocks.db.mockImplementation(async (url: string, init?: RequestInit) => {
     seen.push(url);
     const u = new URL(url, "https://fixture.test/"), table = u.pathname.slice(1), p = u.searchParams;
+    if (table === "store_order_settings") {
+      expect(p.get("company_id")).toBe(`eq.${company}`);
+      expect(init?.method || "GET").toBe("GET");
+      if (orderFooterFailure) throw new Error("PRIVATE-POLICY-ERROR");
+      return [{ cutoff_days_before: 1, cutoff_time: "23:59:00" }];
+    }
     if (table === "rpc/pricing_s2_public_request_guard") {
       const b = JSON.parse(String(init?.body));
       expect(b.p_requester_hash).toMatch(/^[a-f0-9]{64}$/); expect(Object.keys(b.p_payload)).toEqual(["shareLinkId"]);
@@ -110,7 +117,7 @@ beforeEach(() => {
       return inquiryBody === null ? [] : [{ company_id: company, template_key: "lead_dm_kit", body: inquiryBody }];
     }
     if (p.get("company_id") !== `eq.${company}`) return [];
-    if (table === "pricing_document_versions") return p.get("id") === `eq.${version}` ? [{ id: version, document_id: doc, version: 2, revision: 3, published_at: "2026-11-06T00:00:00Z", content: { ...content, cost: "COST-CANARY", supplier: "SUPPLIER-CANARY" } }] : [];
+    if (table === "pricing_document_versions") return p.get("id") === `eq.${version}` ? [{ id: version, document_id: doc, version: publishedNumber, revision: 3, published_at: "2026-11-06T00:00:00Z", content: { ...content, cost: "COST-CANARY", supplier: "SUPPLIER-CANARY" } }] : [];
     if (table === "pricing_documents") return [{ id: doc, kind: content.kind, owner_key: owner, archived_at: archived ? "2026-11-06" : null }];
     if (table === "business_permit_leads") return merged ? [] : [{ id: lead }];
     if (table === "pricing_promotions") return [{ id: content.lines[0].promotionId, stock, starts_on: "2020-01-01", ends_on: "2099-12-31" }];
@@ -578,4 +585,37 @@ it("derives the 14-day order deadline from the verified version separately from 
   const response = await publicPost(request({ token: token(result.publicUrl) }));
   expect(response.status).toBe(200); const body = await response.json();
   expect(body.document.lines).toHaveLength(1); expect(body.document.lines[0].price).toBeNull(); expect(body.orderEntry.available).toBe(false);
+});
+
+it("shows current policy beside an existing v1 with no stored footer without republishing or changing links", async () => {
+  publishedNumber = 1;
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  vi.stubEnv("FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS", company);
+  content.display!.info = [];
+  const prepared = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  const frozen = JSON.stringify({ links, content });
+  const response = await publicPost(request({ token: token(prepared.publicUrl) }));
+  expect(response.status).toBe(200); const body = await response.json();
+  expect(body.document.version).toBe(1); expect(body.document.display.info).toEqual([]); expect(body.document.footer).toBe("");
+  expect(body.orderFooter).toEqual({ status: "available", items: [
+    { key: "next_day_cutoff_time", label: "주문 마감", place: "footer", value: "전날 23:59 (권역·매장별 예외)" },
+    { key: "delivery_weekdays", label: "배송 요일", place: "footer", value: "권역·매장별 확인" },
+  ] });
+  expect(JSON.stringify(body)).not.toContain("PRIVATE-"); expect(JSON.stringify({ links, content })).toBe(frozen);
+  orderFooterFailure = true;
+  const degraded = await (await publicPost(request({ token: token(prepared.publicUrl) }))).json();
+  expect(degraded.orderFooter).toEqual({ status: "unavailable" }); expect(degraded.document).toEqual(body.document);
+  expect(JSON.stringify({ links, content })).toBe(frozen);
+});
+it("reads no policy for OFF companies, invalid tokens or revoked links", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const prepared = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  vi.stubEnv("FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS", other); seen.length = 0;
+  expect((await (await publicPost(request({ token: token(prepared.publicUrl) }))).json()).orderFooter).toBeUndefined();
+  expect(seen.some(path => path.startsWith("store_order_settings?"))).toBe(false);
+  vi.stubEnv("FEATURE_DOCUMENT_ORDER_FOOTER_COMPANY_IDS", company); seen.length = 0;
+  expect((await publicPost(request({ token: "untrusted" }))).status).toBe(404);
+  links[0].revoked_at = new Date().toISOString();
+  expect((await publicPost(request({ token: token(prepared.publicUrl) }))).status).toBe(404);
+  expect(seen.some(path => path.startsWith("store_order_settings?"))).toBe(false);
 });
