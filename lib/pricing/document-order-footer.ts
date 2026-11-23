@@ -33,6 +33,6 @@ export async function readDocumentOrderFooter(scope: DocumentScope, customerId?:
   const info = orderFooterNotice("");
   info[0].value = `${["당일", "전날", "2일 전"][before]} ${time}${customerId ? "" : " (권역·매장별 예외)"}`;
   info[1].value = !customerId ? "권역·매장별 확인" : weekdays?.length && weekdays.length <= 7 && weekdays.every(day => Number.isInteger(day) && day >= 0 && day <= 6)
-    ? [...new Set(weekdays)].sort((a,b) => a-b).map(day => ["일","월","화","수","목","금","토"][day]).join("·") : "배송 설정 확인 필요";
+    ? Array.from(new Set(weekdays)).sort((a,b) => a-b).map(day => ["일","월","화","수","목","금","토"][day]).join("·") : "배송 설정 확인 필요";
   return info;
 }
