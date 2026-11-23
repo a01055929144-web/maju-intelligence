@@ -4,6 +4,7 @@ export { DirectoryStat, OperationalEmptyState } from "@/components/map/customer-
 import { QuickRegisterDrawer } from "@/components/map/quick-register-drawer";
 import { copyText } from "@/lib/copy-text";
 import { leadLayerColor } from "@/domains/route/map-layer-colors";
+import { DEFAULT_LEAD_SEARCH_RADIUS_KM, useLeadRadiusState } from "@/components/map/use-lead-radius-state";
 import { useMapFullscreen } from "@/components/map/use-map-fullscreen";
 import { MapExplorerTabs, MapLayerControl, MapLayerLegend, type MapPanelMode } from "@/components/map/map-layer-controls";
 
@@ -238,7 +239,6 @@ export const tmapWaypointLimit = 15;
 // v2(10-27 시안 ⑫): 기본 = 3분할(왼쪽 담당자·차량 / 지도 / 오른쪽 신규·영업·거래처 목록). v1 저장값은 무시합니다.
 const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v2";
 // "반경 리드"에서 지도를 클릭하면 항상 이 값으로 시작합니다(네이버 지도 반경 도구 참고, 2026-08-20).
-const DEFAULT_LEAD_SEARCH_RADIUS_KM = 0.5;
 export const QUOTE_FOLLOW_UP_STATUS_FILTER = "__quote_follow_up";
 export const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
 
@@ -382,21 +382,26 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 지도 위에 마커로 바로 보여주기 위한 별도 상태입니다(리드 탭 상태와는 독립적).
   // 기본 모드는 "point"(지도 클릭) — 네이버 지도 반경 도구처럼 지도를 클릭하면 그 지점에
   // 고정 기본값(0.5km) 반경이 즉시 생기고, 손잡이로 조절, 오른쪽 클릭이나 지우기 버튼으로 지웁니다.
-  const [leadRadiusOpen, setLeadRadiusOpen] = useState(false);
-  const [leadRadiusAnchorMode, setLeadRadiusAnchorMode] = useState<"all" | "customer" | "point">("point");
-  const [leadRadiusCustomerId, setLeadRadiusCustomerId] = useState("");
-  // point 모드에서 클릭으로 고정한 중심좌표입니다. 아직 고정 전이면 null이고, 이 값이 null인
-  // 동안에만 지도 클릭이 "이 지점에 반경 만들기" 인터랙션을 받습니다.
-  const [leadRadiusPoint, setLeadRadiusPoint] = useState<{ lat: number; lng: number } | null>(null);
-  // 지도가 마지막으로 멈춘 중심좌표 — "빠른 반경 선택" 칩을 누르면 클릭 없이도 지금 보고 있는
-  // 지도 중심을 기준으로 바로 탐색할 수 있게 합니다(네이버 지도의 "이 지역 검색"과 비슷한 흐름).
-  const [mapCenterPoint, setMapCenterPoint] = useState<{ lat: number; lng: number } | null>(null);
-  // 반경 기본값은 0.5km로 고정합니다(2026-08-20 피드백) — 지도를 클릭하면 항상 이 값으로
-  // 시작하고, 이후 손잡이 드래그나 숫자 입력으로 조절합니다.
-  const [leadRadiusKm, setLeadRadiusKm] = useState(DEFAULT_LEAD_SEARCH_RADIUS_KM);
-  const [leadRadiusSearching, setLeadRadiusSearching] = useState(false);
-  const [leadRadiusResult, setLeadRadiusResult] = useState<NearbyPermitLeadResult | null>(null);
-  const [leadRadiusError, setLeadRadiusError] = useState("");
+  const {
+    leadRadiusOpen,
+    setLeadRadiusOpen,
+    leadRadiusAnchorMode,
+    setLeadRadiusAnchorMode,
+    leadRadiusCustomerId,
+    setLeadRadiusCustomerId,
+    leadRadiusPoint,
+    setLeadRadiusPoint,
+    mapCenterPoint,
+    setMapCenterPoint,
+    leadRadiusKm,
+    setLeadRadiusKm,
+    leadRadiusSearching,
+    setLeadRadiusSearching,
+    leadRadiusResult,
+    setLeadRadiusResult,
+    leadRadiusError,
+    setLeadRadiusError
+  } = useLeadRadiusState();
   const [previewLeadId, setPreviewLeadId] = useState("");
   // "전체 리드 보기" — 반경 검색과 무관하게 활성 신규 리드 전체를 메인 지도에 바로 표시합니다.
   // 예전에는 신규 리드 탭 안에 별도 지도가 있었는데(같은 데이터를 두 지도에서 따로 관리),
