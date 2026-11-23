@@ -170,14 +170,19 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
       for (const i of [0,12,13,14,744]) {
         const label=name(i,scenario.existing);
         await page.getByRole('searchbox',{name:'품목 검색',exact:true}).fill(saved.items.find(item=>item.code===code(i))!.catalog_code);
-        const row=page.getByRole('textbox',{name:`${label} 품목명`,exact:true}).locator('xpath=ancestor::tr[1]');
+        const nameInput=page.getByRole('textbox',{name:`${label} 품목명`,exact:true});
+        const row=nameInput.locator(scenario.width===390?'xpath=ancestor::li[1]':'xpath=ancestor::tr[1]');
         const cost=restored?(i<scenario.existing?100:0):(i<188?(i<scenario.existing?100:0):chosenCost(i,scenario.existing));
-        await expect(row.getByRole('cell',{name:`${cost}원`,exact:true}).first()).toBeVisible();
+        if(scenario.width===390)await expect(row).toContainText(`${cost}원`);
+        else await expect(row.getByRole('cell',{name:`${cost}원`,exact:true}).first()).toBeVisible();
         const effectiveDate=restored?(i<scenario.existing?priorDate:null):saved.items.find(item=>item.code===code(i))!.date;
-        const headers=await row.locator('xpath=ancestor::table[1]').getByRole('columnheader').allTextContents();
-        const dateColumn=headers.findIndex(label=>label.trim().startsWith('적용일'));
-        expect(dateColumn).toBeGreaterThanOrEqual(0);
-        await expect(row.getByRole('cell').nth(dateColumn)).toHaveText(effectiveDate || '-');
+        if(scenario.width===390)await expect(row.getByText('적용일',{exact:true}).locator('xpath=following-sibling::span[1]')).toHaveText(effectiveDate||'-');
+        else {
+          const headers=await row.locator('xpath=ancestor::table[1]').getByRole('columnheader').allTextContents();
+          const dateColumn=headers.findIndex(label=>label.trim().startsWith('적용일'));
+          expect(dateColumn).toBeGreaterThanOrEqual(0);
+          await expect(row.getByRole('cell').nth(dateColumn)).toHaveText(effectiveDate||'-');
+        }
       }
       await page.getByRole('searchbox',{name:'품목 검색',exact:true}).fill('');
     };
