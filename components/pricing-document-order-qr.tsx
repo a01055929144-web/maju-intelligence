@@ -114,11 +114,11 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
         </div> : null}
       </div> : null}
       {publicSharingAvailable && (shared || allowCustomerLink) ? <details className={step}>
-        <summary className="min-h-11 cursor-pointer content-center font-bold">기존 거래처 전용 QR</summary>
+        <summary className="min-h-11 cursor-pointer content-center font-bold">관리 · 회수와 기존 거래처 전용 QR</summary>
         <p className="text-sm">발급한 링크의 열람·상태·회수는 링크 관리에서 확인합니다. 특정 거래처에만 보낼 QR이 필요할 때만 아래 기능을 씁니다.</p>
         <div className="flex flex-wrap gap-2">
           <Link className="inline-flex min-h-11 items-center rounded border px-3 underline" href={`/revenue/pricing/links?companyId=${encodeURIComponent(companyId)}`}>링크 관리 열기</Link>
-          {shared ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void revokePublic()} type="button">지금 만든 공개 링크 회수</Button> : null}
+          {shared ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void revokePublic()} type="button">공개 링크 회수</Button> : null}
           {allowCustomerLink ? <Button className="min-h-[44px]" disabled={busy} onClick={() => { setCustomerMode(true); void load(); }} type="button">기존 거래처 전용 QR 선택</Button> : null}
         </div>
         {customerMode && allowCustomerLink ? customerPicker : null}
