@@ -47,6 +47,10 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
         if (!("id" in payload) || !isId(payload.id)) throw new PricingInputError("문서를 확인해 주세요.");
         return repository.request<T>(scope, action, { id: payload.id });
       }
+      if (action === "extension-policy") {
+        if (!("id" in payload) || !isId(payload.id)) throw new PricingInputError("문서를 확인해 주세요.");
+        return repository.request<T>(scope, action, { id: payload.id });
+      }
       if (
         ![
           "list",

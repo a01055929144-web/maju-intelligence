@@ -13,7 +13,7 @@ vi.mock("../lib/auth", () => ({
   getCustomerOperationalName: () => "합성",
 }));
 vi.mock("../lib/store", () => ({ getSupabaseConfig: () => null, supabaseRequest: (path: string, init?: RequestInit) => databaseRequest(path, init) }));
-import { POST } from "../app/api/pricing-documents/route";
+import { GET, POST } from "../app/api/pricing-documents/route";
 import { documentRequest } from "../lib/pricing/document-client";
 import { reviewDocumentExtension, publishDocumentExtension, readDocumentExtensionCatalog, readDocumentExtensionPolicy } from "../lib/pricing/document-extension-client";
 import type { DocumentDraft } from "../domains/pricing/document";
@@ -87,9 +87,10 @@ describe.skipIf(process.env.CX121_API_PG17 !== "true")("CX-121 real POST handler
     vi.stubEnv("PRICING_DOCUMENT_EXTENSION_COMPANY_IDS", company + "," + other);
     vi.stubEnv("LEAD_DOCUMENT_SHARING_ENABLED", "false");
     vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
-      if (!url.startsWith("/api/pricing-documents?") || init?.method !== "POST") throw new Error("Unexpected HTTP fixture request");
-      return POST(new NextRequest("https://synthetic.test" + url, { ...init,
-        headers: { ...init.headers, origin: "https://synthetic.test" } }));
+      if (!url.startsWith("/api/pricing-documents?")) throw new Error("Unexpected HTTP fixture request");
+      const request = new NextRequest("https://synthetic.test" + url, { ...init,
+        headers: { ...init?.headers, origin: "https://synthetic.test" } });
+      return init?.method === "POST" ? POST(request) : GET(request);
     });
   }, 30000);
   afterAll(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
