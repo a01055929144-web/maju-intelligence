@@ -1,7 +1,11 @@
+import { readDocumentOrderFooter } from "./document-order-footer";
+import { readDocumentQrDisplay, saveDocumentQrDisplay } from "./document-qr-display";
+import type { DocumentQrDisplay } from "../../domains/pricing/document";
+import { createHash, randomBytes } from "crypto";
 import { getSupabaseConfig, supabaseRequest } from "../store";
 import type { DocumentScope, PricingDocumentsRepository } from "../../application/pricing/documents";
 import { withDocumentRecalculations } from "./document-recalculation";
-import { catalogDisplaySpec, isId, koreaDay, type DocumentDraft, type DocumentVersion } from "../../domains/pricing/document";
+import { catalogDisplaySpec, isId, isSettlementInfoKey, koreaDay, object, parseDisplay, PricingInputError, type DocumentDraft, type DocumentVersion } from "../../domains/pricing/document";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
 import type { PrepareDocumentShare } from "../../domains/pricing/document-share";
 import { prepareDocumentShare, revokeDocumentShare, recordSharedDocumentDelivery } from "./document-share";
@@ -73,7 +77,7 @@ async function readCompanyVersions(scope: DocumentScope, payload: object): Promi
       documentId: row.document_id,
       version: row.version,
       revision: row.revision,
-      content: row.content,
+      content: { ...row.content, ...(row.content.display ? { display: parseDisplay(row.content.display) } : {}) },
       publishedAt: row.published_at,
       promotionStock: Object.fromEntries(ids.flatMap(id => current.has(id) ? [[id, current.get(id)!.stock]] : [])),
       unavailablePromotions: ids.filter(id => { const promotion = current.get(id); return !promotion || today < promotion.starts_on || today > promotion.ends_on || promotion.stock === 0; }),
@@ -127,12 +131,58 @@ async function recordDocumentSend(scope: DocumentScope, input: DocumentSendInput
 
 export const pricingDocumentsRepository: PricingDocumentsRepository = {
   async request<T>(scope: DocumentScope, action: string, payload: object): Promise<T> {
+    if (action === "order-footer") return readDocumentOrderFooter(scope, (payload as { customerId?: string }).customerId) as Promise<T>;
+    if (action === "qr-display") return readDocumentQrDisplay(scope, (payload as { id: string }).id) as Promise<T>;
+    if (action === "save-qr-display") return saveDocumentQrDisplay(scope, payload as { id: string; expected: number; settings: DocumentQrDisplay }) as Promise<T>;
+    if (action === "save-promotion" && "expected" in payload && payload.expected === 0) {
+      const content = object("content" in payload ? payload.content : null);
+      const productId = content.productId;
+      if (!scope.manager || !isId(productId)) throw new PricingInputError("행사 관리 권한과 상품을 확인해 주세요.");
+      const products = await supabaseRequest<Array<{ id: string; tax_type: string | null }>>(
+        `product_catalog?company_id=eq.${encodeURIComponent(scope.companyId)}&id=eq.${encodeURIComponent(productId)}&is_active=eq.true&select=id,tax_type&limit=1`,
+      );
+      const product = Array.isArray(products) ? products[0] : undefined;
+      if (!Array.isArray(products) || products.length !== 1 || product?.id !== productId || (product.tax_type !== "taxable" && product.tax_type !== "exempt"))
+        throw new PricingInputError("원상품의 과세·면세를 확인하지 못했습니다. 상품관리에서 세금 구분을 확인한 뒤 다시 담아 주세요.");
+      payload = { ...payload, content: { ...content, taxType: product.tax_type } };
+    }
     if (action === "prepare-share") return prepareDocumentShare(scope, payload as PrepareDocumentShare) as Promise<T>;
     if (action === "revoke-share") return revokeDocumentShare(scope, (payload as { shareLinkId: string }).shareLinkId) as Promise<T>;
     if (action === "record-send") {
       const input = payload as DocumentSendInput;
       if (input.shareLinkId) return recordSharedDocumentDelivery(scope, input) as Promise<T>;
       return recordDocumentSend(scope, input) as Promise<T>;
+    }
+    if (action === "extension-review") {
+      const token = randomBytes(32).toString("base64url"), input = payload as Record<string, unknown>;
+      const result = await supabaseRequest<Record<string, unknown>>("rpc/pricing_document_extension_review_v1", {
+        method: "POST", body: JSON.stringify({ p_company: scope.companyId, p_actor: scope.actor, p_manager: scope.manager,
+          p_document: input.id, p_expected: input.expected, p_mode: input.mode, p_valid_until: input.validUntil,
+          p_stage: input.stage, p_content: input.content ?? null, p_token_hash: createHash("sha256").update(token).digest("hex") }),
+      });
+      return { ...result, token } as T;
+    }
+    if (action === "extension-catalog") {
+      const input = payload as Record<string, unknown>;
+      return supabaseRequest<T>("rpc/pricing_document_extension_catalog_v1", { method: "POST", body: JSON.stringify({
+        p_company: scope.companyId, p_actor: scope.actor, p_manager: scope.manager, p_document: input.id,
+        p_expected: input.expected, p_mode: input.mode, p_product_ids: input.productIds,
+      }) });
+    }
+    if (action === "extension-save") {
+      const input = payload as Record<string, unknown>;
+      return supabaseRequest<T>("rpc/pricing_document_extension_save_v1", { method: "POST", body: JSON.stringify({
+        p_company: scope.companyId, p_actor: scope.actor, p_manager: scope.manager, p_document: input.id,
+        p_expected: input.expected, p_mode: input.mode, p_content: input.content,
+      }) });
+    }
+    if (action === "extension-publish") {
+      const input = payload as Record<string, unknown>;
+      return supabaseRequest<T>("rpc/pricing_document_extension_publish_v1", { method: "POST", body: JSON.stringify({
+        p_company: scope.companyId, p_actor: scope.actor, p_manager: scope.manager, p_document: input.id,
+        p_expected: input.expected, p_mode: input.mode, p_token_hash: createHash("sha256").update(String(input.token)).digest("hex"),
+        p_idempotency_key: input.idempotencyKey,
+      }) });
     }
     if (action === "archive") {
       if (!scope.archiveEnabled) throw new Error("문서 보관을 사용할 수 없습니다.");
@@ -141,6 +191,17 @@ export const pricingDocumentsRepository: PricingDocumentsRepository = {
     }
     if (action === "list") return withDocumentRecalculations(scope.companyId, await listCompanyDocuments(scope, payload)) as Promise<T>;
     if (action === "versions") return readCompanyVersions(scope, payload) as Promise<T>;
+    if (action === "publish") {
+      const { id } = payload as { id: string };
+      // Match the existing publishing scope; an old saved draft must be cleaned
+      // by the normal revision-checked save, never silently rewritten here.
+      const rows = await supabaseRequest<Array<{ content: DocumentDraft["content"] }>>(
+        `pricing_documents?company_id=eq.${encodeURIComponent(scope.companyId)}&id=eq.${encodeURIComponent(id)}&or=(kind.eq.sheet,owner_key.eq.${encodeURIComponent(scope.actor)})&select=content&limit=1`,
+      );
+      const info = rows[0]?.content?.display?.info;
+      if (Array.isArray(info) && info.some(item => isSettlementInfoKey(item?.key)))
+        throw new DocumentSendError("입금 계좌는 공개 문서에 넣을 수 없습니다. 문서를 저장한 뒤 다시 발행해 주세요.", 400);
+    }
     const result = await supabaseRequest<T>("rpc/pricing_p1", {
       method: "POST",
       body: JSON.stringify({

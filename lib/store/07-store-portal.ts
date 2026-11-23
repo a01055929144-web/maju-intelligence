@@ -10,6 +10,7 @@ import { readStorePortalSourceDocuments } from "../pricing/store-portal-source-d
 import { isStoreAccountRole } from "../../domains/organization/store-cost-access";
 import { getStoreMemberContext } from "./07-store-member-context";
 import { hasActiveStoreMembership } from "./08-store-cost-access";
+import { getStoreSettlementAccount, type StoreSettlementAccount } from "./07-store-settlement-account";
 
 type Membership = { company_id: string; store_account_id: string; role: string; store_accounts: { customer_id: string } | null };
 type StoreLink = { id: string; token_nonce: string; token_hash: string; document_version_id: string; expires_at: string; can_order: boolean };
@@ -25,6 +26,7 @@ export type StorePortalAccount = {
   hasCostAccess: boolean;
   canManageMembers: boolean;
   canManageAddress: boolean;
+  settlementAccount?: StoreSettlementAccount;
   documents: Array<{ title: string; industry?: string; kind: "sheet" | "quote"; href: string; canOrder: boolean; validUntil: string; itemCount?: number }>;
 };
 
@@ -87,11 +89,13 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
     });
     documents.push(...await readStorePortalSourceDocuments(row.company_id,row.store_account_id,row.store_accounts!.customer_id));
     const canManage = row.role === "owner" || row.role === "manager";
+    const settlementAccount = await getStoreSettlementAccount({ companyId: row.company_id, storeAccountId: row.store_account_id });
     const businessType = companies[0]?.business_type?.trim() || "";
     return { companyId: row.company_id, storeAccountId: row.store_account_id, ...(businessType ? { businessType } : {}),
       ...(receivedHome && companies[0]?.name ? { companyName: companies[0].name } : {}),
       ...(catalogHref ? { catalogHref } : {}),
       customerName: customers[0]?.customer_name || "이름 없는 매장", documents,
+      ...(settlementAccount ? { settlementAccount } : {}),
       hasCostAccess: isFeatureEnabled("STORE_COSTS", row.company_id), canManageMembers: canManage,
       canManageAddress: canManage && isStoreAddressCompanyEnabled(row.company_id) };
   }));

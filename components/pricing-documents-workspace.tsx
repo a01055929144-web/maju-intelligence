@@ -16,6 +16,8 @@ import {
   lineFromCatalog,
   MAX_DOCUMENT_LINES,
   parseDocument,
+  parseDisplay,
+  FIXED_PROMOTION_PRICE_CONTRACT,
   withMargin,
   type CatalogChoice,
   fillBlankDocumentSpecs,
@@ -42,6 +44,13 @@ import { importDocumentExcelRows, parseDocumentExcelRows } from "@/domains/prici
 import { customerErpCode } from "@/domains/product/customer-erp-code";
 import type { LeadDocumentContext } from "@/application/pricing/document-entry";
 import { PricingLeadDocumentShare } from "./pricing-lead-document-share";
+import { reviewDocumentExtension, publishDocumentExtension, readDocumentExtensionCatalog, type ExtensionMode, type ExtensionReview } from "@/lib/pricing/document-extension-client";
+import { PricingDocumentExtensionChoice, PricingDocumentExtensionReport } from "./pricing-document-extension";
+import { Dialog } from "./ui/dialog";
+import { useConfirm } from "./ui/confirm-dialog";
+import { countDocumentTaxMismatches, reviewDocumentTaxes } from "@/domains/pricing/document-tax";
+import { Notice } from "./ui/notice";
+
 const box = "rounded border border-slate-300 px-3 py-2";
 type Profile = {
   revision: number;
@@ -55,6 +64,10 @@ export function PricingDocumentsWorkspace({
   leadContext,
   sharingEnabled = false,
   publicSharingAvailable = false,
+  extensionEnabled = false,
+  footerFormattingEnabled = false,
+  offlineFlyerEnabled = false,
+  vatEnabled = false,
 }: {
   companyId: string;
   manager: boolean;
@@ -63,7 +76,12 @@ export function PricingDocumentsWorkspace({
   leadContext?: LeadDocumentContext;
   sharingEnabled?: boolean;
   publicSharingAvailable?: boolean;
+  extensionEnabled?: boolean;
+  footerFormattingEnabled?: boolean;
+  offlineFlyerEnabled?: boolean;
+  vatEnabled?: boolean;
 }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [docs, setDocs] = useState<DocumentDraft[]>([]),
     [total, setTotal] = useState(0),
     [page, setPage] = useState(1),
@@ -74,6 +92,8 @@ export function PricingDocumentsWorkspace({
     [preview, setPreview] = useState<DocumentVersion | null>(null),
     [openPublicQr, setOpenPublicQr] = useState(false),
     [fontScale, setFontScale] = useState(1);
+  const currentDraft = useRef(draft);
+  currentDraft.current = draft;
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]),
     [catalogQuery, setCatalogQuery] = useState(""),
     [catalogInput, setCatalogInput] = useState(""),
@@ -89,6 +109,13 @@ export function PricingDocumentsWorkspace({
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("documents");
   const [view, setView] = useState<"list" | "editor">("list");
+  const [extensionChoice, setExtensionChoice] = useState<DocumentDraft | null>(null);
+  const [extension, setExtension] = useState<{ mode: ExtensionMode; initial: ExtensionReview } | null>(null);
+  const [extensionReview, setExtensionReview] = useState<ExtensionReview | null>(null);
+  const extensionRetry = useRef<string | null>(null);
+  const [orderFooterAvailable, setOrderFooterAvailable] = useState(false);
+  const [qrDisplayAvailable, setQrDisplayAvailable] = useState(false);
+  const [taxMismatchCount, setTaxMismatchCount] = useState(0);
   /* 11/4: 같은 데이터를 문서(A4 종이)로 보거나 표로 봅니다. 기본은 문서 보기. */
   const [docView, setDocView] = useState<"doc" | "table">("doc"),
     [autoPrint, setAutoPrint] = useState(false),
@@ -106,9 +133,18 @@ export function PricingDocumentsWorkspace({
   const excelInput = useRef<HTMLInputElement>(null);
   const draggedLine = useRef<number | null>(null);
   const read = useCallback(
-    <T,>(action: string, payload: Record<string, unknown> = {}) =>
-      documentRequest<T>(companyId, action, payload).then((r) => r.result),
-    [companyId],
+    <T,>(action: string, payload: Record<string, unknown> = {}) => {
+      if (extension && action === "catalog") {
+        if (!draft) return Promise.reject(new Error("연장할 문서를 다시 선택해 주세요."));
+        return readDocumentExtensionCatalog(companyId, { id: draft.id, expected: draft.revision, mode: extension.mode }, payload).then(result => result as T);
+      }
+      return documentRequest<T>(companyId, action, payload).then(r => {
+        setQrDisplayAvailable(r.qrDisplayAvailable === true);
+        setOrderFooterAvailable(r.orderFooterAvailable === true);
+        return r.result;
+      });
+    },
+    [companyId, extension?.mode, draft?.id, draft?.revision],
   );
   const loadList = useCallback(async () => {
     const r = await read<{ items: DocumentDraft[]; total: number }>("list", {
@@ -180,8 +216,21 @@ export function PricingDocumentsWorkspace({
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
+  const taxReviewKey = draft?.content.lines.map(line => `${line.productId}:${line.taxType}`).join("|") ?? "";
+  useEffect(() => {
+    if (!draft || draft.archivedAt || !taxReviewKey) { setTaxMismatchCount(0); return; }
+    let active = true;
+    const ids = Array.from(new Set(draft.content.lines.map(line => line.productId)));
+    const batches = Array.from({ length: Math.ceil(ids.length / 100) }, (_, index) => ids.slice(index * 100, index * 100 + 100));
+    void Promise.all(batches.map(productIds => read<{ items: CatalogChoice[] }>("catalog", { productIds })))
+      .then(results => { if (active) setTaxMismatchCount(countDocumentTaxMismatches(draft.content.lines, results.flatMap(result => result.items))); })
+      .catch(() => { if (active) setTaxMismatchCount(0); });
+    return () => { active = false; };
+  }, [draft?.id, read, taxReviewKey]);
   function change(content: DocumentContent) {
     if (draft && !draft.archivedAt) {
+      setExtensionReview(null);
+      extensionRetry.current = null;
       setDraft({ ...draft, content });
       setDirty(true);
       setPreview(null);
@@ -205,7 +254,7 @@ export function PricingDocumentsWorkspace({
       const added = missing.flatMap((p) => { const item = byId.get(p.productId); return item ? [{ p, item }] : []; });
       if (!added.length) return;
       setBaselines((previous) => ({ ...previous, ...Object.fromEntries(added.map(({ p, item }) => [p.productId, item.price])) }));
-      change({ ...draft.content, lines: [...draft.content.lines, ...added.map(({ p, item }) => ({ ...lineFromCatalog(item), displayName: p.displayName, price: p.price, promotionId: p.id, startsOn: p.startsOn, endsOn: p.endsOn, remaining: p.stock, badge: p.badge, taxType: p.taxType }))] });
+      change({ ...draft.content, lines: [...draft.content.lines, ...added.map(({ p, item }) => ({ ...lineFromCatalog(item), displayName: p.displayName, price: p.price, promotionId: p.id, startsOn: p.startsOn, endsOn: p.endsOn, remaining: p.stock, badge: p.badge, taxType: p.taxType, ...(draft.content.priceContract === FIXED_PROMOTION_PRICE_CONTRACT ? { priceIncludesTax: true } : {}) }))] });
     }).catch((e) => setError(e instanceof Error ? e.message : "행사·임박을 자동으로 넣지 못했습니다."));
   }, [draft, autoPromos, promotions]); // eslint-disable-line react-hooks/exhaustive-deps
   function discard() {
@@ -253,6 +302,7 @@ export function PricingDocumentsWorkspace({
       showBrand: true,
       showSpec: true,
       lines: [],
+      ...(vatEnabled ? { priceContract: FIXED_PROMOTION_PRICE_CONTRACT, display: { ...parseDisplay(undefined), priceIncludesTax: true } } : {}),
     };
   }
   function startPreset(preset: DocumentPreset, kind: DocumentKind) {
@@ -282,6 +332,7 @@ export function PricingDocumentsWorkspace({
   );
   function create(kind: DocumentKind, content?: DocumentContent) {
     if (!discard()) return;
+    setExtension(null); setExtensionReview(null); extensionRetry.current = null;
     const basis: Record<string, number> = {};
     for (const l of content?.lines || []) basis[l.productId] = l.price;
     setBaselines(basis);
@@ -302,6 +353,7 @@ export function PricingDocumentsWorkspace({
   }
   async function select(d: DocumentDraft) {
     if (!discard()) return;
+    setExtension(null); setExtensionReview(null); extensionRetry.current = null;
     setVersions([]);
     setDraft(structuredClone(d));
     setDirty(false);
@@ -321,8 +373,8 @@ export function PricingDocumentsWorkspace({
     const content = parseDocument(draft.content);
     const r = await documentRequest<DocumentDraft>(
       companyId,
-      "save",
-      { id: draft.id, expected: draft.revision, content },
+      extension ? "extension-save" : "save",
+      { id: draft.id, expected: draft.revision, content, ...(extension ? { mode: extension.mode } : {}) },
       true,
     );
     setDraft(r.result);
@@ -330,8 +382,32 @@ export function PricingDocumentsWorkspace({
     setMessage("초안을 저장했습니다.");
     await loadList();
   }
+  async function refreshTaxes() {
+    const source = currentDraft.current;
+    if (!source || source.archivedAt) return;
+    const ids = Array.from(new Set(source.content.lines.map(line => line.productId)));
+    const batches = Array.from({ length: Math.ceil(ids.length / 100) }, (_, index) => ids.slice(index * 100, index * 100 + 100));
+    const [catalogs, offers] = await Promise.all([
+      Promise.all(batches.map(productIds => read<{ items: CatalogChoice[] }>("catalog", { productIds }))),
+      read<Promotion[]>("promotions"),
+    ]);
+    if (currentDraft.current !== source) throw new Error("편집 내용이 바뀌었습니다. 현재 세금 구분 반영을 다시 눌러 주세요.");
+    const review = reviewDocumentTaxes(source.content.lines, catalogs.flatMap(result => result.items), offers);
+    if (!review.changed) { setMessage("현재 상품·행사와 세금 구분이 같습니다."); return; }
+    if (!(await confirm({ title: "현재 세금 구분 반영", body: `면세로 ${review.toExempt}개·과세로 ${review.toTaxable}개를 바꿉니다. 저장 단가와 기존 발행본은 유지됩니다. 변경 후 초안을 저장해야 적용됩니다.`, confirmLabel: "초안에 반영", tone: "default" }))) return;
+    if (currentDraft.current !== source) throw new Error("편집 내용이 바뀌었습니다. 현재 세금 구분 반영을 다시 눌러 주세요.");
+    change({ ...source.content, lines: review.lines });
+    setMessage(`${review.changed}개 품목의 세금 구분을 초안에 반영했습니다. 확인 후 초안을 저장해 주세요. 기존 발행본은 유지됩니다.`);
+  }
   async function publish() {
     if (!draft || draft.archivedAt || dirty) return;
+    if (extension) {
+      const review = await reviewDocumentExtension(companyId, { id: draft.id, expected: draft.revision,
+        mode: extension.mode, validUntil: draft.content.validUntil, stage: "review", content: draft.content });
+      setExtensionReview(review);
+      extensionRetry.current = crypto.randomUUID();
+      return;
+    }
     const r = await documentRequest<DocumentVersion>(
       companyId,
       "publish",
@@ -417,6 +493,7 @@ export function PricingDocumentsWorkspace({
         remaining: p.stock,
         badge: p.badge,
         taxType: p.taxType,
+        ...(draft.content.priceContract === FIXED_PROMOTION_PRICE_CONTRACT ? { priceIncludesTax: true } : {}),
       })),
     ]);
     setTab("documents");
@@ -433,6 +510,7 @@ export function PricingDocumentsWorkspace({
   }
   async function applyMargin(index?: number, only?: Set<string>) {
     if (!draft || !draft.content.lines.length) return;
+    if (extension) throw new Error("연장 중 마진 변경은 아직 지원하지 않습니다. 단가를 직접 수정한 뒤 서버 가격을 다시 확인해 주세요.");
     const ids = Array.from(
       new Set(
         draft.content.lines
@@ -570,8 +648,9 @@ export function PricingDocumentsWorkspace({
                         );
                       });
   };
+  const vatLocked = Boolean(draft?.content.priceContract && !vatEnabled);
   const editable = Boolean(
-    draft && !draft.archivedAt && (draft.content.kind === "quote" || manager),
+    draft && !draft.archivedAt && !vatLocked && (draft.content.kind === "quote" || manager),
   );
   const latestPublished = versions.reduce<DocumentVersion | null>((latest, version) =>
     !latest || version.version > latest.version ? version : latest, null);
@@ -587,18 +666,57 @@ export function PricingDocumentsWorkspace({
     </div>
     <PricingDocumentSheets companyId={companyId} manager={manager}
       onCreate={(kind) => setStarting(kind)} onOpen={select}
+      onExtend={extensionEnabled ? document => void task(async () => {
+        const published = (await read<DocumentVersion[]>("versions", { id: document.id })).filter(v => v.documentId === document.id)
+          .sort((a, b) => b.version - a.version)[0];
+        if (!published) throw new Error("게시한 문서만 연장할 수 있습니다. 먼저 문서를 게시해 주세요.");
+        setExtensionChoice({ ...document, content: published.content });
+      }) : undefined}
       onCopy={(document) => create(document.content.kind, document.content)} />
+    {extensionChoice && <PricingDocumentExtensionChoice validUntil={extensionChoice.content.validUntil} busy={busy} error={error}
+      onClose={() => { if (!busy) setExtensionChoice(null); }} onContinue={(mode, validUntil) => void task(async () => {
+        const review = await reviewDocumentExtension(companyId, { id: extensionChoice.id, expected: extensionChoice.revision, mode, validUntil, stage: "start" });
+        await select(extensionChoice);
+        setDraft({ ...extensionChoice, content: review.content }); setDirty(true);
+        setExtension({ mode, initial: review }); setExtensionChoice(null);
+      })} />}
     {error ? <p className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p> : null}
     {starting ? <PricingStartGallery kind={starting} loadDocuments={loadStartDocuments} manager={manager} onBlank={(kind) => { setStarting(null); create(kind); }} onClose={() => setStarting(null)} onCopy={(document, kind) => { setStarting(null); create(kind, document.content); }} onPreset={startPreset} /> : null}
   </div>;
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-clip" aria-busy={busy}>
+      {confirmDialog}
+      {vatLocked ? <Notice kind="error">포함 행사 가격 문서 편집이 꺼져 있습니다. 관리자에게 설정을 확인해 주세요. 기존 발행본은 미리보기에서 확인할 수 있습니다.</Notice> : null}
       {leadNotice}
+      {extension && draft && <aside className="space-y-3 rounded border p-3" aria-label="약속가 연장 편집">
+        <p>{extension.mode === "keep" ? "약속가 그대로 연장" : "최신 가격으로 연장"} · 기존 편집기에서 품목·직접 단가·순서·숨김·유효기간을 수정한 뒤 저장하고 게시 전 요약을 확인해 주세요.</p>
+        <p>아래는 마지막 가격 확인 결과입니다. 편집 후 다시 확인해 주세요.</p>
+        <Button className="min-h-[52px]" disabled={busy} onClick={() => void task(async () => {
+          const review = await reviewDocumentExtension(companyId, { id: draft.id, expected: draft.revision, mode: extension.mode,
+            validUntil: draft.content.validUntil, stage: "review", content: draft.content });
+          setExtension({ ...extension, initial: review });
+        })}>편집 내용 가격 확인</Button>
+        <PricingDocumentExtensionReport review={extension.initial} />
+      </aside>}
+      {extensionReview && extension && draft && <Dialog title="연장 게시 확인" fullScreenOnMobile onClose={() => { if (!busy) setExtensionReview(null); }}>
+        {error && <p role="alert">{error}</p>}
+        <PricingDocumentExtensionReport review={extensionReview} />
+        <p>새 게시본이 새 약속가가 됩니다. 같은 링크와 기존 게시 기록을 유지합니다.</p>
+        <Button className="min-h-[52px]" disabled={busy} onClick={() => void task(async () => {
+          if (!extensionRetry.current) return;
+          const version = await publishDocumentExtension(companyId, { id: draft.id, expected: draft.revision,
+            mode: extension.mode, token: extensionReview.token, idempotencyKey: extensionRetry.current });
+          setVersions(await read<DocumentVersion[]>("versions", { id: draft.id }));
+          setMessage(`버전 ${version.version} 연장 게시 완료 · 같은 링크 유지 · 연장 방법 기록 완료`);
+          setExtensionReview(null); setExtension(null); extensionRetry.current = null;
+        })}>새 약속가로 게시</Button>
+      </Dialog>}
       {/* 화면 고정 줄은 앱 상단 줄 하나만 둔다. 이 줄까지 top-0에 고정하면 스크롤 때 페이지 제목을 덮는다(대표 11/10). */}
       <header className="pricing-no-print -mx-1 border-b border-slate-200 bg-white px-1 py-2">
         {draft && tab === "documents" ? (
           <>
             <Toolbar
+              className="max-sm:[&>div]:basis-full max-sm:[&>div]:w-full max-sm:[&_button]:shrink-0 max-sm:[&_button]:whitespace-nowrap"
               left={<>
                 <Button onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button" variant="outline">← 문서 목록</Button>
                 <input aria-label="문서 제목" className="h-9 min-w-[120px] flex-1 rounded-md border border-transparent px-2 text-base font-bold hover:border-slate-200 focus:border-teal-400 sm:text-lg" disabled={!editable} maxLength={100} onChange={(e) => change({ ...draft.content, title: e.target.value })} value={draft.content.title} />
@@ -618,6 +736,7 @@ export function PricingDocumentsWorkspace({
                   { label: "견적서로 복사", disabled: busy, onSelect: () => create("quote", draft.content) },
                   { label: "품목 엑셀 내보내기", disabled: busy, onSelect: () => void task(exportLines) },
                   { label: "품목 엑셀로 담기", disabled: busy || !editable, onSelect: () => excelInput.current?.click() },
+                  { label: "현재 세금 구분 반영", disabled: busy || !editable || !draft.content.lines.length, onSelect: () => void task(refreshTaxes) },
                   ...(editable && draft.content.lines.some((line) => !(line.spec || "").trim()) ? [{ label: "빈 규격 원장에서 채우기", disabled: busy, onSelect: () => void task(fillMissingSpecs) }] : []),
                 ]} />
                 <input accept=".xlsx,.xls,.csv" className="sr-only" ref={excelInput} type="file" onChange={(event) => {
@@ -645,6 +764,12 @@ export function PricingDocumentsWorkspace({
           </div>
         )}
       </header>
+      {draft && taxMismatchCount > 0 ? <Notice kind="error">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="mr-auto">상품 원장과 세금 구분이 다른 품목이 {taxMismatchCount}개 있습니다. 확인 후 초안에 반영하고 저장해 주세요.</p>
+          <Button className="min-h-[44px]" disabled={busy || !editable} onClick={() => void task(refreshTaxes)} type="button" variant="outline">현재 세금 구분 반영</Button>
+        </div>
+      </Notice> : null}
       {draft?.archivedAt ? <p role="status" className="rounded border p-3 text-sm">보관된 문서입니다. 내용을 바꾸거나 새 버전을 발행하려면 문서 보관함에서 먼저 복원해 주세요. 기존 발행본과 주문 링크는 유지됩니다.</p> : null}
       {error && (
         <p
@@ -743,7 +868,7 @@ export function PricingDocumentsWorkspace({
                         />
                       ) : null}
                       <div className="min-w-0 rounded-xl bg-slate-100 p-2 sm:p-5">
-                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} onDropProducts={(ids) => void task(() => addByIds(ids))} onDropPromotions={(ids) => void task(() => addPromotions(promotions.filter((x) => ids.includes(x.id))))} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
+                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} footerFormattingEnabled={footerFormattingEnabled} onContent={change} onDropProducts={(ids) => void task(() => addByIds(ids))} onDropPromotions={(ids) => void task(() => addPromotions(promotions.filter((x) => ids.includes(x.id))))} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
                       </div>
                     </div>
                   </>
@@ -1011,8 +1136,9 @@ export function PricingDocumentsWorkspace({
                           </td>
                           <td className="p-2">
                             <select
-                              disabled={!editable}
+                              disabled={!editable || Boolean(l.promotionId)}
                               aria-label={`품목 ${i + 1} 과세`}
+                              title={l.promotionId ? "행사 원본에서 세금 구분을 수정한 뒤 현재 세금 구분 반영을 눌러 주세요." : undefined}
                               value={l.taxType}
                               onChange={(e) =>
                                 rows(
@@ -1033,6 +1159,7 @@ export function PricingDocumentsWorkspace({
                               <option value="taxable">과세</option>
                               <option value="exempt">면세</option>
                             </select>
+                            {l.promotionId ? <Button className="mt-1 min-h-[44px]" disabled={!editable || !manager} onClick={() => window.open("/revenue/pricing/promotions", "_blank", "noopener")} title={!manager ? "행사 세금 수정은 대표·관리자에게 요청해 주세요." : undefined} type="button" variant="outline">행사 세금 수정</Button> : null}
                           </td>
                           <td className="p-2">
                             <MoneyInput
@@ -1043,8 +1170,9 @@ export function PricingDocumentsWorkspace({
                                 const shown = next ?? 0;
                                 rows(draft.content.lines.map((x, j) => (j === i ? { ...x, price: draft.content.display?.priceIncludesTax && x.taxType === "taxable" ? Math.round(shown / 1.1) : shown } : x)));
                               }}
-                              value={documentDisplayPrice(l.price, l.taxType, draft.content.display?.priceIncludesTax || false)}
+                              value={documentDisplayPrice(l.price, l.taxType, draft.content.display?.priceIncludesTax || false, l.priceIncludesTax)}
                             />
+                            {l.priceIncludesTax ? <p className="text-xs">{l.taxType === "exempt" ? "면세 고정가" : "부가세 포함 고정가"}</p> : null}
                           </td>
                           <td className="p-2">
                             <div className="flex flex-wrap gap-1">
@@ -1105,7 +1233,7 @@ export function PricingDocumentsWorkspace({
                 </>
                 )}
               </div>
-              {docView === "doc" ? <PricingInfoPanel companyId={companyId} content={draft.content} editable={editable} onContent={change} /> : (
+              {docView === "doc" ? <PricingInfoPanel orderFooterAvailable={orderFooterAvailable} companyId={companyId} content={draft.content} editable={editable} onContent={change} /> : (
               <aside className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-3 xl:sticky xl:top-24">
                 <h2 className="text-sm font-black text-slate-900">문서 설정</h2>
                 <div className="grid gap-2">
@@ -1169,6 +1297,7 @@ export function PricingDocumentsWorkspace({
                       <option value="auto">자동(20개 초과 표)</option>
                       <option value="table">표형</option>
                       <option value="cards">카드형</option>
+                      {offlineFlyerEnabled || draft.content.layout === "flyer" ? <option value="flyer">전단지(A4 · 행사 품목 크게)</option> : null}
                     </select>
                   </label>
                   {(
@@ -1220,6 +1349,13 @@ export function PricingDocumentsWorkspace({
             canManageLinks={manager && storeLinksEnabled && !leadContext}
             publicSharingAvailable={publicSharingAvailable && !leadContext}
             openPublicQr={openPublicQr}
+            orderFooterAvailable={orderFooterAvailable}
+            qrDisplayAvailable={qrDisplayAvailable}
+            qrDisplayEditable={manager || preview.content.kind === "quote"}
+            onQrSaved={(previousRevision, revision, settings) => {
+              setDraft(current => current?.id === preview.documentId && current.revision === previousRevision
+                ? { ...current, revision, content: { ...current.content, display: { ...parseDisplay(current.content.display), qr: settings } } } : current);
+            }}
           refresh={() => refreshPreview(preview)}
         />
           </div>

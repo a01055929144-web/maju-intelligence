@@ -1,4 +1,4 @@
-import { purchaseSpecification } from "./purchase-import";
+import { mergeDuplicateLines, purchaseSpecification, type PurchaseImportLine, type PurchasePriceConflict } from "./purchase-import";
 import { supplierNameKey } from "./supplier-name";
 
 export type CostProduct = {
@@ -118,6 +118,34 @@ export function matchByAlias(key: string, supplier: string, products: readonly C
   const hits = products.filter((product) => product.supplierRawKey === key && (!supplierKey || !product.supplierName || supplierNameKey(product.supplierName) === supplierKey));
   if (!hits.length) return null;
   return new Set(hits.map((product) => product.id)).size === 1 ? hits[0] : null;
+}
+
+/** Rebuilds price conflicts after supplier links change which catalog product each source row resolves to. */
+export function mergePurchaseLinesForCatalog(lines: readonly PurchaseImportLine[], products: readonly CostProduct[]) {
+  const merged = mergeDuplicateLines(lines);
+  const unique = Array.from(new Set(products.map(product => product.id))).map(id => {
+    const linked = products.filter(product => product.id === id);
+    return linked.length === 1 ? linked[0] : { ...linked[0], supplierProductId: undefined, supplierName: "여러 매입처" };
+  });
+  const groups = new Map<string, { product: CostProduct; lines: PurchaseImportLine[] }>();
+  for (const line of lines) {
+    const product = matchByAlias(aliasKey(line.rawName, line.spec, line.unit), line.supplier, products)
+      || matchCostImportRow(line, products) || matchCostImportRow({ ...line, supplier: "" }, unique);
+    if (!product) continue;
+    const key = `${product.id}|${line.purchaseDate}`;
+    const group = groups.get(key) || { product, lines: [] };
+    group.lines.push(line); groups.set(key, group);
+  }
+  const conflicts: PurchasePriceConflict[] = [], covered = new Set<number>();
+  for (const [key, group] of Array.from(groups.entries())) {
+    if (new Set(group.lines.map(line => line.cost)).size < 2) continue;
+    const suppliers = new Set(group.lines.map(line => line.supplier).filter(Boolean));
+    conflicts.push({ key: `product:${key}`, name: group.product.name, spec: group.product.spec, unit: group.product.unit,
+      supplier: suppliers.size === 1 ? Array.from(suppliers)[0] : "여러 매입처", purchaseDate: group.lines[0].purchaseDate, candidates: group.lines });
+    group.lines.forEach(line => covered.add(line.rowNumber));
+  }
+  return { merged: merged.filter(line => !covered.has(line.rowNumber)),
+    conflicts: [...merged.conflicts.filter(group => !group.candidates.some(line => covered.has(line.rowNumber))), ...conflicts] };
 }
 
 function bigrams(value: string) {

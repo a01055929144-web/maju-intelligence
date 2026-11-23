@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // CC-60: 리드 화면 "전국 공공데이터" 수집 상태 — 성공 · 이월 · 오류 3가지(가짜 API). 1440 · 390.
-const summary = { lastRunAt: "2026-11-16T05:13:00Z", errorAreas: 0, deferredAreas: 0, pendingAreas: 0, weekFetched: 120 };
+const summary = { lastRunAt: "2026-11-16T05:13:00Z", errorAreas: 0, deferredAreas: 0, pendingAreas: 0, weekFetched: 120, noNewRows: false };
 const cases = [
   { name: "성공", body: { ...summary, result: "success", message: "정상 · 남은 지역 없음" }, expectText: ["성공", "정상 · 남은 지역 없음", "남은(이월) 지역 0곳", "최근 7일 수집 120건"] },
   { name: "이월", body: { ...summary, result: "partial", pendingAreas: 2, deferredAreas: 2, message: "일부 완료 · 남은 2곳은 다음 실행에서 이어받음 (시간 예산 이월 2곳)" }, expectText: ["일부 완료(이어받기)", "남은 2곳", "남은(이월) 지역 2곳"] },

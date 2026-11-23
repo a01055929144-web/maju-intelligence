@@ -52,6 +52,7 @@ export function toPublicStorefront(store: Storefront) {
       maximumQuantity: line.maximumQuantity,
       recentDispatchPrice: line.recentDispatchPrice,
       recentDispatchDate: line.recentDispatchDate,
+      ...(line.productCutoff ? { productCutoff: line.productCutoff } : {}),
     })),
   };
 }

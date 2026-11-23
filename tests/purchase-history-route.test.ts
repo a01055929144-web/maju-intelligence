@@ -78,7 +78,18 @@ it("keeps correction writes closed until the company flag is enabled", async () 
   vi.stubEnv("PURCHASE_RECEIPT_CORRECTIONS_COMPANY_IDS", company);
   mocks.db.mockResolvedValue({ revision: 1 });
   expect((await PATCH(request())).status).toBe(200);
-  expect(mocks.db.mock.calls[0][0]).toBe("rpc/correct_purchase_receipt_line");
+  expect(mocks.db.mock.calls[0][0]).toBe("rpc/mutate_purchase_receipt_line");
+  expect(JSON.parse(mocks.db.mock.calls[0][1].body)).toMatchObject({ p_action: "correct", p_values: { cost: 900 }, p_expected_revision: 0 });
+});
+
+it("validates delete reasons and manual purchase values before the shared mutation RPC", async () => {
+  vi.stubEnv("PURCHASE_RECEIPT_CORRECTIONS_COMPANY_IDS", company);
+  const request = (body: unknown) => new NextRequest("https://example.test/api/price-sheets/receipts", { method: "PATCH", body: JSON.stringify(body) });
+  expect((await PATCH(request({ action: "delete", id: company, reason: "짧음", expectedRevision: 0 }))).status).toBe(400);
+  expect((await PATCH(request({ action: "add", receiptDate: "2026-02-30", productName: "두부", cost: 1000, reason: "누락 매입 추가", expectedRevision: 0 }))).status).toBe(400);
+  mocks.db.mockResolvedValue({ id: company, revision: 0, recalculated: true });
+  expect((await PATCH(request({ action: "add", receiptDate: "2026-11-18", productName: "두부", quantity: 0.3, cost: 1000, reason: "누락 매입 추가", expectedRevision: 0 }))).status).toBe(200);
+  expect(JSON.parse(mocks.db.mock.calls[0][1].body)).toMatchObject({ p_action: "add", p_values: { receiptDate: "2026-11-18", productName: "두부", quantity: 0.3, cost: 1000 } });
 });
 
 it("shows the corrected effective item while retaining the raw receipt row", async () => {

@@ -16,7 +16,7 @@ try {
   assert.equal((await db.query('select current_database() name')).rows[0].name, 'maju_stage_a_integration');
   const action = process.argv[2];
   if (action === 'seed') {
-    const count = Number(process.argv[3]); assert([0,741].includes(count));
+    const count = Number(process.argv[3]); assert([0,1,741].includes(count));
     await db.query('truncate public.companies cascade; truncate public.stage_a_failure_control');
     await db.query(`insert into companies(id,name,owner_name,status) values($1,'CI Stage A','CI Owner','active'),($2,'CI Other','CI Other Owner','active')`, [company,other]);
     await db.query(`insert into product_suppliers(id,company_id,name) values($1,$2,'합성 매입처')`, [supplier,company]);
@@ -44,6 +44,10 @@ try {
   } else if (action === 'receipt-fail-on' || action === 'receipt-fail-off') {
     await db.query('update stage_a_failure_control set fail_receipts=$2 where company_id=$1',[company,action==='receipt-fail-on']);
     console.log(JSON.stringify({receiptFailureEnabled:action==='receipt-fail-on'}));
+  } else if (action === 'confirm-unit') {
+    await db.query(`insert into product_unit_conversions(company_id,product_catalog_id,unit_name,base_quantity,is_confirmed,source)
+      values($1,$2,'BOX',10,true,'manual')`,[company,uuid('2',1)]);
+    console.log(JSON.stringify({confirmedUnit:true}));
   } else if (action === 'state') {
     const counts = (await db.query(`select
       (select count(*)::int from product_catalog where company_id=$1) products_count,

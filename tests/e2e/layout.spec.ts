@@ -40,6 +40,75 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
 const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
 
 for (const width of [1440, 390]) {
+  test(`admin store directory sends signed-out users to login at ${width}px`, async ({ browser }) => {
+    const context = await browser.newContext({ baseURL: "http://127.0.0.1:3100", viewport: { width, height: 844 } });
+    try {
+      const page = await context.newPage();
+      await page.goto("/admin/stores", { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(/\/admin\/login/);
+      expect(await collectLayoutProblems(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test(`admin store directory fits at ${width}px`, async ({ browser }, testInfo) => {
+    const context = await authenticatedContext(browser, "admin", width, 844);
+    try {
+      const page = await context.newPage();
+      const response = await page.goto("/admin/stores", { waitUntil: "domcontentloaded" });
+      expect(response?.ok()).toBeTruthy();
+      await expect(page.getByRole("heading", { name: "매장 관리" })).toBeVisible();
+      await expect(page.getByText("합성 중앙식당", { exact: true }).first()).toBeVisible();
+      expect(await collectLayoutProblems(page)).toEqual([]);
+      await page.screenshot({ path: testInfo.outputPath(`admin-stores-${width}.png`), fullPage: true });
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+for (const width of [1440, 390]) test(`상품별 주문 마감 입력·일괄 지정 (${width}px)`, async ({ browser }) => {
+  const context = await authenticatedContext(browser, "customer", width, 900);
+  try {
+    const page = await context.newPage();
+    const id = "10000000-0000-4000-8000-000000000001";
+    const item = { id, name: "합성 양파", unit: "kg", salesUnit: "kg", purchaseUnit: "박스", purchasePrice: 1000, isActive: true, matchStatus: "matched", linkedSupplierCount: 0, hasUnconfirmedConversion: false, barcodes: [], orderCutoffDaysBefore: null, orderCutoffTime: null };
+    let available = false;
+    const saved: Array<Record<string, unknown>> = [];
+    await page.route("**/api/product-catalog?*", (route) => route.fulfill({ json: { items: [item], cutoffAvailable: available } }));
+    await page.route("**/api/product-catalog", (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      saved.push(body);
+      return route.fulfill({ json: body.action === "update-cutoffs" ? { savedIds: [id] } : { item: { ...item, orderCutoffDaysBefore: body.orderCutoffDaysBefore, orderCutoffTime: body.orderCutoffTime } } });
+    });
+    await page.goto("/revenue/products", { waitUntil: "domcontentloaded" });
+    await expect(page.getByLabel("합성 양파 주문 마감 며칠 전")).toHaveCount(0);
+    available = true;
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const days = page.getByLabel("합성 양파 주문 마감 며칠 전");
+    await expect(days).toBeVisible();
+    await days.fill("0");
+    await page.getByLabel("합성 양파 주문 마감 시각").fill("12:00");
+    await days.locator("..").getByRole("button", { name: "저장" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "1개 상품의 주문 마감을 저장했습니다" })).toBeVisible();
+    expect(saved[0]).toMatchObject({ action: "update-cutoffs", ids: [id], orderCutoffDaysBefore: 0, orderCutoffTime: "12:00" });
+    await page.getByRole("checkbox").last().check();
+    await page.getByLabel("일괄 주문 마감 며칠 전").fill("2");
+    await page.getByLabel("일괄 주문 마감 시각").fill("15:30");
+    await page.getByRole("button", { name: "주문 마감 일괄 지정" }).click();
+    expect(saved[1]).toMatchObject({ action: "update-cutoffs", ids: [id], orderCutoffDaysBefore: 2, orderCutoffTime: "15:30" });
+    await page.getByRole("button", { name: /합성 양파/ }).first().click();
+    const editor = page.getByRole("dialog", { name: "상품 편집" });
+    await editor.getByLabel("주문 마감 며칠 전").fill("1");
+    await editor.getByLabel("주문 마감 시각").fill("10:30");
+    await editor.getByRole("button", { name: "저장", exact: true }).click();
+    expect(saved[2]).toMatchObject({ orderCutoffDaysBefore: 1, orderCutoffTime: "10:30" });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+  } finally { await context.close(); }
+});
+
+for (const width of [1440, 390]) {
   test(`pricing catalog tabs preserve the selected view at ${width}px`, async ({ browser }, testInfo) => {
     const context = await authenticatedContext(browser, "customer", width, 844);
     try {
@@ -48,7 +117,7 @@ for (const width of [1440, 390]) {
       const priceState = { groups: [], categories: [], items: [product], defaultMargin: 20, defaultRounding: 10, pendingCount: 0, total: 1, page: 1, pageSize: 50, lastBatch: null, restored: false };
       const catalog = { id: "60000000-0000-4000-8000-000000000001", name: "양식", margin: 32, rounding: 10, categories: [], storeCount: 0 };
       await page.route("**/api/price-sheets?*", (route) => route.fulfill({ json: priceState }));
-      await page.route("**/api/margin-templates?*", (route) => route.fulfill({ json: { templates: [catalog] } }));
+      await page.route("**/api/margin-templates?*", (route) => route.fulfill({ json: { defaultStoreCount: 7, templates: [catalog] } }));
       const response = await page.goto("/revenue/pricing/catalog", { waitUntil: "domcontentloaded" });
       expect(response?.ok()).toBeTruthy();
       await expect(page.getByRole("tab", { name: "판매가" })).toHaveAttribute("aria-selected", "true");
@@ -60,6 +129,10 @@ for (const width of [1440, 390]) {
       expect(await collectLayoutProblems(page)).toEqual([]);
       await page.screenshot({ path: testInfo.outputPath(`pricing-catalog-tabs-${width}.png`), fullPage: false });
       await page.getByRole("tab", { name: "카탈로그" }).click();
+      const catalogCards = page.getByRole("group", { name: "카탈로그 선택" });
+      await expect(catalogCards.getByRole("button").first()).toContainText("기본 카탈로그");
+      await expect(catalogCards.getByText("매장 7곳", { exact: false })).toBeVisible();
+      await expect(catalogCards.getByText("새 매장은 항상 기본 카탈로그로 시작합니다.", { exact: true })).toBeVisible();
       await page.getByRole("button", { name: "판매가 보기" }).click();
       await expect(page).toHaveURL(new RegExp(`view=prices.*catalog=${catalog.id}`));
       await expect(page.getByRole("combobox", { name: "카탈로그로 보기" })).toHaveValue(catalog.id);
@@ -141,7 +214,7 @@ for (const width of [1440, 390]) {
       const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
       await expect(review.getByRole("button", { name: "확인한 날짜로 저장", exact: true })).toBeDisabled();
       expect(saved).toHaveLength(0);
-      await review.getByRole("checkbox").check();
+      await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
       await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
       await expect(page.getByText(/매입가 1건 저장/)).toBeVisible();
       expect(saved).toHaveLength(1);
@@ -508,4 +581,5 @@ for (const viewport of viewports) {
     expect(failures, failures.join("\n")).toEqual([]);
   });
 }
+
 

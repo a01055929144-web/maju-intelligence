@@ -35,6 +35,8 @@ export type SalesKitSettings = {
   orderCode: string;
   contactPhone: string;
   contactLabel: string;
+  /** 회사가 직접 입력한 문의 연락처를 공개 문서에 표시하도록 명시적으로 동의했는지. */
+  publicContactEnabled: boolean;
   /** 이미 발행된 단가표 공개 링크 중 영업 문구에 기본으로 붙일 링크. */
   priceSheetUrl: string;
 };
@@ -42,6 +44,7 @@ export type SalesKitSettings = {
 export const DEFAULT_SALES_KIT: SalesKitSettings = {
   contactLabel: "",
   contactPhone: "",
+  publicContactEnabled: false,
   defaults: {},
   fields: ["price_sheet", "order_link", "contact"],
   materials: [],
@@ -68,6 +71,7 @@ export function parseSalesKit(raw: string | null | undefined): SalesKitSettings 
     return {
       contactLabel: typeof value.contactLabel === "string" ? value.contactLabel.slice(0, 30) : "",
       contactPhone: typeof value.contactPhone === "string" ? value.contactPhone.slice(0, 20) : "",
+      publicContactEnabled: value.publicContactEnabled === true,
       defaults: value.defaults && typeof value.defaults === "object" ? value.defaults : {},
       fields: Array.isArray(value.fields) ? value.fields.filter((field): field is SalesKitField => (SALES_KIT_FIELDS as readonly string[]).includes(field)) : DEFAULT_SALES_KIT.fields,
       materials,
@@ -78,6 +82,12 @@ export function parseSalesKit(raw: string | null | undefined): SalesKitSettings 
   } catch {
     return { ...DEFAULT_SALES_KIT };
   }
+}
+
+/** 공개 문서는 동의한 직접 입력값만 사용합니다. 회사·대표 연락처 fallback은 받지 않습니다. */
+export function getPublicSalesKitContact(settings: SalesKitSettings) {
+  const phone = settings.contactPhone.replace(/\D/g, "");
+  return settings.publicContactEnabled && phone ? { label: settings.contactLabel.trim(), phone } : null;
 }
 
 export function validateOrderUrl(url: string) {

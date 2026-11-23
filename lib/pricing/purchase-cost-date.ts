@@ -1,7 +1,7 @@
 import { supabaseRequest } from "../store";
-import type { PurchaseDateRow } from "../../domains/pricing/purchase-cost-date";
+import { holdFuturePrices, holdUnitMismatchedPrices, type PurchaseDateRow } from "../../domains/pricing/purchase-cost-date";
 
-export type PurchaseDateBatch = { id: string; status: "completed" | "restored" | "processing"; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number };
+export type PurchaseDateBatch = { id: string; status: "completed" | "restored" | "processing"; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number; sourceFileName?: string; receiptDate?: string };
 export function purchaseDateEnabled(companyId: string) {
   return (process.env.FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
 }
@@ -9,9 +9,9 @@ export function purchaseHistoryOnlyDefaultEnabled(companyId: string) {
   return (process.env.FEATURE_PURCHASE_HISTORY_ONLY_DEFAULT_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
 }
 export async function getPurchaseDateBatch(companyId: string, batchId?: string): Promise<PurchaseDateBatch | null> {
-  const rows = await supabaseRequest<Array<{ id: string; status: PurchaseDateBatch["status"]; recalc_run_id: string | null; row_count: number; history_only_product_count: number }>>(
-    `purchase_cost_date_batches_v2?select=id,status,recalc_run_id,row_count,history_only_product_count&company_id=eq.${encodeURIComponent(companyId)}${batchId ? `&id=eq.${batchId}` : ""}&order=created_at.desc,id.desc&limit=1`);
-  return rows[0] ? { id: rows[0].id, status: rows[0].status, recalcRunId: rows[0].recalc_run_id, rowCount: rows[0].row_count, historyOnlyProductCount: rows[0].history_only_product_count } : null;
+  const rows = await supabaseRequest<Array<{ id: string; status: PurchaseDateBatch["status"]; recalc_run_id: string | null; row_count: number; history_only_product_count: number; source_file_name: string; default_receipt_date: string }>>(
+    `purchase_cost_date_batches_v2?select=id,status,recalc_run_id,row_count,history_only_product_count,source_file_name,default_receipt_date&company_id=eq.${encodeURIComponent(companyId)}${batchId ? `&id=eq.${batchId}` : ""}&order=created_at.desc,id.desc&limit=1`);
+  return rows[0] ? { id: rows[0].id, status: rows[0].status, recalcRunId: rows[0].recalc_run_id, rowCount: rows[0].row_count, historyOnlyProductCount: rows[0].history_only_product_count, sourceFileName: rows[0].source_file_name, receiptDate: rows[0].default_receipt_date } : null;
 }
 export async function undatedPurchasePrices(companyId: string) {
   const result: Array<{ productId: string; cost: number }> = [];
@@ -24,10 +24,12 @@ export async function undatedPurchasePrices(companyId: string) {
   throw new Error("purchase_catalog_limit");
 }
 export async function savePurchaseDateBatch(companyId: string, batchId: string, date: string, fileName: string, actor: string, rows: PurchaseDateRow[]) {
-  // Until SQL validates conversion under the same locks, mismatched units remain blocked.
+  // Until SQL validates conversion under the same locks, keep the receipt and hold only its current-price change.
   const ids = Array.from(new Set(rows.map(row => row.productId)));
   const units = new Map<string, string>();
   const unconfirmedPacks = new Set<string>();
+  const confirmedSupplierProducts = new Set<string>();
+  const confirmedProductUnits = new Set<string>();
   for (let offset = 0; offset < ids.length; offset += 100) {
     const products = await supabaseRequest<Array<{ id: string; sales_unit: string | null; purchase_to_sales_ratio?: number | null }>>(
       `product_catalog?select=id,sales_unit,purchase_to_sales_ratio&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${ids.slice(offset, offset + 100).join(",")})`);
@@ -36,10 +38,32 @@ export async function savePurchaseDateBatch(companyId: string, batchId: string, 
       if (!product.sales_unit && Number(product.purchase_to_sales_ratio) > 1) unconfirmedPacks.add(product.id);
     });
   }
-  if (rows.some(row => row.priceSelected && (unconfirmedPacks.has(row.productId) || (row.unit.trim() && units.get(row.productId) && units.get(row.productId) !== row.unit.trim().toLowerCase())))) throw new Error("purchase_date_unit_conversion_pending");
+  const unitReviewRows = rows.filter(row => row.priceSelected && (!row.unit.trim() || !units.get(row.productId)
+    || row.unit.trim().toLocaleLowerCase("ko") !== units.get(row.productId)));
+  const supplierProductIds = Array.from(new Set(unitReviewRows.flatMap(row => row.supplierProductId ? [row.supplierProductId] : [])));
+  for (let offset = 0; offset < supplierProductIds.length; offset += 100) {
+    const matches = await supabaseRequest<Array<{ product_catalog_id: string; supplier_product_id: string; purchase_to_sales_ratio: number | null; conversion_confirmed: boolean }>>(
+      `supplier_product_matches?select=product_catalog_id,supplier_product_id,purchase_to_sales_ratio,conversion_confirmed&company_id=eq.${encodeURIComponent(companyId)}&supplier_product_id=in.(${supplierProductIds.slice(offset, offset + 100).join(",")})&match_status=eq.confirmed`);
+    matches.forEach(match => {
+      if (match.conversion_confirmed && Number(match.purchase_to_sales_ratio) > 0) confirmedSupplierProducts.add(`${match.product_catalog_id}|${match.supplier_product_id}`);
+    });
+  }
+  const conversionProductIds = Array.from(new Set(unitReviewRows.filter(row => row.unit.trim()).map(row => row.productId)));
+  for (let offset = 0; offset < conversionProductIds.length; offset += 100) {
+    const conversions = await supabaseRequest<Array<{ product_catalog_id: string; unit_name: string; base_quantity: number; is_confirmed: boolean }>>(
+      `product_unit_conversions?select=product_catalog_id,unit_name,base_quantity,is_confirmed&company_id=eq.${encodeURIComponent(companyId)}&product_catalog_id=in.(${conversionProductIds.slice(offset, offset + 100).join(",")})&is_confirmed=eq.true`);
+    conversions.forEach(conversion => {
+      const unit = conversion.unit_name.trim().toLocaleLowerCase("ko");
+      if (unit && Number(conversion.base_quantity) > 0) confirmedProductUnits.add(`${conversion.product_catalog_id}|${unit}`);
+    });
+  }
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+  const safeRows = holdFuturePrices(holdUnitMismatchedPrices(rows, units, confirmedSupplierProducts, confirmedProductUnits), today).map(row => unconfirmedPacks.has(row.productId) && row.priceSelected
+    ? { ...row, priceSelected: false, priceHeld: true, replaceUndatedCurrent: undefined, expectedPurchasePrice: undefined }
+    : row);
   const result = await supabaseRequest<{ batchId: string; recalcRunId: string | null; status: "completed" | "restored"; rowCount: number; historyOnlyProductCount: number }>("rpc/save_purchase_cost_date_batch_v2", {
     method: "POST", body: JSON.stringify({ p_company: companyId, p_batch: batchId, p_default_receipt_date: date,
-      p_rows: rows, p_actor_name: actor, p_source_file_name: fileName })
+      p_rows: safeRows, p_actor_name: actor, p_source_file_name: fileName })
   });
   return result;
 }
@@ -51,6 +75,7 @@ export function restorePurchaseDateBatch(companyId: string, batchId: string, act
 export function purchaseDateError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("purchase_date_unit_conversion_pending")) return "매입처 단위와 판매 단위의 환산을 먼저 확인해 주세요. 확인 전에는 해당 상품의 가격을 반영하지 않았습니다.";
+  if (message.includes("purchase_receipt_lines_amounts")) return "단가·수량이 음수인 행(반품 등)이 있어 저장하지 못했습니다. 반품 행을 빼고 다시 올려 주세요.";
   if (message.includes("purchase_cost_date_batch_conflict")) return "같은 요청 번호의 내용이 달라졌습니다. 목록과 원본 파일을 다시 확인해 주세요.";
   if (message.includes("changed") || message.includes("latest") || message.includes("restored_separately")) return "기존 가격이나 이후 변경 내역이 달라 처리하지 못했습니다. 화면 전체를 새로고침하고 원본 파일을 다시 올려 현재 가격과 적용일을 확인해 주세요.";
   return "날짜별 매입가 처리가 완료되지 않았습니다. 같은 요청으로 다시 시도하거나 목록을 새로고침해 결과를 확인해 주세요.";

@@ -5,6 +5,8 @@ export type PartnerPaymentAttempt = {
   entryDate: string;
   amount: number;
   paymentMethod: "cash" | "bank" | "card";
+  documentId?: string;
+  memo?: string;
   idempotencyKey: string;
 };
 
@@ -53,6 +55,8 @@ function parsePartnerPaymentAttempt(value: string | null): PartnerPaymentAttempt
       entryDate: parsed.entryDate,
       amount: parsed.amount,
       paymentMethod: parsed.paymentMethod,
+      ...(typeof parsed.documentId === "string" && parsed.documentId ? { documentId: parsed.documentId } : {}),
+      ...(typeof parsed.memo === "string" && parsed.memo ? { memo: parsed.memo } : {}),
       idempotencyKey: parsed.idempotencyKey,
     };
   } catch {

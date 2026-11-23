@@ -1,16 +1,18 @@
-import { randomUUID } from "crypto";
+import { readPublicDocumentOrderFooter } from "./document-order-footer";
+import { createHash, randomUUID } from "crypto";
 import type { DocumentScope } from "../../application/pricing/documents";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
-import { parseDocument, isId, koreaDay, withLivePromotions, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
+import { parseDocument, isId, koreaDay, visibleDocumentLines, withLivePromotions, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
 import { documentOrderExpiry, publicDocumentLinkExpiry, publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
 import { getStoreSession } from "../auth";
 import { quoteAcceptanceEnabled } from "./acceptance-feature";
-import { publicDocumentOrderEntryEnabled, publicDocumentSignupEnabled } from "./public-document-order-feature";
+import { publicDocumentOrderEntryEnabled, publicDocumentShoppingEnabled, publicDocumentSignupEnabled, publicDocumentOrderGuidanceEnabled } from "./public-document-order-feature";
 import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
 import { industryBasketsEnabled } from "./industry-basket-feature";
 import { documentSharePreview } from "../../domains/pricing/industry-basket";
+import { documentExtensionServerEnabled } from "./document-extension-server";
 
 type ShareRow = {
   id: string; company_id: string; document_id: string; document_version_id: string; lead_id: string | null;
@@ -145,10 +147,27 @@ export async function recordSharedDocumentDelivery(scope: DocumentScope, input: 
   return { sendId: result.sendId, leadActionId: result.leadActionId, documentId: result.documentId,
     documentVersionId: result.documentVersionId, publicUrl: publicUrl(row) };
 }
+/** Read only the issuer's explicit public opt-in; never use the sales-kit phone fallback. */
+async function readPublicInquiry(companyId: string) {
+  try {
+    const rows = await supabaseRequest<Array<{ body: string }>>(path("company_message_templates", companyId,
+      "template_key=eq.lead_dm_kit&is_active=eq.true&select=body&limit=1"));
+    let settings: Record<string, unknown>;
+    try { settings = JSON.parse(rows[0]?.body || "{}"); }
+    catch { return { status: "not_configured" as const }; }
+    if (!settings || settings.publicContactEnabled !== true || typeof settings.contactPhone !== "string" ||
+      !/^[0-9 -]{8,20}$/.test(settings.contactPhone)) return { status: "not_configured" as const };
+    const phone = settings.contactPhone.replace(/[ -]/g, "");
+    if (!/^0\d{8,10}$/.test(phone) && !/^1[568]\d{6}$/.test(phone)) return { status: "not_configured" as const };
+    return { status: "available" as const, phone,
+      label: typeof settings.contactLabel === "string" ? settings.contactLabel.trim().slice(0, 30) : "" };
+  } catch { return { status: "unavailable" as const }; }
+}
+
 export async function readPublicDocument(token: string, requester: string) {
-  const { row, output, orderable } = await resolvePublicDocument(token, requester);
+  const { row, issuedVersionId, output, orderable, items } = await resolvePublicDocument(token, requester);
   if (row.send_id) await supabaseRequest(path("pricing_document_sends", row.company_id,
-    `id=eq.${row.send_id}&document_version_id=eq.${row.document_version_id}&lead_id=eq.${row.lead_id}&acceptance_status=eq.sent&viewed_at=is.null`), {
+    `id=eq.${row.send_id}&document_version_id=eq.${issuedVersionId}&lead_id=eq.${row.lead_id}&acceptance_status=eq.sent&viewed_at=is.null`), {
     method: "PATCH", body: JSON.stringify({ viewed_at: new Date().toISOString(), acceptance_status: "viewed" }),
   });
   // A session for a different distributor cannot change this document's signup flow.
@@ -160,11 +179,16 @@ export async function readPublicDocument(token: string, requester: string) {
       return await hasAllowedStorePortalMembership(session.authUserId, row.company_id);
     } catch { return false; }
   })();
-  return { document: output, expiresAt: row.expires_at,
+  const orderFooter = row.lead_id === null ? await readPublicDocumentOrderFooter(row.company_id) : undefined;
+  return { document: output, expiresAt: row.expires_at, ...(orderFooter ? { orderFooter } : {}),
+    ...(row.lead_id === null ? { inquiry: await readPublicInquiry(row.company_id),
+      orderGuidanceAvailable: publicDocumentOrderGuidanceEnabled(row.company_id) } : {}),
     acceptanceAvailable: Boolean(row.lead_id && row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)),
     ...(row.lead_id === null ? { orderEntry: { available: publicDocumentSignupEnabled(row.company_id) && orderable,
       message: !orderable ? "이 문서에는 현재 주문할 품목이나 판매가가 없습니다. 발행 회사에 주문 가능한 새 문서를 요청해 주세요." : "카카오 점주 가입·주문 연결을 준비 중입니다. 발행 회사 담당자에게 문의해 주세요.",
-      companyName: output.companyName, title: output.title, version: output.version, ...(member ? { member: true } : {}) } } : {}) };
+      companyName: output.companyName, title: output.title, version: output.version,
+      ...(publicDocumentShoppingEnabled(row.company_id) ? { shopping: true, cartScope: row.id,
+        itemKeys: items.map(item => item?.key ?? null) } : {}), ...(member ? { member: true } : {}) } } : {}) };
 }
 
 async function resolvePublicDocument(token: string, requester: string) {
@@ -172,7 +196,7 @@ async function resolvePublicDocument(token: string, requester: string) {
   const decoded = verifyDocumentShareToken(token);
   if (!decoded) missing();
   const rows = await supabaseRequest<ShareRow[]>(`pricing_document_share_links?id=eq.${decoded.id}&token_hash=eq.${decoded.hash}&select=${shareFields}&limit=1`);
-  const row = rows[0];
+  let row = rows[0];
   if (!row || !documentSharingEnabled(row.company_id) || row.revoked_at || !equalShareHash(row.token_hash, decoded.hash) ||
     row.token_nonce !== decoded.nonce || !Number.isFinite(Date.parse(row.expires_at))) missing();
   if (Date.parse(row.expires_at) <= Date.now()) {
@@ -181,9 +205,16 @@ async function resolvePublicDocument(token: string, requester: string) {
     missing();
   }
   await limitDocumentShare(row.company_id, requester, "read", row.id);
+  const issuedVersionId = row.document_version_id;
   if (row.lead_id === null) {
     if (!publicDocumentOrderEntryEnabled(row.company_id) || row.send_id) missing();
   } else await assertLead(row.company_id, row.lead_id);
+  if (documentExtensionServerEnabled(row.company_id)) {
+    const currentVersionId = await supabaseRequest<string | null>("rpc/resolve_pricing_document_link_head_v1", {
+      method: "POST", body: JSON.stringify({ p_share_link: row.id }),
+    });
+    if (currentVersionId && isId(currentVersionId)) row = { ...row, document_version_id: currentVersionId };
+  }
   const version = await published(row.company_id, row.document_version_id, row.created_by_key);
   if (version.documentId !== row.document_id) missing();
   const ids = Array.from(new Set(version.content.lines.flatMap(l => l.promotionId ? [l.promotionId] : [])));
@@ -193,15 +224,23 @@ async function resolvePublicDocument(token: string, requester: string) {
       path("pricing_promotions", row.company_id, `id=in.(${ids.slice(offset, offset + 100).join(",")})&select=id,stock,starts_on,ends_on&limit=100`));
     promotions.push(...current.map(p => ({ id: p.id, stock: p.stock, startsOn: p.starts_on, endsOn: p.ends_on })));
   }
-  const output = publicDocumentOutput(withLivePromotions(version, promotions));
-  return { row, output, orderable: version.content.showPrice && !output.expired && output.lines.length > 0 };
+  const liveVersion = withLivePromotions(version, promotions);
+  const day = koreaDay();
+  const output = publicDocumentOutput(liveVersion, day);
+  const items = publicDocumentShoppingEnabled(row.company_id) && row.lead_id === null
+    ? visibleDocumentLines(liveVersion, day).visible.map((line, index) =>
+      isId(line.productId) && output.lines[index].price !== null ? {
+        key: createHash("sha256").update(`${row.id}:${line.productId}:${line.promotionId ?? ""}`).digest("hex").slice(0, 32),
+        productId: line.productId, promotionId: line.promotionId ?? null,
+      } : null) : [];
+  return { row, issuedVersionId, output, items, orderable: version.content.showPrice && !output.expired && output.lines.length > 0 };
 }
 
 /** 07 server-only handoff: caller-supplied company/customer IDs are never used. */
 export async function getPublicDocumentOrderContext(token: string, requester: string) {
   if (!publicDocumentOrderEntryEnabled()) missing();
-  const { row, output, orderable } = await resolvePublicDocument(token, requester);
+  const { row, output, orderable, items } = await resolvePublicDocument(token, requester);
   if (row.lead_id !== null || !orderable) missing();
   return { companyId: row.company_id, documentId: row.document_id, documentVersionId: row.document_version_id,
-    shareLinkId: row.id, orderExpiresAt: documentOrderExpiry(output.validUntil), expiresAt: row.expires_at, tokenHash: row.token_hash, issuerActorKey: row.created_by_key };
+    shareLinkId: row.id, items, orderExpiresAt: documentOrderExpiry(output.validUntil), expiresAt: row.expires_at, tokenHash: row.token_hash, issuerActorKey: row.created_by_key };
 }

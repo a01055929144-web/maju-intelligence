@@ -19,6 +19,12 @@ export function leadLayerColor(type: "new" | "sales"): string {
 }
 
 /** 오른쪽 목록 탭 값 → 그 레이어 색. */
-export function listTabColor(tab: "new" | "sales" | "customers"): string {
-  return tab === "new" ? MAP_LAYER_COLORS.newLead : tab === "sales" ? MAP_LAYER_COLORS.salesLead : MAP_LAYER_COLORS.customer;
+export function listTabColor(tab: "new" | "sales" | "customers" | "drivers"): string {
+  return tab === "new"
+    ? MAP_LAYER_COLORS.newLead
+    : tab === "sales"
+      ? MAP_LAYER_COLORS.salesLead
+      : tab === "drivers"
+        ? MAP_LAYER_COLORS.vehicle
+        : MAP_LAYER_COLORS.customer;
 }

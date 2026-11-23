@@ -1,18 +1,36 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { completeDocumentFontCSS } from "@/lib/pricing/document-export-fonts";
 import {
   documentOutput,
+  documentQrDisplay, type DocumentQrDisplay,
   refreshedDocumentVersion,
   printPages,
   koreaDay,
+  parseDisplay,
+  documentFooterTypography,
   type DocumentVersion,
   type DocumentOutput,
 } from "@/domains/pricing/document";
+import { useDocumentOrderFooter } from "./use-document-order-footer";
+import { withOrderFooter } from "@/domains/pricing/document-order-footer";
+import type { DocumentInfoItem } from "@/domains/pricing/document";
+import { documentRequest } from "@/lib/pricing/document-client";
 import { PricingDocumentOrderQr, type DocumentOrderQr } from "./pricing-document-order-qr";
-import { documentLinkLastDay } from "@/domains/pricing/document-share";
 import { Button } from "./ui/button";
 import { formatWon } from "@/domains/shared/money";
+
+export function pricingPaperStyle(fontScale: number) {
+  return `.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * fontScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}`;
+}
+
+export async function pricingPaperImage(paper: HTMLElement) {
+  await document.fonts.ready;
+  const { toPng, getFontEmbedCSS } = await import("html-to-image");
+  const fontEmbedCSS = completeDocumentFontCSS(await getFontEmbedCSS(paper));
+  return toPng(paper, { backgroundColor: "#ffffff", pixelRatio: 2, fontEmbedCSS });
+}
 
 type OutputLine = DocumentOutput["lines"][number];
 
@@ -24,6 +42,9 @@ export function PageContent({
   start = 0,
   qr,
   online = false,
+  fontScale = 1,
+  qrDisplay,
+  orderInfo,
 }: {
   data: DocumentOutput;
   page: number;
@@ -31,6 +52,9 @@ export function PageContent({
   start?: number;
   qr?: DocumentOrderQr | null;
   online?: boolean;
+  fontScale?: number;
+  qrDisplay?: DocumentQrDisplay;
+  orderInfo?: DocumentInfoItem[];
 }) {
   const accent =
     data.theme === "blue"
@@ -38,9 +62,11 @@ export function PageContent({
       : data.theme === "green"
         ? "#047857"
         : "#1f2937";
-  const display = data.display;
+  const savedDisplay = parseDisplay(data.display);
+  const display = { ...savedDisplay, info: withOrderFooter(savedDisplay.info, orderInfo) };
   const headerInfo = display.info.filter((item) => item.place === "header");
   const footerInfo = display.info.filter((item) => item.place === "footer");
+  const footerType = documentFooterTypography(display, fontScale);
   const promos = data.lines.filter((l) => l.badge);
   const regular = data.lines.filter((l) => !l.badge);
   const columns = online ? 1 : Math.max(1, Math.min(3, display.columns || 1));
@@ -48,11 +74,17 @@ export function PageContent({
   const perColumn = Math.ceil(regular.length / columns) || 0;
   const chunks = Array.from({ length: columns }, (_, i) => regular.slice(i * perColumn, (i + 1) * perColumn)).filter((chunk) => chunk.length);
   const price = (l: OutputLine) => (l.price !== null ? formatWon(l.price) : "—");
+  const flyer = data.layout === "flyer";
+  const qrSettings = qrDisplay || documentQrDisplay(display.qr);
+  const qrMillimeters = { small: 24, normal: 30, large: 36 }[qrSettings.size];
+  const qrLength = online ? `${{ small: 96, normal: 128, large: 160 }[qrSettings.size]}px` : `${qrMillimeters}mm`;
+  const qrBlock = qr ? <div data-document-qr data-qr-position={qrSettings.position} data-qr-size={qrSettings.size} className={`flex items-center gap-3 ${qrSettings.position.endsWith("right") ? "flex-row-reverse" : ""}`}><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} style={{ width: qrLength, height: qrLength }} className="shrink-0" />{qr.audience !== "public" ? <p className="text-xs"><strong>{qr.customerName}</strong><br />QR을 스캔해 주문하세요. 이 거래처에만 전달해 주세요.</p> : null}</div> : null;
   return (
     <div
       className="pricing-output-content"
       style={{ borderTop: `6px solid ${accent}` }}
     >
+      {qrSettings.position.startsWith("top") ? qrBlock : null}
       <header className="space-y-1.5 border-b pb-3">
         {/* 11/4: 문서를 주는 회사가 먼저 눈에 들어오도록 회사명을 가장 크게 */}
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -84,8 +116,8 @@ export function PageContent({
       </header>
       {promos.length ? (
         <section className="my-3 rounded border border-amber-300 bg-amber-50 p-2">
-          <p className="mb-1.5 text-xs font-bold text-amber-900">행사·임박 상품</p>
-          {display.promoLayout === "table" ? (
+          <p className="mb-1.5 text-xs font-bold text-amber-900">행사·임박 상품{promos.some(line => line.priceIncludesTax) ? " · 고정가(과세 품목 부가세 포함)" : ""}</p>
+          {display.promoLayout === "table" && !flyer ? (
             <table className="pricing-output-table w-full table-fixed border-collapse text-left">
               <tbody>
                 {promos.map((l, i) => (
@@ -98,12 +130,12 @@ export function PageContent({
               </tbody>
             </table>
           ) : (
-            <div className="pricing-promo-cards grid grid-cols-3 gap-2">
+            <div className={`pricing-promo-cards grid gap-2 ${flyer ? "grid-cols-2" : "grid-cols-3"}`}>
               {promos.map((l, i) => (
-                <article key={i} className="rounded bg-white p-2">
-                  <p className="font-bold"><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{l.badge}</span>{l.displayName}</p>
+                <article key={i} className={`rounded bg-white p-2 ${flyer ? "pricing-flyer-promo border-2 border-amber-300 p-3" : ""}`}>
+                  <p className={flyer ? "text-lg font-black leading-tight" : "font-bold"}><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{l.badge}</span>{l.displayName}</p>
                   <p data-document-spec className="text-xs">{l.spec} {l.unit}</p>
-                  <p data-document-price className="font-bold">{price(l)}</p>
+                  <p data-document-price className={flyer ? "mt-2 text-2xl font-black tabular-nums" : "font-bold"}>{price(l)}</p>
                   {display.showTaxType ? <p data-document-tax className="text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</p> : null}
                   <p className="text-xs">{l.endsOn ? `${l.endsOn}까지` : ""}{l.remaining !== null ? ` · 남은 ${l.remaining}` : ""}</p>
                 </article>
@@ -163,13 +195,13 @@ export function PageContent({
         <p className="py-8">표시 가능한 품목이 없습니다.</p>
       )}
       <footer className="mt-auto space-y-1.5 border-t pt-3 text-sm">
-        {qr ? <div className="flex items-center gap-3"><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} className="h-32 w-32 shrink-0" /><p className="text-xs"><strong>{qr.customerName}</strong><br />{qr.audience === "public" ? "QR로 문서를 열고 주문·가입을 시작하세요." : "QR을 스캔해 주문하세요. 이 거래처에만 전달해 주세요."}{qr.audience === "public" && qr.expiresAt ? <><br />가격·주문: {data.validUntil}까지<br />QR 품목 열람: {documentLinkLastDay(qr.expiresAt)}까지</> : null}</p></div> : null}
+        {qrSettings.position.startsWith("bottom") ? qrBlock : null}
         {footerInfo.length ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
             {footerInfo.map((item) => <p key={`${item.label}-${item.value}`}>{item.label} · {item.value}</p>)}
           </div>
         ) : null}
-        {data.footer ? <p className="whitespace-pre-wrap">{data.footer}</p> : null}
+        {data.footer ? <p className="whitespace-pre-wrap" data-document-footer style={{ fontSize: footerType.fontSize ?? undefined, fontWeight: footerType.bold ? 700 : undefined, lineHeight: footerType.fontSize ? `${footerType.lineHeight}px` : undefined }}>{data.footer}</p> : null}
         <p className="text-right text-xs">
           {page} / {pages}쪽
         </p>
@@ -187,6 +219,10 @@ export function PricingDocumentPreview({
   canManageLinks = false,
   publicSharingAvailable = false,
   openPublicQr = false,
+  orderFooterAvailable = false,
+  qrDisplayAvailable = false,
+  qrDisplayEditable = false,
+  onQrSaved,
 }: {
   version: DocumentVersion;
   refresh?: () => Promise<DocumentVersion>;
@@ -198,12 +234,48 @@ export function PricingDocumentPreview({
   canManageLinks?: boolean;
   publicSharingAvailable?: boolean;
   openPublicQr?: boolean;
+  orderFooterAvailable?: boolean;
+  qrDisplayAvailable?: boolean;
+  qrDisplayEditable?: boolean;
+  onQrSaved?: (previousRevision: number, revision: number, settings: DocumentQrDisplay) => void;
 }) {
   const [current, setCurrent] = useState(version),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [day, setDay] = useState(koreaDay());
   const [qr, setQr] = useState<DocumentOrderQr | null>(null);
+  const orderFooter = useDocumentOrderFooter(companyId, qr?.audience === "public" ? undefined : qr?.customerId ?? version.content.customerId, orderFooterAvailable);
+  const qrSettingsAvailable = qrDisplayAvailable && version.version > 0 && Boolean(companyId);
+  const [qrSettings, setQrSettings] = useState(() => documentQrDisplay(version.content.display?.qr));
+  const [savedQrSettings, setSavedQrSettings] = useState<DocumentQrDisplay | null>(null);
+  const [qrRevision, setQrRevision] = useState<number | null>(null);
+  const [qrMessage, setQrMessage] = useState("");
+  const qrRead = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    let active = true;
+    qrRead.current = Promise.resolve();
+    setQrRevision(null);
+    if (!qrSettingsAvailable) setQrSettings(documentQrDisplay(version.content.display?.qr));
+    if (qrSettingsAvailable && companyId) {
+      const loading = documentRequest<{ revision: number; settings: DocumentQrDisplay }>(companyId, "qr-display", { id: version.documentId }).then(({ result }) => {
+        if (active) { setQrSettings(result.settings); setSavedQrSettings(result.settings); setQrRevision(result.revision); }
+      }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "QR 표시 설정을 불러오지 못했습니다."); throw cause; });
+      qrRead.current = loading;
+      void loading.catch(() => undefined);
+    }
+    return () => { active = false; };
+  }, [companyId, version.documentId, qrSettingsAvailable]);
+  async function saveQrSettings() {
+    if (!companyId || qrRevision === null || !qrDisplayEditable) return;
+    setBusy(true); setError(""); setQrMessage("");
+    try {
+      const { result } = await documentRequest<{ previousRevision: number; revision: number; settings: DocumentQrDisplay }>(companyId, "save-qr-display", { id: version.documentId, expected: qrRevision, settings: qrSettings }, true);
+      setQrRevision(result.revision); setQrSettings(result.settings); setSavedQrSettings(result.settings);
+      onQrSaved?.(result.previousRevision, result.revision, result.settings);
+      setQrMessage("QR 표시 설정을 저장했습니다. 게시 버전·링크·QR·가격은 유지됩니다.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "QR 표시 설정을 저장하지 못했습니다."); }
+    finally { setBusy(false); }
+  }
   const papers = useRef<Array<HTMLDivElement | null>>([]);
   const output = documentOutput(current, day),
     pages = printPages(output, fontScale, Boolean(qr));
@@ -216,6 +288,8 @@ export function PricingDocumentPreview({
     return () => window.clearTimeout(timer);
   }, [current.content.validUntil, day]);
   const prepare = useCallback(async () => {
+    await qrRead.current;
+    await orderFooter.ready.current;
     const latest = refreshedDocumentVersion(version, refresh ? await refresh() : version);
     if (!alive.current) throw new Error("미리보기를 다시 열어 주세요.");
     flushSync(() => {
@@ -226,7 +300,7 @@ export function PricingDocumentPreview({
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
     return latest;
-  }, [refresh, version]);
+  }, [refresh, version, orderFooter.ready]);
   const printDocument = useCallback(async () => {
     autoPrinted.current = true;
     setBusy(true); setError("");
@@ -246,12 +320,7 @@ export function PricingDocumentPreview({
       await prepare();
       const paper = papers.current[index];
       if (!paper) throw new Error("페이지를 확인해 주세요.");
-      const { toPng } = await import("html-to-image");
-      const url = await toPng(paper, {
-        backgroundColor: "#ffffff",
-        pixelRatio: 2,
-        skipFonts: true,
-      });
+      const url = await pricingPaperImage(paper);
       const a = document.createElement("a");
       a.download = `document-v${current.version}-${index + 1}.png`;
       a.href = url;
@@ -272,16 +341,22 @@ export function PricingDocumentPreview({
         </span>
       </div>
       {companyId && (canManageLinks || publicSharingAvailable) && current.version > 0 ? <PricingDocumentOrderQr key={current.id} companyId={companyId} version={current} publicSharingAvailable={publicSharingAvailable} allowCustomerLink={canManageLinks} initiallyOpen={openPublicQr && publicSharingAvailable} onInsert={setQr} /> : null}
-      {error && (
+      {qrSettingsAvailable ? <div className="pricing-no-print flex flex-wrap items-center gap-3">
+        <label>QR 위치<select aria-label="QR 위치" className="ml-2 min-h-[44px] rounded border px-2" disabled={busy || qrRevision === null || !qrDisplayEditable} value={qrSettings.position} onChange={event => { setQrSettings({ ...qrSettings, position: event.target.value as DocumentQrDisplay["position"] }); setQrMessage(""); }}><option value="bottom-left">왼쪽 아래</option><option value="bottom-right">오른쪽 아래</option><option value="top-right">오른쪽 위</option><option value="top-left">왼쪽 위</option></select></label>
+        <label>QR 크기<select aria-label="QR 크기" className="ml-2 min-h-[44px] rounded border px-2" disabled={busy || qrRevision === null || !qrDisplayEditable} value={qrSettings.size} onChange={event => { setQrSettings({ ...qrSettings, size: event.target.value as DocumentQrDisplay["size"] }); setQrMessage(""); }}><option value="small">작게</option><option value="normal">보통</option><option value="large">크게</option></select></label>
+        <Button className="min-h-[44px]" disabled={busy || qrRevision === null || !qrDisplayEditable || JSON.stringify(qrSettings) === JSON.stringify(savedQrSettings)} onClick={() => void saveQrSettings()} type="button" variant="outline">QR 표시 설정 저장</Button>
+        <p role={qrMessage ? "status" : undefined} aria-label={qrMessage ? "QR 표시 설정 저장 결과" : undefined} className="text-sm">{qrMessage || (qrDisplayEditable ? "선택 후 저장하면 다음에 문서를 열어도 같은 표시를 사용합니다." : "표시 설정은 대표·관리자 또는 견적 작성자에게 요청해 주세요.")}</p>
+      </div> : null}
+      {(error || orderFooter.error) && (
         <p role="alert" className="pricing-no-print text-red-700">
-          {error} 같은 버튼으로 다시 시도하거나 미리보기를 닫고 버전을 다시 선택해 주세요.
+          {error || orderFooter.error} 같은 버튼으로 다시 시도하거나 미리보기를 닫고 버전을 다시 선택해 주세요.
         </p>
       )}
       <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
         <div className="pricing-no-print">
           <h3 className="mb-2 font-semibold">온라인 · 휴대폰</h3>
           <div className="pricing-online max-w-[390px] rounded-2xl border bg-white p-3 shadow">
-            <PageContent data={output} page={1} pages={1} qr={qr} online />
+            <PageContent data={output} page={1} pages={1} qr={qr} qrDisplay={qrSettings} orderInfo={orderFooter.items} online />
           </div>
         </div>
         <div className="min-w-0">
@@ -298,7 +373,9 @@ export function PricingDocumentPreview({
                   >
                     <PageContent
                       data={data}
+                      fontScale={fontScale}
                       qr={qr}
+                      qrDisplay={qrSettings} orderInfo={orderFooter.items}
                       page={i + 1}
                       pages={pages.length}
                       start={pages
@@ -319,7 +396,7 @@ export function PricingDocumentPreview({
           </div>
         </div>
       </div>
-      <style>{`.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * fontScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-paper footer img{width:30mm;height:30mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-online .pricing-output-content{min-height:0}.pricing-online .pricing-output-grid,.pricing-online .pricing-promo-cards{grid-template-columns:minmax(0,1fr)!important}.pricing-online table{table-layout:auto}.pricing-online col{width:auto!important}.pricing-online [data-document-price]{white-space:nowrap;overflow-wrap:normal;text-align:right;width:1%}.pricing-online article [data-document-price]{width:auto}.pricing-online [data-document-spec]{overflow-wrap:anywhere}.pricing-preview-modal:has(.pricing-document-preview){margin:0!important;isolation:isolate;z-index:100}.pricing-preview-modal:has(.pricing-document-preview)>div:first-child{position:sticky;top:0;z-index:20;background:#fff;isolation:isolate}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}#pricing-print-root>div:last-child .pricing-paper{break-after:auto;page-break-after:auto}.pricing-output-content th{position:static}}`}</style>
+      <style>{`${pricingPaperStyle(fontScale)}.pricing-flyer-promo{break-inside:avoid;page-break-inside:avoid}.pricing-online .pricing-output-content{min-height:0}.pricing-online .pricing-output-grid,.pricing-online .pricing-promo-cards{grid-template-columns:minmax(0,1fr)!important}.pricing-online table{table-layout:auto}.pricing-online col{width:auto!important}.pricing-online [data-document-price]{white-space:nowrap;overflow-wrap:normal;text-align:right;width:1%}.pricing-online article [data-document-price]{width:auto}.pricing-online [data-document-spec]{overflow-wrap:anywhere}.pricing-preview-modal:has(.pricing-document-preview){margin:0!important;isolation:isolate;z-index:100}.pricing-preview-modal:has(.pricing-document-preview)>div:first-child{position:sticky;top:0;z-index:20;background:#fff;isolation:isolate}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}#pricing-print-root>div:last-child .pricing-paper{break-after:auto;page-break-after:auto}.pricing-output-content th{position:static}}`}</style>
     </section>
   );
 }

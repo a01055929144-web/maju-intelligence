@@ -1,73 +1,22 @@
 "use client";
+import { CustomerDirectoryView, OperationalEmptyState, countGrades } from "@/components/map/customer-directory-view";
+export { DirectoryStat, OperationalEmptyState } from "@/components/map/customer-directory-view";
+import { QuickRegisterDrawer } from "@/components/map/quick-register-drawer";
 import { copyText } from "@/lib/copy-text";
-import { leadLayerColor, listTabColor, MAP_LAYER_COLORS } from "@/domains/route/map-layer-colors";
+import { leadLayerColor } from "@/domains/route/map-layer-colors";
+import { MapExplorerTabs, MapLayerControl, MapLayerLegend, type MapPanelMode } from "@/components/map/map-layer-controls";
 
 import Link from "next/link";
-import { DEFAULT_LEAD_DM_TEMPLATE, LEAD_DM_TEMPLATES, filterDmItems, parseExcludedItems, renderLeadDm } from "@/domains/lead/dm-template";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, } from "react";
-import { DriverSelectField } from "@/components/driver-select-field";
 import { areaLabelMatchesSigungu, phoneDigitsMatch, summarizeMultiFilter } from "@/lib/map-filter-multi";
-import {
-  AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  CalendarDays,
-  Check,
-  CheckCircle2,
-  
-  Columns2,
-  Columns3,
-  Copy,
-  
-  
-  ExternalLink,
-  Eye,
-  EyeOff,
-  
-  Gauge,
-  GripVertical,
-  Layers,
-  
-  Loader2,
-  ListFilter,
-  Lock,
-  Maximize2,
-  Minimize2,
-  MapPin,
-  MapPinned,
-  
-  MessageSquareText,
-  Navigation,
-  
-  
-  Phone,
-  
-  Radar,
-  RefreshCw,
-  Ruler,
-  Search,
-  Square,
-  Star,
-  Store,
-  Target,
-  
-  Truck,
-  
-  UserRound,
-  Utensils,
-  X,
-  type LucideIcon
-} from "lucide-react";
+import { AlertTriangle, CalendarDays, Check, CheckCircle2, Columns2, Columns3, Copy, ExternalLink, Eye, EyeOff, Gauge, GripVertical, Layers, Loader2, ListFilter, Maximize2, Minimize2, MapPin, MapPinned, MessageSquareText, Navigation, Phone, Radar, RefreshCw, Ruler, Search, Square, Star, Store, Target, Truck, UserRound, Utensils, X, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
-import { LoadingState } from "@/components/ui/state";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SearchInput } from "@/components/ui/search-input";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { NOTICE_TOAST_MS } from "@/components/ui/notice";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { customerLocationChip, customerLocationNote, customerLocationState } from "@/domains/route/map-customer-notice";
@@ -99,48 +48,23 @@ import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/l
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
 import { nextLeadLayerSelection } from "@/lib/map-layer-selection";
 import { getMapLeadReminderLabel } from "@/lib/map-lead-workflow";
-import type {
-  ChurnRiskCustomer,
-  DeliveryCompletionEvent,
-  DeliveryVehicle,
-  PermitLeadActionItem,
-  PermitLeadItem,
-  PermitLeadPeriod,
-  PossibleDuplicateCustomer,
-  RoutePlan,
-  RoutePlanStop,
-  StaffInvitation,
-  StaffLocationEvent,
-  StaffVehicleLocation
-} from "@/lib/store";
+import type { ChurnRiskCustomer, DeliveryCompletionEvent, DeliveryVehicle, PermitLeadActionItem, PermitLeadItem, RoutePlan, RoutePlanStop, StaffInvitation, StaffLocationEvent, StaffVehicleLocation } from "@/lib/store";
 import type { VehicleMaster, } from "@/domains/delivery/vehicle-master";
 import type { RouteOrderLinkStatus } from "@/application/route/today-route-order-projection";
 import { getTmsServiceDateKey } from "@/domains/delivery/service-date";
 import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
 import { leadDocumentEntryHref, type LeadDocumentEntryAccess } from "@/domains/lead/document-entry";
 import { formatStoreAreaPyeong, STORE_AREA_RANGE_OPTIONS } from "@/domains/lead/store-area";
-import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { formatPhoneNumber } from "@/lib/phone";
-import {
-  clamp,
-  estimateFuelCostWon,
-  formatMinutes,
-  getStoreTotals,
-  gradeBadgeClass,
-  
-  readLocalJson,
-  resolveRevenueGrade,
-  roundToOneDecimal,
-  saveLocalJson,
-  type RevenueGrade
-} from "@/lib/route-map-utils";
-import { businessStatusClass, getBusinessStatusLabel, getLeadConfidence, isGenericNaverSearchLink, LEAD_STORE_AREA_FEATURE_ENABLED, permitGradeToneClassName, type StoreRow } from "@/components/map/map-row-helpers";
+import { clamp, estimateFuelCostWon, formatMinutes, getStoreTotals, readLocalJson, resolveRevenueGrade, roundToOneDecimal, saveLocalJson, type RevenueGrade } from "@/lib/route-map-utils";
+import { getBusinessStatusLabel, getLeadConfidence, isGenericNaverSearchLink, LEAD_STORE_AREA_FEATURE_ENABLED, permitGradeToneClassName, type StoreRow } from "@/components/map/map-row-helpers";
 import { RouteMetric, VehicleEdit, createLiveVehicleMarkers, createLocationRoutePath, liveVehicleMatchesDeliveryGroup, summarizeLocationEvents, vehicleColorForId } from "@/components/map/vehicle-helpers";
 export { RouteMetric, vehicleColorForId };
 import { FullRouteNavigateAction, getRouteStopAddress, NavigateMenu, RouteWorkspaceGuide, type CourseSummary, type MarkerViewMode, type WorkspaceView } from "@/components/map/route-planner";
 export { FullRouteNavigateAction, getRouteStopAddress, NavigateMenu };
 export type { CourseSummary };
+import { useMapHeaderOffset } from "@/components/map/use-map-header-offset";
+import { useMapLocalPersistence } from "@/components/map/use-map-local-persistence";
 import { localStoreKeys, QUOTE_DRAFT_UPDATED_EVENT } from "@/components/map/local-store-keys";
 import { buildOutboundItemNotes, quoteDraftId, readQuoteDraft, type QuoteDraft, type QuoteSubject } from "@/components/map/quote-draft";
 export { buildOutboundItemNotes };
@@ -148,11 +72,14 @@ export { buildOutboundItemNotes };
 const QuoteDrawer = dynamic(() => import("@/components/map/quote-drawer").then((m) => m.QuoteDrawer));
 export { localStoreKeys, QUOTE_DRAFT_UPDATED_EVENT, quoteDraftId, readQuoteDraft };
 export type { QuoteDraft, QuoteSubject };
+import { getLeadInstagramHandle, getLeadInstagramSearchUrl, buildLeadDmScript, getPermitLeadQuoteSubject, isPermitLeadUnscored, PERMIT_LEAD_TYPE_LABEL } from "@/components/map/lead-helpers";
+export { normalizeLeadSearchToken, normalizeInstagramHandleValue, getLeadInstagramHandle, getLeadInstagramSearchUrl, getLeadInstagramSearchTokens, permitLeadActionLabel, buildLeadDmScript, getPermitLeadTableAction, getPermitLeadQuoteSubject, PERMIT_PERIOD_OPTIONS, PERMIT_PERIOD_BADGE_LABEL, PERMIT_ACTION_OPTIONS, isPermitLeadUnscored, PERMIT_LEAD_TYPE_LABEL, PERMIT_LEAD_TYPE_DESCRIPTION, formatLeadOpenDateFilterLabel } from "@/components/map/lead-helpers";
+export type { LeadDmSettings, PermitLeadActionIntent } from "@/components/map/lead-helpers";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 // 옛 경로 다시 내보내기(다른 화면이 워크스페이스에서 가져오던 이름).
 export { getLeadConfidence, permitGradeToneClassName };
 export type { StoreRow };
-import { StoreEdit, StoreHistoryItem, StoreAttachment, FuelPriceByType, resolveDisplayIndustry, withPermitLeadCompanyQuery, normalizePhoneNumber } from "@/components/map/map-place-helpers";
+import { StoreEdit, StoreHistoryItem, StoreAttachment, FuelPriceByType, resolveDisplayIndustry, withPermitLeadCompanyQuery } from "@/components/map/map-place-helpers";
 // M4b: 지도 거래처 상세·빠른 카드는 열 때만 내려받는다(components/map/map-place-detail.tsx). 옛 경로 이름은 그대로 내보낸다.
 export const StoreQuickCard = dynamic(() => import("@/components/map/map-place-detail").then((m) => m.StoreQuickCard));
 const StoreDetail = dynamic(() => import("@/components/map/map-place-detail").then((m) => m.StoreDetail));
@@ -167,17 +94,11 @@ const DeliveryAssignmentPanel = dynamic(() => import("@/components/map/vehicle-l
 const LiveVehicleStatusPanel = dynamic(() => import("@/components/map/vehicle-layer").then((m) => m.LiveVehicleStatusPanel));
 const VehicleAnalysisModal = dynamic(() => import("@/components/map/vehicle-layer").then((m) => m.VehicleAnalysisModal));
 
-const CustomerAttachmentUploadPanel = dynamic(
-  () => import("@/components/customer-attachment-upload-panel").then((module) => module.CustomerAttachmentUploadPanel),
-  { loading: () => <LoadingState label="첨부 기능을 준비하는 중입니다." /> }
-);
 type GradeFilter = "all" | RevenueGrade;
-type MapPanelMode = "split" | "driver" | "customer" | "newLead" | "salesLead" | "map";
 
 export type PermitLeadActionKind = "call" | "dm" | "visit" | "hold" | "exclude" | "quote" | "sms" | "talktalk" | "email" | "fax" | "status";
 export type BulkLeadActionBusy = PermitLeadActionKind | "quoteFollowUp" | "";
 export type PermitLeadActionResult = { action?: PermitLeadActionItem; message?: string; ok: boolean; status?: string };
-export type PermitLeadActionIntent = "call" | "dm" | "followup" | "info" | "";
 export const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 export type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 export type PermitLeadEnrichResponse = {
@@ -320,31 +241,6 @@ export const QUOTE_FOLLOW_UP_STATUS_FILTER = "__quote_follow_up";
 export const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
 
 
-// 2026-08-28 피드백 대응: storeEdits/vehicleEdits는 이 브라우저에서만 유지되는 "서버 저장 전까지의
-// 임시 낙관적 캐시"인데, 지우는 로직이 없어 한 번 저장되면 영구히 남아 있었습니다. 실제 서버 값이
-// 나중에 다른 경로(다른 기기, 관리자 도구 등)로 바뀌어도 이 브라우저는 계속 옛 값을 보여주는
-// 문제가 있었습니다. 완전한 해결(저장 성공 시 즉시 제거)은 현재 화면이 서버 재조회 없이 이 캐시에만
-// 의존해 렌더링하는 구조상 화면이 원래 값으로 되돌아가 보이는 부작용이 있어, 대신 TTL(48시간)을 둬서
-// "최소한 며칠 넘게 어긋난 채로 남아있지는 않게" 합니다.
-const EDIT_CACHE_TTL_MS = 48 * 60 * 60 * 1000;
-
-function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values: Record<string, T>; savedAt: Record<string, number> } {
-  const values = readLocalJson<Record<string, T>>(valueKey, {});
-  const savedAt = readLocalJson<Record<string, number>>(savedAtKey, {});
-  const now = Date.now();
-  const freshValues: Record<string, T> = {};
-  const freshSavedAt: Record<string, number> = {};
-  for (const [id, value] of Object.entries(values)) {
-    const timestamp = savedAt[id];
-    // 이 기능 배포 이전에 저장돼 저장 시각 기록이 없는 값은 일단 유지하되, 지금 시각으로 새로
-    // 기록해 이후부터는 TTL이 정상 적용되게 합니다.
-    if (timestamp && now - timestamp > EDIT_CACHE_TTL_MS) continue;
-    freshValues[id] = value;
-    freshSavedAt[id] = timestamp || now;
-  }
-  return { values: freshValues, savedAt: freshSavedAt };
-}
-
 export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, distributorSales = false, documentEntry = { canCreateQuote: false, canCreateSheet: false }, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialLeadType = "new", initialView = "map", leadDetailMode = "drawer", mapMarkers, orderLinkStatus = "off", routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -441,58 +337,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
-  // 지도 탭에서 검색/필터/신규 리드 반경 바가 1024px 이상에서 지도 위 카드로 표시됩니다(lg:absolute).
-  // "신규 리드 반경"을 켜면 이 카드에 한 줄이 더 늘어나 높이가 커지는데, 지도 오른쪽 위
-  // MapControls(내 위치 버튼)의 세로 위치가 고정값이면 늘어난 카드와 겹칩니다.
-  //
-  // 이 카드(mapHeaderRef)는 위쪽 KPI/이탈 위험 알림 블록을 건너뛰고 항상 지도 영역의 부모
-  // 기준 top-2에 뜨는데(lg:absolute), MapControls는 지도 영역 자신(mapAreaRef)의 top을
-  // 기준으로 위치합니다 — 두 기준점이 서로 다른 조상이라, 카드 높이만으로 오프셋을 계산하면
-  // KPI 패널이 펼쳐져 있거나 이탈 위험 알림 배너가 떠 있을 때 실제 카드 아래쪽 가장자리와
-  // MapControls 위치가 어긋납니다. getBoundingClientRect()로 카드의 실제 화면 아래쪽 가장자리와
-  // 지도 영역의 실제 화면 위쪽 가장자리를 직접 비교해 그 차이를 오프셋으로 써서, 위에 어떤 블록이
-  // 얼마나 있든 항상 카드 바로 아래에 오도록 합니다.
-  const mapHeaderRef = useRef<HTMLElement>(null);
-  const mapAreaRef = useRef<HTMLDivElement>(null);
-  const [mapHeaderHeightPx, setMapHeaderHeightPx] = useState(0);
-  const recomputeMapHeaderOffset = useCallback(() => {
-    const headerNode = mapHeaderRef.current;
-    const areaNode = mapAreaRef.current;
-    if (!headerNode || !areaNode) return;
-    const headerRect = headerNode.getBoundingClientRect();
-    const areaRect = areaNode.getBoundingClientRect();
-    // 시안 ⑫부터 필터 줄은 지도 위에 겹치지 않는 고정 줄입니다. 겹칠 때(예전 배치·특수 화면)만
-    // 그만큼 + 여백을 주고, 겹치지 않으면 0이라 패널·컨트롤이 지도 영역 맨 위에 붙습니다.
-    const overlap = headerRect.bottom - areaRect.top;
-    setMapHeaderHeightPx(overlap > 1 ? Math.round(overlap + 16) : 0);
-  }, []);
-  useEffect(() => {
-    const headerNode = mapHeaderRef.current;
-    const areaNode = mapAreaRef.current;
-    if (!headerNode || !areaNode || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(recomputeMapHeaderOffset);
-    observer.observe(headerNode);
-    observer.observe(areaNode);
-    recomputeMapHeaderOffset();
-    // 2026-09-07 피드백("우측 패널 위쪽에 위치하는데 짤려서 안보임") 대응: ResizeObserver는 헤더
-    // 카드(mapHeaderRef) 자신의 "크기"가 변할 때만 반응합니다. 그런데 이 오프셋 계산은 크기가 아니라
-    // "화면상 실제 위치"(getBoundingClientRect)를 봅니다 — 창 크기 변경처럼 두 요소의 크기는 그대로여도
-    // 화면 위치/레이아웃이 바뀌는 경우까지는 ResizeObserver가 못 잡아, 헤더 카드(z-20, 항상 위)가
-    // 계산이 어긋난 채로 좌우 패널(z-10)의 위쪽을 가려버리는 문제가 있었습니다. window resize에도
-    // 다시 계산하도록 보강합니다.
-    window.addEventListener("resize", recomputeMapHeaderOffset);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", recomputeMapHeaderOffset);
-    };
-  }, [recomputeMapHeaderOffset]);
-  // 위 ResizeObserver/resize 리스너로도 놓칠 수 있는 나머지 경우(폰트 로딩으로 인한 리플로우,
-  // 리드 필터 줄이 늘어나는 등rowspan 변화가 있는 렌더 등)를 보강하기 위해, 커밋될 때마다(매 렌더
-  // 이후) 오프셋을 다시 계산합니다. recomputeMapHeaderOffset은 getBoundingClientRect 두 번 읽는 정도라
-  // 가볍고, 값이 그대로면 setState가 리렌더를 유발하지 않아 무한 루프로 이어지지 않습니다.
-  useLayoutEffect(() => {
-    recomputeMapHeaderOffset();
-  });
+  const { mapAreaRef, mapHeaderHeightPx, mapHeaderRef, recomputeMapHeaderOffset } = useMapHeaderOffset();
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
   const [detailLeadId, setDetailLeadId] = useState("");
@@ -509,25 +354,24 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 지도 레이어 바 "거래처": 꺼 두면 거래처 마커만 지도에서 숨긴다(목록·검색은 그대로).
   const [customersLayerOn, setCustomersLayerOn] = useState(true);
   const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
-  const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
-  const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(
-    () => loadEditCacheWithTtl<StoreEdit>(localStoreKeys.storeEdits, localStoreKeys.storeEditsSavedAt).values
-  );
-  const [storeEditsSavedAt, setStoreEditsSavedAt] = useState<Record<string, number>>(
-    () => loadEditCacheWithTtl<StoreEdit>(localStoreKeys.storeEdits, localStoreKeys.storeEditsSavedAt).savedAt
-  );
-  const [storeHistories, setStoreHistories] = useState<Record<string, StoreHistoryItem[]>>(() => readLocalJson(localStoreKeys.histories, {}));
-  const [vehicleEdits, setVehicleEdits] = useState<Record<string, VehicleEdit>>(
-    () => loadEditCacheWithTtl<VehicleEdit>(localStoreKeys.vehicleEdits, localStoreKeys.vehicleEditsSavedAt).values
-  );
-  const [vehicleEditsSavedAt, setVehicleEditsSavedAt] = useState<Record<string, number>>(
-    () => loadEditCacheWithTtl<VehicleEdit>(localStoreKeys.vehicleEdits, localStoreKeys.vehicleEditsSavedAt).savedAt
-  );
-  const [manualDrivers, setManualDrivers] = useState<string[]>(() => readLocalJson(localStoreKeys.manualDrivers, []));
-  // 배송차는 담당자와 별개로 지정될 수 있어(같은 트럭을 여러 담당자가 나눠 쓰거나, 한 담당자가
-  // 상황에 따라 다른 차량을 몰 수 있음), 아직 어떤 거래처에도 배정되지 않은 배송차 이름을 미리
-  // 등록해 두는 목록입니다. manualDrivers와 동일한 로컬 저장 방식을 씁니다.
-  const [manualVehicles, setManualVehicles] = useState<string[]>(() => readLocalJson(localStoreKeys.manualVehicles, []));
+  const {
+    manualDrivers,
+    manualVehicles,
+    setManualDrivers,
+    setManualVehicles,
+    setStoreAttachments,
+    setStoreEdits,
+    setStoreEditsSavedAt,
+    setStoreHistories,
+    setVehicleEdits,
+    setVehicleEditsSavedAt,
+    storeAttachments,
+    storeEdits,
+    storeEditsSavedAt,
+    storeHistories,
+    vehicleEdits,
+    vehicleEditsSavedAt
+  } = useMapLocalPersistence();
   const [courseSummary, setCourseSummary] = useState<CourseSummary | null>(null);
   const [fuelPrices, setFuelPrices] = useState<FuelPriceByType>({ diesel: null, gasoline: null });
   const [vehicleFilterId, setVehicleFilterId] = useState("all");
@@ -987,7 +831,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     const keyword = query.trim().toLowerCase();
     if (keyword.length < 2) return [];
     return allStores
-      .filter((store) => `${store.name} ${store.region} ${store.address || ""}`.toLowerCase().includes(keyword) || phoneDigitsMatch(store.phone, keyword))
+      .filter((store) => `${store.name} ${store.region} ${store.address || ""} ${store.deliveryDriver || ""}`.toLowerCase().includes(keyword) || phoneDigitsMatch(store.phone, keyword))
       .slice(0, 30);
   }, [allStores, query]);
   // 신규 리드도 같은 검색창에서 함께 찾을 수 있게 합니다(2026-08-24 피드백). 이미 "제외" 처리한 리드는
@@ -1332,6 +1176,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const mapFilterChips: Array<{ active: boolean; icon: LucideIcon; key: MapFilterPopKey; label: string; muted?: boolean; title: string }> = [
     { active: Boolean(mapLeadRegionSigungu), icon: MapPin, key: "region", label: summarizeMultiFilter(mapLeadRegionSigungu, "영업 지역"), title: "영업 지역" },
     { active: Boolean(mapLeadIndustryFilter), icon: Utensils, key: "industry", label: summarizeMultiFilter(mapLeadIndustryFilter, "업종"), title: "업종" },
+    { active: gradeFilter !== "all", icon: Star, key: "more", label: gradeFilter === "all" ? "우선순위" : `${gradeFilter}등급`, title: "우선순위 등급" },
     {
       active: LEAD_STORE_AREA_FEATURE_ENABLED && Boolean(mapLeadAreaRange),
       icon: Ruler,
@@ -1398,8 +1243,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       reminderOnly: mapLeadReminderOnly,
       stage: mapLeadStageFilter,
       typeFilter: mapLeadTypeFilter
-    }),
-    [statusScopedLeadsForMap, mapLeadTypeFilter, mapTargetType, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]
+    }).filter((lead) => gradeFilter === "all" || lead.grade === gradeFilter),
+    [statusScopedLeadsForMap, mapLeadTypeFilter, mapTargetType, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong, gradeFilter]
   );
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
@@ -1489,35 +1334,30 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const mapRightInsetClass = mapLeftPanelMini ? "lg:right-14" : !mapLeftPanelVisible ? "lg:right-0" : mapPanelMode === "split" ? "lg:right-[250px]" : "lg:right-[320px] xl:right-[360px]";
   // 레이어 바·조건 요약은 지도 칸(패널 사이) 안에 있으므로 패널 폭과 무관하게 지도 칸 기준 왼쪽 12px입니다.
   const mapOverlayLeftClass = "lg:left-3";
-  // 시안 ⑫ 오른쪽 목록 탭(신규 · 영업 · 거래처). 3분할이든 지도+목록이든 같은 탭을 씁니다.
+  const activeExplorerMode: MapPanelMode = mapPanelMode === "driver"
+    ? "driver"
+    : activeRightPanelTab === "stores"
+      ? "customer"
+      : mapLeadTypeFilter === "sales"
+        ? "salesLead"
+        : "newLead";
+  // 담당자·거래처·신규·영업을 어느 목록에서도 같은 탭으로 전환합니다.
   const rightListTabs = (
-    <SplitListTabs
-      active={activeRightPanelTab === "stores" ? "customers" : mapLeadTypeFilter === "sales" ? "sales" : "new"}
+    <MapExplorerTabs
+      active={activeExplorerMode}
       counts={{
         customers: allStores.length,
+        drivers: deliveryVehicles.filter((vehicle) => !vehicle.isUnassigned).length,
         newLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "new").length,
         salesLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "sales").length
       }}
-      leadsLoading={allLeadsLoadState === "loading" || allLeadsLoadState === "idle"}
       onSelect={(tab) => {
-        // 이미 선택된 탭을 다시 누르면 오른쪽 목록 패널을 접는다(패널의 접기 버튼과 같은 동작).
-        const activeTab = activeRightPanelTab === "stores" ? "customers" : mapLeadTypeFilter === "sales" ? "sales" : "new";
+        const activeTab = activeExplorerMode;
         if (tab === activeTab && !rightCollapsed) {
           setMapPanelMode("map");
           return;
         }
-        if (mapPanelMode !== "split") {
-          setMapPanelMode(tab === "customers" ? "customer" : tab === "sales" ? "salesLead" : "newLead");
-          return;
-        }
-        if (tab === "customers") {
-          setRightPanelTab("stores");
-          return;
-        }
-        setRightPanelTab("leads");
-        resetLeadView();
-        setMapLeadTypeFilter(tab === "sales" ? "sales" : "new");
-        setMapLeadsVisible(true);
+        setMapPanelMode(tab);
       }}
     />
   );
@@ -1686,7 +1526,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const focusOrigin = () => {
     if (initialView === "leads") {
       const params = new URLSearchParams(window.location.search);
-      router.push(`/map${params.size ? `?${params.toString()}` : ""}`);
+      window.location.assign(`/map${params.size ? `?${params.toString()}` : ""}`);
       return;
     }
     setActiveView("map");
@@ -1698,7 +1538,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const resetWorkspace = () => {
     if (initialView === "leads") {
       const params = new URLSearchParams(window.location.search);
-      router.push(`/map${params.size ? `?${params.toString()}` : ""}`);
+      window.location.assign(`/map${params.size ? `?${params.toString()}` : ""}`);
       return;
     }
     setActiveView("map");
@@ -1733,7 +1573,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       const params = new URLSearchParams(window.location.search);
       if (nextView === "map") params.delete("view");
       else params.set("view", nextView);
-      router.push(`/map${params.size ? `?${params.toString()}` : ""}`);
+      window.location.assign(`/map${params.size ? `?${params.toString()}` : ""}`);
       return;
     }
     setActiveView(nextView);
@@ -1748,14 +1588,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     }
   };
 
-  useEffect(() => saveLocalJson(localStoreKeys.attachments, storeAttachments), [storeAttachments]);
-  useEffect(() => saveLocalJson(localStoreKeys.histories, storeHistories), [storeHistories]);
-  useEffect(() => saveLocalJson(localStoreKeys.storeEdits, storeEdits), [storeEdits]);
-  useEffect(() => saveLocalJson(localStoreKeys.storeEditsSavedAt, storeEditsSavedAt), [storeEditsSavedAt]);
-  useEffect(() => saveLocalJson(localStoreKeys.vehicleEdits, vehicleEdits), [vehicleEdits]);
-  useEffect(() => saveLocalJson(localStoreKeys.vehicleEditsSavedAt, vehicleEditsSavedAt), [vehicleEditsSavedAt]);
-  useEffect(() => saveLocalJson(localStoreKeys.manualDrivers, manualDrivers), [manualDrivers]);
-  useEffect(() => saveLocalJson(localStoreKeys.manualVehicles, manualVehicles), [manualVehicles]);
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(document.fullscreenElement === workspaceRef.current);
@@ -2542,7 +2374,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             }}
             onChange={(value) => { setQuery(value); setSearchOpen(value.trim().length >= 2); }}
             onClear={closeSearch}
-            placeholder="상호·주소·전화"
+            placeholder="거래처·리드·담당자·주소 검색"
             value={query}
           >
             {showExternalResults && query.trim().length < 2 && recentQueries.length ? (
@@ -3197,7 +3029,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   params.delete("pin");
                   params.delete("detail");
                   params.set("type", mapLeadTypeFilter === "sales" ? "keyword" : "permit");
-                  router.push(`/leads?${params.toString()}`);
+                  // /map 과 /leads 는 같은 /dashboard 로 rewrite 되어 router.push 로는 화면(initialView)이 바뀌지 않는다.
+                  // 사이드바와 같은 방식으로 문서를 새로 연다.
+                  window.location.assign(`/leads?${params.toString()}`);
                 }}
                 onToggleCollapsed={() => setMapPanelMode(rightCollapsed ? (mapLeadTypeFilter === "new" ? "newLead" : "salesLead") : "map")}
                 selectedLeadId={previewLeadId}
@@ -3440,1020 +3274,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 // 지도 검색에서 찾은 미등록 매장을 화면을 떠나지 않고 그 자리에서 바로 등록할 수 있게 하는 패널입니다.
 // 상호명만 있으면 저장할 수 있고(사업자등록번호는 나중에 서류로 보완), 저장에 성공하면 같은 패널 안에서
 // 바로 사업자등록증·신분증·적재위치 파일을 업로드할 수 있도록 이어집니다.
-function QuickRegisterDrawer({
-  driverOptions,
-  onAddDriver,
-  onAddVehicle,
-  onClose,
-  onRegistered,
-  result,
-  vehicleOptions
-}: {
-  driverOptions?: string[];
-  onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
-  onAddVehicle?: (vehicleName: string) => Promise<{ ok: boolean; message?: string }>;
-  onClose: () => void;
-  onRegistered: () => void;
-  result: ExternalBusinessResult;
-  vehicleOptions?: string[];
-}) {
-  const [customerName, setCustomerName] = useState(result.name);
-  const [address, setAddress] = useState(result.roadAddress || result.address);
-  const [phone, setPhone] = useState(formatPhoneNumber(result.phone));
-  const [industry, setIndustry] = useState(result.industry);
-  const [deliveryManager, setDeliveryManager] = useState("");
-  const [deliveryVehicle, setDeliveryVehicle] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [createdCustomer, setCreatedCustomer] = useState<{ id: string; name: string; assignmentNotice?: string } | null>(null);
-  // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 서버가 상호명이 같은 기존 거래처를
-  // 발견하면 바로 저장하지 않고 이 상태에 그 목록을 담아 확인창을 띄웁니다. 사용자가 "그래도 등록"을
-  // 선택해야만 confirmDuplicate: true로 다시 요청을 보내 실제로 저장합니다.
-  const [duplicateMatches, setDuplicateMatches] = useState<PossibleDuplicateCustomer[] | null>(null);
-  // 2026-08-31 에러 처리/복원력 감사 후속: 카카오 검색 결과로 채워진 값을 그대로 두거나(=아직
-  // 손대지 않음) 이미 등록을 마쳤다면 이탈 경고를 띄우지 않고, 사용자가 실제로 뭔가 고치거나
-  // 담당자/배송차를 지정했을 때만(=저장 안 하고 나가면 다시 입력해야 함) 경고합니다.
-  const isDraftDirty =
-    !createdCustomer &&
-    (customerName !== (result.name || "") ||
-      address !== (result.roadAddress || result.address || "") ||
-      phone !== (result.phone || "") ||
-      industry !== (result.industry || "") ||
-      Boolean(deliveryManager) ||
-      Boolean(deliveryVehicle));
-  useUnsavedChangesWarning(isDraftDirty);
-
-  async function saveCustomer(confirmDuplicate = false) {
-    if (!customerName.trim() || isSaving) return;
-
-    setIsSaving(true);
-    setSaveError("");
-
-    try {
-      const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
-      const response = await fetchWithTimeout("/api/customers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address,
-          businessStatus: "확인 필요",
-          companyId: companyId || undefined,
-          confirmDuplicate,
-          customerName,
-          deliveryManager: deliveryManager || undefined,
-          deliveryVehicle: deliveryVehicle || undefined,
-          industry: industry || "미분류",
-          kakaoPlaceUrl: result.kakaoPlaceUrl,
-          phone: normalizePhoneNumber(phone),
-          validateBusinessNumber: false
-        })
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.message || "거래처 등록에 실패했습니다.");
-      if (payload?.possibleDuplicate) {
-        setDuplicateMatches(payload.duplicateMatches || []);
-        return;
-      }
-
-      const customerId = String(payload?.customer?.id || "");
-      if (!customerId) throw new Error("거래처는 저장됐지만 ID를 확인하지 못했습니다. 거래처 관리에서 확인해주세요.");
-
-      setCreatedCustomer({ id: customerId, name: customerName, assignmentNotice: payload?.assignmentNotice });
-      onRegistered();
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "거래처 등록에 실패했습니다.");
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <>
-      <button aria-label="빠른 등록 닫기" className="fixed inset-0 z-40 bg-slate-950/45" onClick={onClose} type="button" />
-      <aside className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-[480px] flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <header className="maju-card-header border-b px-4 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-xs font-black text-teal-700">지도 검색 · 빠른 등록</p>
-              <h3 className="mt-1 truncate text-xl font-black text-slate-950">{createdCustomer ? `${createdCustomer.name} 등록 완료` : "거래처로 등록"}</h3>
-              <p className="mt-1 text-xs font-bold text-slate-500">
-                {createdCustomer ? "서류를 업로드하면 바로 사용할 수 있습니다." : "이름과 주소만 있으면 바로 저장할 수 있습니다."}
-              </p>
-            </div>
-            <button
-              aria-label="닫기"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-rose-50 hover:text-rose-700"
-              onClick={onClose}
-              type="button"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-4">
-          {createdCustomer ? (
-            <div className="space-y-4">
-              <CustomerAttachmentUploadPanel customerId={createdCustomer.id} customerName={createdCustomer.name} />
-              {createdCustomer.assignmentNotice ? (
-                <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-bold text-teal-800">
-                  {createdCustomer.assignmentNotice}
-                </div>
-              ) : null}
-              <button className="maju-button-primary flex h-11 w-full items-center justify-center gap-2 text-sm" onClick={onClose} type="button">
-                <Check className="h-4 w-4" />
-                완료
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3 rounded-md border border-slate-200 bg-white p-4">
-              <label className="block space-y-1.5">
-                <span className="text-xs font-black text-slate-500">상호명 (필수)</span>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setCustomerName(event.target.value)}
-                  value={customerName}
-                />
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-black text-slate-500">주소</span>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setAddress(event.target.value)}
-                  value={address}
-                />
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-black text-slate-500">연락처</span>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setPhone(formatPhoneNumber(event.target.value))}
-                  value={phone}
-                />
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-black text-slate-500">업종</span>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setIndustry(event.target.value)}
-                  value={industry}
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-black text-slate-500">담당자</span>
-                  <DriverSelectField driverOptions={driverOptions || []} onAddDriver={onAddDriver} onChange={setDeliveryManager} value={deliveryManager} />
-                </label>
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-black text-slate-500">배송차</span>
-                  <DriverSelectField
-                    driverOptions={vehicleOptions || []}
-                    entityLabel="배송차"
-                    onAddDriver={onAddVehicle}
-                    onChange={setDeliveryVehicle}
-                    value={deliveryVehicle}
-                  />
-                </label>
-              </div>
-              <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-blue-800">
-                사업자등록번호는 지금 없어도 됩니다. 저장 후 사업자등록증을 업로드해 보완할 수 있습니다.
-              </p>
-              {saveError ? <p className="text-xs font-bold text-rose-600">{saveError}</p> : null}
-              <button
-                className="maju-button-primary flex h-11 w-full items-center justify-center gap-2 text-sm disabled:opacity-60"
-                disabled={!customerName.trim() || isSaving}
-                onClick={() => saveCustomer()}
-                type="button"
-              >
-                {isSaving ? "저장 중" : "거래처로 등록"}
-              </button>
-            </div>
-          )}
-        </div>
-      </aside>
-      {duplicateMatches ? (
-        <ConfirmDialog
-          cancelLabel="취소"
-          confirmLabel="그래도 등록"
-          message={`이름이 같은 거래처가 이미 있습니다.\n${duplicateMatches.map((match) => `· ${match.customerName}${match.address ? ` (${match.address})` : ""}`).join("\n")}\n\n그래도 새 거래처로 등록하시겠습니까?`}
-          onCancel={() => setDuplicateMatches(null)}
-          onConfirm={() => {
-            setDuplicateMatches(null);
-            saveCustomer(true);
-          }}
-          title="중복 의심 거래처"
-          tone="default"
-        />
-      ) : null}
-    </>
-  );
-}
-
-function MapExplorerTabs({
-  active,
-  counts,
-  onSelect
-}: {
-  readonly active: MapPanelMode;
-  readonly counts: { customers: number; drivers: number; newLeads: number; salesLeads: number };
-  readonly onSelect: (mode: MapPanelMode) => void;
-}) {
-  const tabs = [
-    { count: counts.drivers, label: "담당자·차량", value: "driver" as const },
-    { count: counts.customers, label: "거래처", value: "customer" as const },
-    { count: counts.newLeads, label: "신규", value: "newLead" as const },
-    { count: counts.salesLeads, label: "영업", value: "salesLead" as const }
-  ];
-  return (
-    <nav aria-label="지도 통합 탐색" className="grid shrink-0 grid-cols-4 gap-1 border-b border-slate-200 bg-slate-50 p-1.5">
-      {tabs.map((tab) => (
-        <button
-          aria-current={active === tab.value ? "page" : undefined}
-          className={`min-w-0 rounded-md px-1.5 py-1.5 text-xs font-bold transition ${
-            active === tab.value ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:bg-white hover:text-slate-900"
-          }`}
-          key={tab.value}
-          onClick={() => onSelect(tab.value)}
-          type="button"
-        >
-          <span className="block truncate">{tab.label}</span>
-          <span className="mt-0.5 block text-xs font-semibold tabular-nums opacity-70">{tab.count.toLocaleString()}</span>
-        </button>
-      ))}
-    </nav>
-  );
-}
-
-// 시안 ⑫ 3분할 오른쪽 목록 탭: 신규 / 영업 / 거래처 (담당자·차량은 왼쪽 패널 전용).
-function SplitListTabs({
-  active,
-  counts,
-  leadsLoading,
-  onSelect
-}: {
-  readonly active: "new" | "sales" | "customers";
-  readonly counts: { customers: number; newLeads: number; salesLeads: number };
-  readonly leadsLoading: boolean;
-  readonly onSelect: (tab: "new" | "sales" | "customers") => void;
-}) {
-  const tabs = [
-    { count: counts.newLeads, label: "신규", lead: true, value: "new" as const },
-    { count: counts.salesLeads, label: "영업", lead: true, value: "sales" as const },
-    { count: counts.customers, label: "거래처", lead: false, value: "customers" as const }
-  ];
-  return (
-    <nav aria-label="오른쪽 목록" className="flex shrink-0 gap-1 border-b border-slate-200 bg-white px-3 py-2.5">
-      {tabs.map((tab) => (
-        <button
-          aria-current={active === tab.value ? "page" : undefined}
-          className={`h-[30px] min-w-0 whitespace-nowrap rounded-lg px-3 text-[13px] transition ${
-            active === tab.value ? "font-bold text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-          }`}
-          key={tab.value}
-          onClick={() => onSelect(tab.value)}
-          style={active === tab.value ? { backgroundColor: listTabColor(tab.value) } : undefined}
-          type="button"
-        >
-          <span className="whitespace-nowrap">{tab.label}</span>{" "}
-          <span className="tabular-nums">{tab.lead && leadsLoading ? "…" : tab.count.toLocaleString()}</span>
-        </button>
-      ))}
-    </nav>
-  );
-}
-
-function MapLayerControl({
-  className,
-  counts,
-  customersOn,
-  headerOffsetPx,
-  markerViewMode,
-  onSelectLeadLayer,
-  onSelectMarkerMode,
-  onToggleCustomers,
-  showAllLeadsOnMap,
-  typeFilter
-}: {
-  readonly className: string;
-  readonly customersOn: boolean;
-  readonly onToggleCustomers: () => void;
-  readonly counts: {
-    activeVehicles: number;
-    customers: number;
-    newLeads: number;
-    salesLeads: number;
-  };
-  readonly headerOffsetPx: number;
-  readonly markerViewMode: MarkerViewMode;
-  readonly onSelectLeadLayer: (type: PermitLeadType) => void;
-  readonly onSelectMarkerMode: () => void;
-  readonly showAllLeadsOnMap: boolean;
-  readonly typeFilter: "all" | PermitLeadType;
-}) {
-  // 시안 ⑫ 레이어 바: 색 점 + 이름 + 건수의 둥근 버튼. 켜짐은 실선, 꺼짐은 점선·흐린 글자.
-  const layerButtonClass = (active: boolean) =>
-    `flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs transition ${
-      active ? "border border-slate-400 bg-white text-slate-900" : "border border-dashed border-slate-300 bg-slate-50 text-slate-400 hover:text-slate-600"
-    }`;
-  const newOn = showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "new");
-  const salesOn = showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "sales");
-  const vehicleOn = markerViewMode === "vehicle";
-
-  return (
-    <div
-      aria-label="지도 레이어"
-      className={`pointer-events-auto absolute left-3 z-10 hidden max-w-[calc(100%-1.5rem)] items-center gap-1 overflow-x-auto rounded-[10px] bg-white p-1 shadow-[0_2px_8px_rgba(15,23,42,.12)] lg:flex ${className}`}
-      style={{ top: headerOffsetPx ? `${headerOffsetPx + 12}px` : "0.75rem" }}
-    >
-      <button aria-pressed={customersOn} className={layerButtonClass(customersOn)} onClick={onToggleCustomers} title="거래처 레이어 켜기 또는 끄기" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: MAP_LAYER_COLORS.customer }} />
-        거래처 {counts.customers}
-      </button>
-      <button aria-pressed={newOn} className={layerButtonClass(newOn)} onClick={() => onSelectLeadLayer("new")} title="신규 리드 레이어 켜기 또는 끄기" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: MAP_LAYER_COLORS.newLead }} />
-        신규 {counts.newLeads}
-      </button>
-      <button aria-pressed={salesOn} className={layerButtonClass(salesOn)} onClick={() => onSelectLeadLayer("sales")} title="영업 리드 레이어 켜기 또는 끄기" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: MAP_LAYER_COLORS.salesLead }} />
-        영업 {counts.salesLeads}
-      </button>
-      <button aria-pressed={vehicleOn} className={layerButtonClass(vehicleOn)} onClick={onSelectMarkerMode} title="거래처 마커를 차량별 또는 등급별로 표시" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-sm" style={{ backgroundColor: MAP_LAYER_COLORS.vehicle }} />
-        차량 {counts.activeVehicles}
-      </button>
-    </div>
-  );
-}
-
-function MapLayerLegend({
-  counts
-}: {
-  readonly counts: {
-    activeVehicles: number;
-    completedCustomers: number;
-    customers: number;
-    newLeads: number;
-    salesLeads: number;
-    staleVehicles: number;
-    lastOperationVehicles: number;
-  };
-}) {
-  return (
-    <div className="pointer-events-none absolute inset-x-2 bottom-2 z-10 flex justify-center sm:inset-x-3 sm:bottom-3 lg:hidden">
-      <div
-        aria-label="지도 마커 범례"
-        className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-xs font-bold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,.16)] backdrop-blur sm:text-[11px] lg:max-w-[calc(100%-640px)] xl:max-w-[calc(100%-700px)]"
-      >
-        <span className="font-black text-slate-500">범례</span>
-        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-white" style={{ backgroundColor: MAP_LAYER_COLORS.customer }} />거래처 {counts.customers}</span>
-        {counts.newLeads > 0 ? (
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded" style={{ backgroundColor: MAP_LAYER_COLORS.newLead }} />신규 리드 {counts.newLeads}</span>
-        ) : null}
-        {counts.salesLeads > 0 ? (
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded" style={{ backgroundColor: MAP_LAYER_COLORS.salesLead }} />영업 리드 {counts.salesLeads}</span>
-        ) : null}
-        <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">🚚</span>실시간 {counts.activeVehicles}</span>
-        {counts.staleVehicles ? <span className="inline-flex items-center gap-1 text-slate-500"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-xs text-white">🚚</span>지연 {counts.staleVehicles}</span> : null}
-        {counts.lastOperationVehicles ? <span className="inline-flex items-center gap-1 text-slate-400"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-300 text-xs text-slate-700">🚚</span>마지막 운행 {counts.lastOperationVehicles}</span> : null}
-        <span className="inline-flex items-center gap-1 text-emerald-700"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">✓</span>오늘 완료 {counts.completedCustomers}</span>
-      </div>
-    </div>
-  );
-}
-
-function CustomerDirectoryView({
-  dataRegistrationHref,
-  driverOptions,
-  fuelPrices,
-  onSelectStore,
-  selectedStoreId,
-  sourceReady,
-  stores,
-  vehicleOptions
-}: {
-  readonly dataRegistrationHref: string;
-  readonly driverOptions: string[];
-  readonly fuelPrices: FuelPriceByType;
-  readonly onSelectStore: (storeId: string) => void;
-  readonly selectedStoreId: string;
-  readonly sourceReady: boolean;
-  readonly stores: StoreRow[];
-  readonly vehicleOptions: string[];
-}) {
-  const router = useRouter();
-  const deliveryPricePerLiter = fuelPrices.diesel?.pricePerLiter || fuelPrices.gasoline?.pricePerLiter || 0;
-  const gradeCounts = countGrades(stores);
-  const unknownCount = stores.filter((store) => store.businessStatus === "unknown").length;
-  // 2026-08-31 피드백 대응: "물류비 합계" KPI. 거래처 하나하나가 출발지에서 각자 왕복한다고
-  // 가정해 전부 더하면(=지금 표의 "예산 물류비" 열을 단순 합산) 실제 배송보다 훨씬 부풀려집니다 —
-  // 실제로는 배송차 한 대가 담당 거래처를 한 번의 경로로 순회합니다. 배송차별 실제 순회 경로를
-  // 매번 계산하려면 배송차마다 티맵 API를 호출해야 해 비용·속도 부담이 크므로, 그 배송차가 맡은
-  // 거래처 중 가장 먼 거리를 "이 배송차가 한 번 나가서 도는 왕복 거리"의 근사치로 삼습니다(가장 먼
-  // 곳까지 갔다 오는 길에 나머지 거래처를 들른다고 가정 — 실제 순회 경로보다는 다소 넉넉한 편이지만,
-  // 거래처별 왕복을 전부 더하는 것보다는 훨씬 현실에 가깝습니다).
-  const totalLogisticsCostWon = useMemo(() => {
-    const farthestDistanceByVehicle = new Map<string, number>();
-    stores.forEach((store) => {
-      const vehicleKey = store.deliveryVehicleName || store.deliveryDriver || `__unassigned_${store.id}`;
-      const distanceKm = store.distanceKm || 0;
-      const current = farthestDistanceByVehicle.get(vehicleKey) ?? 0;
-      if (distanceKm > current) farthestDistanceByVehicle.set(vehicleKey, distanceKm);
-    });
-    let total = 0;
-    farthestDistanceByVehicle.forEach((distanceKm) => {
-      total += estimateFuelCostWon(distanceKm, deliveryPricePerLiter) * 2;
-    });
-    return total;
-  }, [stores, deliveryPricePerLiter]);
-  type DirectorySortKey = "businessStatus" | "deliveryDriver" | "deliveryVehicleName" | "distanceKm" | "expectedRevenue" | "grade" | "industry" | "logisticsCost" | "name";
-  const [sortKey, setSortKey] = useState<DirectorySortKey | null>(null);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [showMoreDirectoryColumns, setShowMoreDirectoryColumns] = useState(false);
-  function toggleSort(key: DirectorySortKey) {
-    if (sortKey === key) {
-      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDirection("asc");
-    }
-  }
-  const gradeSortWeight: Record<string, number> = { A: 3, B: 2, C: 1 };
-  // 2026-09-07 피드백("담당자 또는 배송차가 거래처를 일괄 또는 선택해서 이동할 수 있는게 필요할
-  // 것 같아. 하나하나 옮기려니까 너무 힘드네") 대응: 담당자/배송차로 목록을 좁혀두면 "전체 선택"
-  // 만으로 그 그룹 전체를 한 번에 고를 수 있습니다(체크박스로 부분 선택도 그대로 가능).
-  const [directoryManagerFilter, setDirectoryManagerFilter] = useState("");
-  const [directoryVehicleFilter, setDirectoryVehicleFilter] = useState("");
-  const filteredStores = useMemo(() => {
-    return stores.filter((store) => {
-      if (directoryManagerFilter && (store.deliveryDriver || "") !== directoryManagerFilter) return false;
-      if (directoryVehicleFilter && (store.deliveryVehicleName || "") !== directoryVehicleFilter) return false;
-      return true;
-    });
-  }, [stores, directoryManagerFilter, directoryVehicleFilter]);
-  const sortedStores = useMemo(() => {
-    if (!sortKey) return filteredStores;
-    const decorated = filteredStores.map((store) => ({
-      logisticsCost: estimateFuelCostWon(store.distanceKm || 0, deliveryPricePerLiter) * 2,
-      store
-    }));
-    decorated.sort((a, b) => {
-      let diff = 0;
-      if (sortKey === "name") diff = a.store.name.localeCompare(b.store.name, "ko");
-      else if (sortKey === "industry") diff = (a.store.industry || "").localeCompare(b.store.industry || "", "ko");
-      else if (sortKey === "grade") diff = (gradeSortWeight[a.store.grade] || 0) - (gradeSortWeight[b.store.grade] || 0);
-      else if (sortKey === "deliveryDriver") diff = (a.store.deliveryDriver || "").localeCompare(b.store.deliveryDriver || "", "ko");
-      else if (sortKey === "deliveryVehicleName") diff = (a.store.deliveryVehicleName || "").localeCompare(b.store.deliveryVehicleName || "", "ko");
-      else if (sortKey === "expectedRevenue") diff = a.store.expectedRevenue - b.store.expectedRevenue;
-      else if (sortKey === "distanceKm") diff = (a.store.distanceKm || 0) - (b.store.distanceKm || 0);
-      else if (sortKey === "logisticsCost") diff = a.logisticsCost - b.logisticsCost;
-      else if (sortKey === "businessStatus") diff = getBusinessStatusLabel(a.store.businessStatus).localeCompare(getBusinessStatusLabel(b.store.businessStatus), "ko");
-      return sortDirection === "asc" ? diff : -diff;
-    });
-    return decorated.map((item) => item.store);
-  }, [filteredStores, sortKey, sortDirection, deliveryPricePerLiter]);
-  function SortableHeader({
-    className = "",
-    label,
-    sortKeyValue,
-    helpText
-  }: {
-    className?: string;
-    label: string;
-    sortKeyValue: DirectorySortKey;
-    helpText?: string;
-  }) {
-    const isActive = sortKey === sortKeyValue;
-    return (
-      <th className={`border-r border-slate-200 px-4 py-3 ${className}`}>
-        <span className="inline-flex items-center gap-1">
-          <button
-            className={`inline-flex items-center gap-1 hover:text-slate-900 ${isActive ? "text-slate-900" : ""}`}
-            onClick={() => toggleSort(sortKeyValue)}
-            type="button"
-          >
-            {label}
-            {isActive ? sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3 text-slate-300" />}
-          </button>
-          {helpText ? (
-            <details className="group relative" onClick={(event) => event.stopPropagation()}>
-              <summary aria-label={`${label} 설명`} className="grid h-5 w-5 cursor-pointer list-none place-items-center rounded-full text-[11px] font-black text-slate-400 hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">ⓘ</summary>
-              <span className="absolute left-0 top-6 z-30 block w-64 rounded-lg border border-slate-200 bg-white p-3 text-left text-[11px] font-semibold leading-5 text-slate-600 shadow-xl">{helpText}</span>
-            </details>
-          ) : null}
-        </span>
-      </th>
-    );
-  }
-  // 2026-08-27 피드백("거래처가 중복되어 있는게 있어") 대응: 상호명+주소가 동일한 거래처를 화면에서
-  // 바로 찾아 병합할 수 있게 합니다. 서버에는 이미 병합 API(mergeDuplicateCustomers)가 있었지만 이를
-  // 부를 UI가 없어서 사용자가 중복을 직접 발견해도 정리할 방법이 없었습니다.
-  const duplicateGroups = useMemo(() => {
-    const groups = new Map<string, StoreRow[]>();
-    stores.forEach((store) => {
-      const key = `${store.name}`.trim().toLowerCase().replace(/\s/g, "") + "|" + `${store.address || ""}`.trim().toLowerCase().replace(/\s/g, "");
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(store);
-    });
-    return Array.from(groups.values()).filter((group) => group.length > 1);
-  }, [stores]);
-  const [mergingKey, setMergingKey] = useState<string | null>(null);
-  const [mergeError, setMergeError] = useState("");
-  const [pendingMergeGroup, setPendingMergeGroup] = useState<StoreRow[] | null>(null);
-
-  // 2026-09-07 피드백("담당자 또는 배송차가 거래처를 일괄 또는 선택해서 이동할 수 있는게 필요할
-  // 것 같아. 하나하나 옮기려니까 너무 힘드네") 대응: 지금까지는 거래처를 한 곳씩 열어 담당자/배송차를
-  // 고쳐야 했습니다. 위 directoryManagerFilter/directoryVehicleFilter로 목록을 좁힌 뒤 "전체 선택"으로
-  // 그 그룹 전체를 한 번에, 또는 체크박스로 원하는 거래처만 골라, 다른 담당자/배송차로 한 번에
-  // 옮길 수 있게 합니다.
-  const [selectedStoreIds, setSelectedStoreIds] = useState<Set<string>>(new Set());
-  const [bulkTargetManager, setBulkTargetManager] = useState("");
-  const [bulkTargetVehicle, setBulkTargetVehicle] = useState("");
-  const [bulkApplying, setBulkApplying] = useState(false);
-  const [bulkMessage, setBulkMessage] = useState("");
-  const [bulkError, setBulkError] = useState("");
-
-  function toggleSelectStore(storeId: string) {
-    setSelectedStoreIds((current) => {
-      const next = new Set(current);
-      if (next.has(storeId)) next.delete(storeId);
-      else next.add(storeId);
-      return next;
-    });
-  }
-
-  async function runBulkReassign() {
-    const targetManager = bulkTargetManager.trim();
-    const targetVehicle = bulkTargetVehicle.trim();
-    const customerIds = Array.from(selectedStoreIds);
-    if (!customerIds.length || (!targetManager && !targetVehicle)) return;
-    setBulkApplying(true);
-    setBulkError("");
-    setBulkMessage("");
-    try {
-      const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
-      if (targetManager) {
-        const response = await fetch("/api/customers/bulk-manager", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyId: companyId || undefined, customerIds, deliveryManager: targetManager })
-        });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(payload?.message || "담당자 일괄 변경에 실패했습니다.");
-      }
-      if (targetVehicle) {
-        const response = await fetch("/api/customers/bulk-vehicle", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyId: companyId || undefined, customerIds, deliveryVehicle: targetVehicle })
-        });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(payload?.message || "배송차 일괄 변경에 실패했습니다.");
-      }
-      setBulkMessage(`${customerIds.length.toLocaleString()}곳을 이동했습니다.`);
-      setSelectedStoreIds(new Set());
-      setBulkTargetManager("");
-      setBulkTargetVehicle("");
-      router.refresh();
-    } catch (error) {
-      setBulkError(error instanceof Error ? error.message : "일괄 이동에 실패했습니다.");
-    } finally {
-      setBulkApplying(false);
-    }
-  }
-
-  function completenessScore(store: StoreRow) {
-    return [store.businessRegistrationNumber, store.deliveryDriver, store.deliveryVehicleName, store.phone, store.representativeName, store.accessMethodType, store.loadingPosition].filter(
-      Boolean
-    ).length;
-  }
-
-  async function runMerge(group: StoreRow[]) {
-    const sorted = [...group].sort((a, b) => completenessScore(b) - completenessScore(a));
-    const primary = sorted[0];
-    const duplicates = sorted.slice(1);
-    const groupKey = group.map((store) => store.id).join(",");
-    setMergingKey(groupKey);
-    setMergeError("");
-    try {
-      const companyId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") : null;
-      const response = await fetch("/api/customers/merge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: companyId || undefined,
-          primaryCustomerId: primary.id,
-          duplicateCustomerIds: duplicates.map((store) => store.id)
-        })
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.message || "중복 거래처 병합에 실패했습니다.");
-      setPendingMergeGroup(null);
-      router.refresh();
-    } catch (error) {
-      setMergeError(error instanceof Error ? error.message : "중복 거래처 병합에 실패했습니다.");
-    } finally {
-      setMergingKey(null);
-    }
-  }
-
-  return (
-    <section className="flex min-h-[480px] flex-1 flex-col overflow-visible rounded-b-xl bg-[#f6f8fb] p-4 pb-6">
-      <div className="grid shrink-0 gap-3 lg:grid-cols-3">
-        <DirectoryStat label="거래처" value={`${stores.length}곳`} />
-        <DirectoryStat label="A등급" value={`${gradeCounts.A}곳`} />
-        <DirectoryStat
-          label="물류비 합계"
-          title="배송차별로, 그 배송차가 맡은 거래처 중 가장 먼 곳까지의 왕복 유류비를 더한 값입니다(참고용 추정치). 거래처 각각의 왕복을 단순 합산하지 않고 배송차 한 대가 한 번에 순회한다고 가정합니다."
-          value={`${Math.round(totalLogisticsCostWon / 10000).toLocaleString()}만원`}
-        />
-      </div>
-
-      {sourceReady && duplicateGroups.length ? (
-        <div className="mt-3 flex shrink-0 flex-col gap-2.5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
-          <div className="flex items-center gap-2.5">
-            <Copy className="h-4 w-4 shrink-0 text-rose-700" />
-            <p className="text-xs font-bold leading-5 text-rose-900">
-              상호명·주소가 같은 중복 의심 거래처가 <span className="font-black">{duplicateGroups.length}건</span> 있습니다. 매출·거래내역이 나뉘어
-              집계될 수 있어 병합을 권장합니다.
-            </p>
-          </div>
-          {mergeError ? <p className="text-xs font-bold text-rose-700">{mergeError}</p> : null}
-          <div className="flex flex-col gap-2">
-            {duplicateGroups.map((group) => {
-              const groupKey = group.map((store) => store.id).join(",");
-              const sorted = [...group].sort((a, b) => completenessScore(b) - completenessScore(a));
-              return (
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-100 bg-white px-3 py-2" key={groupKey}>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-black text-slate-950">{sorted[0].name}</p>
-                    <p className="truncate text-[11px] font-bold text-slate-500">
-                      {sorted[0].address || sorted[0].region} · {group.length}건 중복 · 기준 레코드는 자동으로 정보가 더 많은 쪽을 선택합니다
-                    </p>
-                  </div>
-                  <button
-                    className="maju-button-secondary h-8 shrink-0 px-3 text-[11px]"
-                    disabled={mergingKey === groupKey}
-                    onClick={() => setPendingMergeGroup(group)}
-                    type="button"
-                  >
-                    {mergingKey === groupKey ? "병합 중..." : "병합"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      {sourceReady && unknownCount ? (
-        <div className="mt-3 flex shrink-0 items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />
-          <p className="text-xs font-bold leading-5 text-amber-900">
-            사업자 상태가 아직 확인되지 않은 거래처가 <span className="font-black">{unknownCount}곳</span> 있습니다. 아래 목록에서 거래처를 눌러 상세
-            패널의 &quot;사업자 상태 조회&quot;를 실행하세요.
-          </p>
-        </div>
-      ) : null}
-
-      {/* 2026-09-07 피드백("담당자 또는 배송차가 거래처를 일괄 또는 선택해서 이동할 수 있는게
-          필요할 것 같아. 하나하나 옮기려니까 너무 힘드네"): 담당자/배송차로 목록을 좁힌 뒤 "전체
-          선택"으로 그 그룹 전체를, 또는 표의 체크박스로 원하는 거래처만 골라 다른 담당자·배송차로
-          한 번에 옮길 수 있습니다. */}
-      {sourceReady && stores.length ? (
-        <div className="mt-3 flex shrink-0 flex-col gap-2.5 rounded-lg border border-teal-200 bg-teal-50/60 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="shrink-0 text-xs font-black text-teal-900">담당자/배송차 일괄 이동</p>
-            <select
-              className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
-              onChange={(event) => setDirectoryManagerFilter(event.target.value)}
-              value={directoryManagerFilter}
-            >
-              <option value="">담당자 전체</option>
-              {driverOptions.map((driver) => (
-                <option key={driver} value={driver}>
-                  {driver}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
-              onChange={(event) => setDirectoryVehicleFilter(event.target.value)}
-              value={directoryVehicleFilter}
-            >
-              <option value="">배송차 전체</option>
-              {vehicleOptions.map((vehicle) => (
-                <option key={vehicle} value={vehicle}>
-                  {vehicle}
-                </option>
-              ))}
-            </select>
-            <button
-              className="maju-button-secondary h-8 shrink-0 px-3 text-[11px]"
-              onClick={() => {
-                const allVisibleSelected = sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id));
-                setSelectedStoreIds(allVisibleSelected ? new Set() : new Set(sortedStores.map((store) => store.id)));
-              }}
-              type="button"
-            >
-              {sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id)) ? "전체 해제" : `보이는 ${sortedStores.length.toLocaleString()}곳 전체 선택`}
-            </button>
-            {selectedStoreIds.size ? <span className="text-xs font-black text-teal-900">{selectedStoreIds.size.toLocaleString()}곳 선택됨</span> : null}
-          </div>
-          {selectedStoreIds.size ? (
-            <div className="flex flex-wrap items-center gap-2 border-t border-teal-200 pt-2.5">
-              <span className="shrink-0 text-xs font-bold text-teal-900">이동할 곳:</span>
-              <select
-                className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
-                onChange={(event) => setBulkTargetManager(event.target.value)}
-                value={bulkTargetManager}
-              >
-                <option value="">담당자 변경 안 함</option>
-                {driverOptions.map((driver) => (
-                  <option key={driver} value={driver}>
-                    {driver}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="h-8 rounded-md border border-teal-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-400"
-                onChange={(event) => setBulkTargetVehicle(event.target.value)}
-                value={bulkTargetVehicle}
-              >
-                <option value="">배송차 변경 안 함</option>
-                {vehicleOptions.map((vehicle) => (
-                  <option key={vehicle} value={vehicle}>
-                    {vehicle}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="maju-button-primary h-8 shrink-0 px-3 text-[11px] disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={bulkApplying || (!bulkTargetManager.trim() && !bulkTargetVehicle.trim())}
-                onClick={runBulkReassign}
-                type="button"
-              >
-                {bulkApplying ? "이동 중..." : `${selectedStoreIds.size.toLocaleString()}곳 이동`}
-              </button>
-              <button
-                className="maju-button-secondary h-8 shrink-0 px-3 text-[11px]"
-                disabled={bulkApplying}
-                onClick={() => {
-                  setSelectedStoreIds(new Set());
-                  setBulkTargetManager("");
-                  setBulkTargetVehicle("");
-                }}
-                type="button"
-              >
-                선택 해제
-              </button>
-            </div>
-          ) : null}
-          {bulkError ? <p className="text-xs font-bold text-rose-700">{bulkError}</p> : null}
-          {bulkMessage ? <p className="text-xs font-bold text-emerald-700">{bulkMessage}</p> : null}
-        </div>
-      ) : null}
-
-      <div className="maju-section-card mt-4 !overflow-visible">
-        {sourceReady && stores.length ? (
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
-            <p className="text-xs font-semibold text-slate-500">기본 화면은 업무에 필요한 핵심 정보만 표시합니다.</p>
-            <button className="maju-button-secondary h-8 px-3 text-xs" onClick={() => setShowMoreDirectoryColumns((current) => !current)} type="button">
-              {showMoreDirectoryColumns ? "핵심 컬럼만" : "컬럼 더보기"}
-            </button>
-          </div>
-        ) : null}
-        {!sourceReady ? (
-          <OperationalEmptyState
-            actionHref={dataRegistrationHref}
-            actionLabel="거래처 등록"
-            description="사업자번호, 주소, 담당자, 매출등급을 등록하세요."
-            title="거래처 원장 필요"
-          />
-        ) : null}
-        {sourceReady ? (
-          stores.length ? (
-            <div className="overflow-x-auto">
-              <table className={`w-full border-separate border-spacing-0 text-left text-sm ${showMoreDirectoryColumns ? "min-w-[1520px]" : "min-w-[760px]"}`}>
-                <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
-                  <tr>
-                    <th className="w-[36px] border-r border-slate-200 px-3 py-3">
-                      <input
-                        aria-label="현재 보이는 거래처 전체 선택"
-                        checked={sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id))}
-                        className="h-3.5 w-3.5 accent-teal-700"
-                        onChange={() => {
-                          const allVisibleSelected = sortedStores.length > 0 && sortedStores.every((store) => selectedStoreIds.has(store.id));
-                          setSelectedStoreIds(allVisibleSelected ? new Set() : new Set(sortedStores.map((store) => store.id)));
-                        }}
-                        type="checkbox"
-                      />
-                    </th>
-                    <SortableHeader className="w-[28%]" label="거래처" sortKeyValue="name" />
-                    {showMoreDirectoryColumns ? <SortableHeader className="w-[96px]" label="업종" sortKeyValue="industry" /> : null}
-                    <SortableHeader className="w-[96px]" helpText="거래처의 매출 규모와 중요도를 기준으로 관리하는 등급입니다." label="매출등급" sortKeyValue="grade" />
-                    <SortableHeader className="w-[130px]" label="담당자" sortKeyValue="deliveryDriver" />
-                    {showMoreDirectoryColumns ? <SortableHeader
-                      className="w-[130px]"
-                      helpText="담당자와 배송차는 독립적으로 지정할 수 있으며 같은 배송차를 여러 담당자가 나눠 쓰는 경우도 포함합니다. 지도 필터는 이 값을 기준으로 동작합니다."
-                      label="배송차"
-                      sortKeyValue="deliveryVehicleName"
-                    /> : null}
-                    {showMoreDirectoryColumns ? <SortableHeader className="w-[120px] text-right" label="예상매출" sortKeyValue="expectedRevenue" /> : null}
-                    {showMoreDirectoryColumns ? <SortableHeader className="w-[120px] text-right" label="출발지 거리" sortKeyValue="distanceKm" /> : null}
-                    {showMoreDirectoryColumns ? <SortableHeader
-                      className="w-[150px] text-right"
-                      helpText="출발지에서 이 거래처까지 왕복했을 때의 예상 유류비로, 참고용 추정치입니다."
-                      label="예산 물류비"
-                      sortKeyValue="logisticsCost"
-                    /> : null}
-                    <SortableHeader className="w-[120px]" label="사업자 상태" sortKeyValue="businessStatus" />
-                    {showMoreDirectoryColumns ? <th className="w-[110px] border-r border-slate-200 px-4 py-3">출입 방법</th> : null}
-                    {showMoreDirectoryColumns ? <th
-                      className="w-[90px] border-r border-slate-200 px-4 py-3"
-                      title="보안을 위해 실제 비밀번호 값은 목록에 노출하지 않습니다. 거래처를 눌러 상세 패널에서 확인하세요."
-                    >
-                      비밀번호
-                    </th> : null}
-                    {showMoreDirectoryColumns ? <th className="w-[150px] px-4 py-3">적재 위치</th> : null}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {sortedStores.map((store) => (
-                    <tr
-                      data-selected={store.id === selectedStoreId ? "true" : "false"}
-                      className={`cursor-pointer transition hover:bg-slate-50 ${store.id === selectedStoreId ? "bg-teal-50/70 shadow-[inset_3px_0_0_#0f766e]" : "bg-white"}`}
-                      key={store.id}
-                      onClick={() => onSelectStore(store.id)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") onSelectStore(store.id);
-                      }}
-                    >
-                      <td className="border-r border-slate-100 px-3 py-3" onClick={(event) => event.stopPropagation()}>
-                        <input
-                          aria-label={`${store.name} 선택`}
-                          checked={selectedStoreIds.has(store.id)}
-                          className="h-3.5 w-3.5 accent-teal-700"
-                          onChange={() => toggleSelectStore(store.id)}
-                          type="checkbox"
-                        />
-                      </td>
-                      <td className="min-w-0 border-r border-slate-100 px-4 py-3">
-                        <p className="truncate font-black text-slate-950">{store.name}</p>
-                        <p className="mt-1 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
-                      </td>
-                      {showMoreDirectoryColumns ? <td className="max-w-[96px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.industry || "미분류"}</td> : null}
-                      <td className="border-r border-slate-100 px-4 py-3">
-                        <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                      </td>
-                      <td className="max-w-[130px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryDriver || "미지정"}</td>
-                      {showMoreDirectoryColumns ? <td className="max-w-[130px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-700">{store.deliveryVehicleName || "미지정"}</td> : null}
-                      {showMoreDirectoryColumns ? <td className="border-r border-slate-100 px-4 py-3 text-right font-black text-slate-950">{store.expectedRevenue.toLocaleString()}만원</td> : null}
-                      {showMoreDirectoryColumns ? <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">{store.distanceKm?.toLocaleString() || "-"}km</td> : null}
-                      {showMoreDirectoryColumns ? <td className="border-r border-slate-100 px-4 py-3 text-right font-bold text-slate-500">
-                        {(() => {
-                          const roundTripCost = estimateFuelCostWon(store.distanceKm || 0, deliveryPricePerLiter) * 2;
-                          return roundTripCost ? `왕복 ${roundTripCost.toLocaleString()}원` : <span className="text-slate-400">확인 필요</span>;
-                        })()}
-                      </td> : null}
-                      <td className="border-r border-slate-100 px-4 py-3">
-                        <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
-                        {store.relationshipStatus === "거래종료" ? (
-                          <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">거래 종료</span>
-                        ) : null}
-                      </td>
-                      {showMoreDirectoryColumns ? <td className="max-w-[110px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.accessMethodType || "미등록"}</td> : null}
-                      {showMoreDirectoryColumns ? <td className="border-r border-slate-100 px-4 py-3">
-                        {store.hasAccessPassword ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">
-                            <Lock className="h-3 w-3" /> 등록됨
-                          </span>
-                        ) : (
-                          <span className="text-xs font-bold text-slate-400">미등록</span>
-                        )}
-                      </td> : null}
-                      {showMoreDirectoryColumns ? <td className="max-w-[150px] truncate px-4 py-3 font-bold text-slate-500">{store.loadingPosition || "미등록"}</td> : null}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <OperationalEmptyState
-              actionHref={dataRegistrationHref}
-              actionLabel="거래처 관리 확인"
-              description="필터를 초기화하거나 거래처 값을 확인하세요."
-              title="조건에 맞는 거래처 없음"
-            />
-          )
-        ) : null}
-      </div>
-
-      {pendingMergeGroup ? (
-        <ConfirmDialog
-          confirmLabel="병합"
-          message={`"${pendingMergeGroup[0].name}" ${pendingMergeGroup.length}건을 하나로 병합합니다. 정보가 더 많은 레코드를 기준으로 남기고 나머지는 거래내역·메모·첨부자료를 옮긴 뒤 삭제합니다. 되돌릴 수 없습니다.`}
-          onCancel={() => setPendingMergeGroup(null)}
-          onConfirm={() => runMerge(pendingMergeGroup)}
-          title="중복 거래처 병합"
-        />
-      ) : null}
-    </section>
-  );
-}
-
-export function normalizeLeadSearchToken(value: string) {
-  return value.toLowerCase().replace(/[@._\-\s]/g, "");
-}
-
-export function normalizeInstagramHandleValue(value: string | undefined) {
-  const rawValue = (value || "").trim();
-  if (!rawValue) return "";
-
-  const urlMatch = rawValue.match(/instagram\.com\/([^/?#]+)/i);
-  if (urlMatch?.[1]) {
-    const handle = decodeURIComponent(urlMatch[1]).replace(/^@/, "").trim();
-    const reservedPaths = new Set(["accounts", "direct", "explore", "p", "reel", "reels", "stories"]);
-    if (!handle || reservedPaths.has(handle.toLowerCase())) return "";
-    return `@${handle}`;
-  }
-
-  const plainValue = rawValue.replace(/^@/, "").trim();
-  if (/^[a-z0-9._]{2,30}$/i.test(plainValue)) return `@${plainValue}`;
-  return "";
-}
-
-export function getLeadInstagramHandle(lead: PermitLeadItem) {
-  return normalizeInstagramHandleValue(lead.instagramUrl);
-}
-
-// 2026-08-24 피드백("인스타 id 검색이 잘 안되고 있어")의 원인: 예전에는 실제 저장된 인스타 ID가
-// 없는 리드도 상호명에서 글자만 뽑아 "@추정아이디"를 만들어 표시/검색에 썼습니다. 이 추정값은
-// 실제 계정과 무관해서, 사용자가 진짜 아이디로 검색해도 안 걸리고, 클릭해도 엉뚱한(혹은 존재하지
-// 않는) 계정으로 연결되는 문제가 있었습니다. 이제 실제로 저장된 ID만 "확인됨"으로 표시/검색하고,
-// 없으면 명확히 "검색 필요" 상태로 보여줍니다.
-export function getLeadInstagramSearchUrl(lead: PermitLeadItem) {
-  const handle = getLeadInstagramHandle(lead);
-  if (handle) return `https://www.instagram.com/${encodeURIComponent(handle.replace(/^@/, ""))}/`;
-  return `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent([lead.businessName, lead.address].filter(Boolean).join(" "))}`;
-}
-
-export function getLeadInstagramSearchTokens(lead: PermitLeadItem) {
-  const handle = getLeadInstagramHandle(lead);
-  if (!handle) return [];
-  return [lead.instagramUrl || "", handle, handle.replace(/^@/, ""), normalizeLeadSearchToken(handle)].filter(Boolean);
-}
-
-export function permitLeadActionLabel(actionType: string) {
-  if (actionType === "call") return "전화";
-  if (actionType === "dm") return "인스타 DM";
-  if (actionType === "sms") return "문자";
-  if (actionType === "talktalk") return "네이버 톡톡";
-  if (actionType === "email") return "이메일";
-  if (actionType === "fax") return "팩스";
-  if (actionType === "status") return "상태 변경";
-  if (actionType === "visit") return "방문";
-  if (actionType === "hold") return "보류";
-  if (actionType === "exclude") return "제외";
-  if (actionType === "quote") return "견적 요청";
-  if (actionType === "convert") return "거래처 전환";
-  return actionType;
-}
-
-/** 11/3 A3: 회사 기본 문구(placeholder {상호}{업종}{품목})와 제외 품목을 반영합니다. 결제 조건 기본값은 '협의'. */
-export type LeadDmSettings = { excluded?: string; template?: string; distributorTemplate?: string; context?: { companyName?: string; region?: string; mainItems?: string; newCount?: number } };
-export function buildLeadDmScript(lead: PermitLeadItem, settings?: LeadDmSettings) {
-  // CC-31: 유통사 리드는 유통사용 회사 문구(없으면 코드 기본 D1)를 쓰고 {업종}·{품목}은 무시한다. 매장 리드는 기존 그대로.
-  const distributor = lead.targetType === "distributor";
-  const items = distributor ? [] : filterDmItems(buildOutboundItemNotes(lead.industryPrimary), parseExcludedItems(settings?.excluded || "")).slice(0, 4);
-  const template = distributor ? settings?.distributorTemplate || LEAD_DM_TEMPLATES.distributor[0].body : settings?.template || DEFAULT_LEAD_DM_TEMPLATE;
-  return renderLeadDm(template, { businessName: lead.businessName, industry: lead.industryPrimary, items, target: distributor ? "distributor" : "restaurant", ...settings?.context });
-}
-
-
-export function getPermitLeadTableAction(lead: PermitLeadItem): { intent: PermitLeadActionIntent; label: string; mode: "detail" | "quote"; primary: boolean } {
-  if (lead.status === "견적 발송" || lead.status === "재연락 예정") return { intent: "followup", label: "후속 기록", mode: "detail", primary: true };
-  if (lead.status === "견적 요청") return { intent: "", label: "견적 작성", mode: "quote", primary: true };
-  if (lead.nextAction === "오늘 바로 전화") return { intent: "call", label: "통화 기록", mode: "detail", primary: true };
-  if (lead.nextAction === "오늘 DM 발송") return { intent: "dm", label: "DM 기록", mode: "detail", primary: true };
-  if (lead.nextAction === "정보 보강") return { intent: "info", label: "정보 확인", mode: "detail", primary: false };
-  return { intent: "", label: "상세 보기", mode: "detail", primary: false };
-}
-
-export function getPermitLeadQuoteSubject(lead: PermitLeadItem): QuoteSubject {
-  return {
-    address: lead.address,
-    industry: lead.industryPrimary,
-    instagramUrl: lead.instagramUrl,
-    leadId: lead.id,
-    name: lead.businessName,
-    outboundNotes: buildOutboundItemNotes(lead.industryPrimary),
-    phone: lead.phone,
-    reviewCount: lead.reviewCount
-  };
-}
-
 /** 지도 위 리드 반경 검색 결과 마커를 클릭했을 때 뜨는 간단 카드입니다. StoreQuickCard보다 가볍습니다. */
 // 2026-08-30 피드백("배송차, 매니저 추천도 같이 뜨면 좋을 듯") 대응: 새 가짜 거리 계산을 만들지
 // 않고, 이미 있는 신호만 써서 추천합니다. 1순위는 서버가 실제 좌표 거리로 계산해준
@@ -4833,51 +3653,9 @@ function PermitLeadMapQuickCard({
   );
 }
 
-// 2026-08-28 피드백 대응(아직 점수 계산 안 된 리드가 그냥 낮은 등급으로 보임): 리뷰수·평점·검색량
-// 보강이 한 번도 실행되지 않은 리드는 grade가 null이라도 "실제로 낮은 등급"이 아니라 "아직 채점
-// 전"입니다. 세 값이 모두 없으면(0도 아니고 아예 미기록) 보강 전으로 간주합니다.
-export const PERMIT_PERIOD_OPTIONS: Array<{ label: string; value: "all" | PermitLeadPeriod }> = [
-  { label: "전체 기간", value: "all" },
-  { label: "오늘 신규", value: "today" },
-  { label: "이번 주 신규", value: "week" },
-  { label: "이번 달 신규", value: "month" },
-  { label: "최근 90일", value: "recent" }
-];
-export const PERMIT_PERIOD_BADGE_LABEL: Record<PermitLeadPeriod, string> = {
-  today: "오늘 신규",
-  week: "이번 주 신규",
-  month: "이번 달 신규",
-  recent: "최근 90일"
-};
-export const PERMIT_ACTION_OPTIONS = ["오늘 바로 전화", "오늘 DM 발송", "전화·DM 검토", "정보 보강", "제외 검토"];
-
-export function isPermitLeadUnscored(lead: Pick<PermitLeadItem, "reviewCount" | "rating" | "keywordVolume">) {
-  return lead.reviewCount == null && lead.rating == null && lead.keywordVolume == null;
-}
-
 // 이 이름들은 9개 파일이 지도 파일에서 가져간다 — 옛 경로에서 다시 내보낸다(M3a: 순수 계산은 domains/lead/map-filters.ts).
 export { getPermitLeadOpenDate, getPermitLeadType, isPermitLeadInOpenDateFilter, PERMIT_LEAD_TYPE_OPTIONS };
 export type { LeadOpenDateFilterMode, PermitLeadType };
-export const PERMIT_LEAD_TYPE_LABEL: Record<PermitLeadType, string> = {
-  new: "신규리드",
-  sales: "영업리드"
-};
-export const PERMIT_LEAD_TYPE_DESCRIPTION: Record<PermitLeadType, string> = {
-  new: "개업일이 최근 90일 이내로 확인된 신생 사업자 리드입니다.",
-  sales: "개업일은 확인되지 않지만, 검색량·리뷰 등 활동 지표를 기준으로 영업 타겟팅하는 리드입니다."
-};
-
-export function formatLeadOpenDateFilterLabel(mode: LeadOpenDateFilterMode, year: string, month: string, startDate: string, endDate: string) {
-  if (mode === "all") return "개시일 전체";
-  if (mode === "missing") return "개시일 미확인";
-  if (mode === "year") return year ? `${year}년 개시` : "연도 선택 필요";
-  if (mode === "month") return month ? `${month} 개시` : "월 선택 필요";
-  if (!startDate && !endDate) return "직접 기간";
-  if (startDate && endDate) return `${startDate} ~ ${endDate}`;
-  if (startDate) return `${startDate} 이후`;
-  return `${endDate} 이전`;
-}
-
 // 인허가 데이터 표준 컬럼명(공공데이터포털 기준)과 흔히 쓰는 변형을 함께 인식합니다.
 const PERMIT_HEADER_ALIASES: Record<string, string[]> = {
   businessName: ["사업장명", "상호명", "업체명", "거래처명"],
@@ -5048,77 +3826,6 @@ const TodayCourseView = dynamic(() => import("./today-course-view").then((module
   ),
   ssr: false
 });
-
-export function DirectoryStat({
-  active = false,
-  label,
-  onClick,
-  title,
-  tone = "slate",
-  value
-}: {
-  readonly active?: boolean;
-  readonly label: string;
-  readonly onClick?: () => void;
-  readonly title?: string;
-  readonly tone?: "rose" | "slate";
-  readonly value: string;
-}) {
-  const content = (
-    <>
-      <p className="maju-muted-label">{label}</p>
-      <p className={`mt-1 text-[24px] font-black leading-none ${tone === "rose" ? "text-rose-600" : "text-slate-950"}`}>{value}</p>
-    </>
-  );
-  // 2026-09-01 피드백: "해당 카드를 누르면, 아래 거래처들이 필터가 되면 좋을 것 같아" — KPI 카드를
-  // 눌러 바로 아래 목록을 그 조건으로 필터링할 수 있게 클릭 가능한 버튼 형태를 추가로 지원합니다.
-  if (onClick) {
-    return (
-      <button
-        className={`maju-stat-card w-full px-4 py-3 text-left transition hover:border-teal-300 hover:shadow-sm ${
-          active ? "border-teal-400 ring-1 ring-inset ring-teal-300" : ""
-        }`}
-        onClick={onClick}
-        title={title}
-        type="button"
-      >
-        {content}
-      </button>
-    );
-  }
-  return (
-    <div className="maju-stat-card px-4 py-3" title={title}>
-      {content}
-    </div>
-  );
-}
-
-export function OperationalEmptyState({
-  actionHref,
-  actionLabel,
-  description,
-  title
-}: {
-  readonly actionHref: string;
-  readonly actionLabel: string;
-  readonly description: string;
-  readonly title: string;
-}) {
-  return (
-    <div className="grid h-full min-h-[520px] place-items-center px-4 text-center">
-      <div className="max-w-xl rounded-xl border border-dashed border-teal-200 bg-teal-50/60 px-4 py-8 shadow-[0_8px_22px_rgba(15,118,110,0.08)]">
-        <div className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-white text-teal-700 shadow-sm ring-1 ring-inset ring-teal-100">
-          <Store className="h-5 w-5" />
-        </div>
-        <h3 className="mt-4 text-lg font-black text-slate-950">{title}</h3>
-        <p className="mt-2 text-sm font-bold leading-6 text-slate-600">{description}</p>
-        <Link className="maju-button-primary mt-5 h-10 px-4 text-sm" href={actionHref}>
-          {actionLabel}
-        </Link>
-      </div>
-    </div>
-  );
-}
 
 function Kpi({
   helper,
@@ -5632,15 +4339,6 @@ function getRevenueGrade(revenue: number): RevenueGrade {
   return "C";
 }
 
-function countGrades(stores: StoreRow[]) {
-  return stores.reduce(
-    (counts, store) => ({
-      ...counts,
-      [store.grade]: counts[store.grade] + 1
-    }),
-    { A: 0, B: 0, C: 0 } as Record<RevenueGrade, number>
-  );
-}
 
 function applyStoreEdits(stores: StoreRow[], edits: Record<string, StoreEdit>) {
   return stores.map((store) => {

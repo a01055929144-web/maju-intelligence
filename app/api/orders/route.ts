@@ -5,15 +5,17 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
-import { erpOrderDocumentsEnabled } from "@/lib/erp-order-documents-feature";
-import { readConfirmedOrderSaleDocuments, syncStoreOrderSaleDocument } from "@/lib/pricing/store-order-sale-document";
+import { erpOrderDocumentsEnabled, orderReceiptDraftEnabled } from "@/lib/erp-order-documents-feature";
+import { readConfirmedOrderSaleDocuments, readOrderSaleDocuments, receiveStoreOrderWithSaleDocument, syncStoreOrderSaleDocument } from "@/lib/pricing/store-order-sale-document";
 import { supabaseRequest } from "@/lib/store";
 import { isStoreOrderStatus } from "../../../domains/order/store-order-status";
 import { markNewOrderNotificationProcessed } from "@/lib/store/07-company-notifications";
+import { orderListExportEnabled } from "@/lib/order-list-export-feature";
 
 export const dynamic = "force-dynamic";
 
-const PAGE_SIZE = 20;
+const LEGACY_PAGE_SIZE = 20;
+const EXPORT_PAGE_SIZE = 500;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MEMBER_ROLE: Record<string, string> = { owner: "점주", manager: "관리자", staff: "직원" };
 
@@ -82,17 +84,19 @@ export async function GET(request: NextRequest) {
       if (!matched.length) return NextResponse.json({ hasMore: false, items: [] }, { headers: { "Cache-Control": "no-store" } });
       customerFilter = `&customer_id=in.(${matched.map((row) => row.id).join(",")})`;
     }
+    const pageSize = orderListExportEnabled(scope) ? EXPORT_PAGE_SIZE : LEGACY_PAGE_SIZE;
     const orders = await supabaseRequest<OrderRow[]>(
       `store_orders?company_id=eq.${company}${status === "all" ? "" : `&status=eq.${status}`}${customerFilter}` +
       "&select=id,customer_id,delivery_date,status,known_total,has_market_price,request_memo,submitted_at,revision,ordered_by_member_id,store_account_id," +
       "store_order_lines(product_name,specification,sales_unit,quantity,total_amount,is_market_price)" +
-      `&order=submitted_at.desc,id.desc&limit=${PAGE_SIZE + 1}&offset=${(page - 1) * PAGE_SIZE}`,
+      `&order=submitted_at.desc,id.desc&limit=${pageSize + 1}&offset=${(page - 1) * pageSize}`,
     );
-    const items = orders.slice(0, PAGE_SIZE);
+    const items = orders.slice(0, pageSize);
     const customerIds = Array.from(new Set(items.map((order) => order.customer_id)));
     const memberIds = Array.from(new Set(items.map((order) => order.ordered_by_member_id).filter((id): id is string => Boolean(id))));
     const accountIds = Array.from(new Set(items.map((order) => order.store_account_id).filter((id): id is string => Boolean(id))));
     const erpEnabled = erpOrderDocumentsEnabled(scope);
+    const draftReceipt = orderReceiptDraftEnabled(scope);
     const [customers, members, pending, documents] = await Promise.all([
       customerIds.length ? supabaseRequest<CustomerRow[]>(
         `normalized_customers?company_id=eq.${company}&id=in.(${customerIds.join(",")})&select=id,customer_name,address,delivery_base_address,delivery_address_detail`,
@@ -103,14 +107,15 @@ export async function GET(request: NextRequest) {
       accountIds.length ? supabaseRequest<Array<{ id: string }>>(
         `store_accounts?company_id=eq.${company}&id=in.(${accountIds.join(",")})&customer_review_status=eq.needs_review&select=id`,
       ) : Promise.resolve([]),
-      erpEnabled ? readConfirmedOrderSaleDocuments(scope, items.map(order => order.id)) : undefined,
+      draftReceipt ? readOrderSaleDocuments(scope, items.map(order => order.id))
+        : erpEnabled ? readConfirmedOrderSaleDocuments(scope, items.map(order => order.id)) : undefined,
     ]);
     const needsReview = new Set(pending.map((row) => row.id));
     const customerById = new Map(customers.map((customer) => [customer.id, customer]));
     const memberLabel = new Map(members.map((member) => [member.id,
       `${member.app_users?.name?.trim().slice(0, 80) || "이름 미등록"} · ${MEMBER_ROLE[member.role] || "구성원"}`]));
     return NextResponse.json({
-      hasMore: orders.length > PAGE_SIZE,
+      hasMore: orders.length > pageSize,
       items: items.map((order) => {
         const customer = customerById.get(order.customer_id);
         const base = customer?.delivery_base_address?.trim();
@@ -129,9 +134,10 @@ export async function GET(request: NextRequest) {
           requestMemo: order.request_memo,
           submittedAt: order.submitted_at,
           revision: order.revision,
-          ...(erpEnabled ? {
+          ...(draftReceipt || erpEnabled ? {
+             ...(draftReceipt ? { draftReceipt: true } : {}),
             orderDocument: document?.customer_id === order.customer_id
-              ? { status: "confirmed", number: document.document_number }
+              ? { status: "status" in document ? document.status : "confirmed", number: document.document_number }
               : { status: "unlinked" },
           } : {}),
           lines: order.store_order_lines.map((line) => ({
@@ -163,8 +169,19 @@ export async function POST(request: NextRequest) {
     typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1)
     return NextResponse.json({ message: "확인할 주문을 다시 선택해 주세요." }, { status: 400 });
   const erpEnabled = erpOrderDocumentsEnabled(scope);
-  if (retryDocument && !erpEnabled) return unavailable();
+  const draftReceipt = orderReceiptDraftEnabled(scope);
+  if (retryDocument && !erpEnabled && !draftReceipt) return unavailable();
   try {
+    if (draftReceipt) {
+      const order = await receiveStoreOrderWithSaleDocument(scope, orderId, revision, {
+        userId: auth.customerSession?.userId ?? null,
+        name: getCustomerOperationalName(auth.customerSession) || "고객사 주문 확인",
+      });
+      if (order?.id !== orderId || order.status !== "received" || order.revision !== revision + 1)
+        throw new Error("order_receipt_document_unlinked");
+      await markNewOrderNotificationProcessed(scope, orderId).catch(() => undefined);
+      return NextResponse.json({ order });
+    }
     if (erpEnabled) {
       const [current] = await supabaseRequest<Array<{ id: string; customer_id: string }>>(
         `store_orders?company_id=eq.${encodeURIComponent(scope)}&id=eq.${orderId}&status=eq.submitted&revision=eq.${revision}&select=id,customer_id&limit=1`,
@@ -196,6 +213,13 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message.includes("store_customer_review_required"))
       return NextResponse.json({ message: "이 매장은 첫 거래 거래처 확인이 필요합니다. 주문 줄의 '거래처 확인'을 먼저 해 주세요." }, { status: 409 });
+    if (draftReceipt) {
+      if (error instanceof Error && error.message.includes("order_receipt_conflict"))
+        return NextResponse.json({ message: "주문이 변경됐습니다. 새로고침 후 다시 시도해 주세요." }, { status: 409 });
+      if (error instanceof Error && error.message.includes("order_receipt_amount_mismatch"))
+        return NextResponse.json({ code: "order_document_failed", message: "주문과 전표 금액이 달라 접수하지 않았습니다. 금액을 확인해 주세요." }, { status: 409 });
+      return NextResponse.json({ code: "order_document_failed", message: "전표 연결에 실패했습니다. 주문을 접수하지 않았습니다." }, { status: 409 });
+    }
     return NextResponse.json({ message: "주문을 확인 처리하지 못했습니다. 다시 시도해 주세요." }, { status: 500 });
   }
 }

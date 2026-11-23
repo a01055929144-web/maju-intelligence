@@ -6,6 +6,7 @@ import {
   saveBusinessDocument,
   type SaveBusinessDocumentInput,
 } from "@/lib/business-documents";
+import { businessDocumentCancellationEnabled } from "@/lib/business-document-cancellation-feature";
 export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const scope = await getRequestAuthScope(request); if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -27,6 +28,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   if (!scopeHasCapability(scope, "manage_sales")) {
     return NextResponse.json({ message: "전표를 삭제할 권한이 없습니다." }, { status: 403 });
+  }
+  if (!businessDocumentCancellationEnabled(scope.companyId)) {
+    return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   }
   try {
     await deleteBusinessDocumentDraft(scope.companyId!, (await params).id);

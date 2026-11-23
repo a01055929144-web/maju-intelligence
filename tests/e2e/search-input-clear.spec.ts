@@ -9,7 +9,7 @@ for (const width of [1440, 390]) test(`지도 검색창 ×와 Esc (${width}px)`,
   await page.goto("/map");
   if (width < 640) await page.getByRole("button", { name: "필터", exact: true }).click();
 
-  const search = page.getByPlaceholder("상호·주소·전화");
+  const search = page.getByPlaceholder("거래처·리드·담당자·주소 검색");
   await expect(page.getByRole("button", { name: "검색어 지우기" })).toHaveCount(0);
   await search.fill("가짜상호");
   const clear = page.getByRole("button", { name: "검색어 지우기" });

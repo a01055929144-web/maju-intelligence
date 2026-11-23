@@ -6,7 +6,7 @@ const PERMIT_EXCLUDED_INDUSTRY_KEYWORDS = [
 
 export const PERMIT_INDUSTRY_RULES: ReadonlyArray<{ primary: string; keywords: string[] }> = [
   { primary: "한식", keywords: ["한식", "국밥", "해장국", "백반", "찌개", "곰탕", "설렁탕", "분식", "식당", "닭갈비", "갈비", "칼국수", "전집", "막창", "김밥", "튀김", "반찬", "혼밥", "도시락", "횟집", "회집", "생선회"] },
-  { primary: "카페/디저트", keywords: ["카페", "커피", "coffee", "디저트", "도넛", "베이커리", "제과", "빵집", "빠띠시에", "떡집"] },
+  { primary: "카페/디저트", keywords: ["카페", "커피", "coffee", "디저트", "도넛", "떡집"] },
   { primary: "일식", keywords: ["일식", "이자카야", "스시", "라멘", "돈카츠", "우동"] },
   { primary: "중식", keywords: ["중식", "중국식", "마라탕", "양꼬치", "짬뽕", "짜장"] },
   { primary: "프랜차이즈/배달", keywords: ["치킨", "피자", "버거", "패스트푸드", "푸드트럭"] },
@@ -15,12 +15,23 @@ export const PERMIT_INDUSTRY_RULES: ReadonlyArray<{ primary: string; keywords: s
   { primary: "뷔페/단체급식", keywords: ["뷔페", "부페", "단체급식", "구내식당", "케이터링", "출장조리"] }
 ];
 
+// 검색어 묶음은 그대로 두고, 장소가 실제로 확인된 세부 업종만 별도로 분류합니다.
+const SPECIALTY_INDUSTRIES = [
+  { primary: "베이커리", keywords: ["베이커리", "제과", "빵집", "빠띠시에", "제빵"] },
+  { primary: "브라질 음식", keywords: ["브라질", "브라질리언", "brazilian", "슈하스코", "츄라스코"] },
+  { primary: "멕시코 음식", keywords: ["멕시칸", "멕시코", "mexican", "타코", "부리토", "퀘사디아"] }
+] as const;
+
 export function classifyPermitLeadIndustry(rawIndustryText: string, businessName: string) {
   const haystack = `${rawIndustryText || ""} ${businessName || ""}`;
   for (const excluded of PERMIT_EXCLUDED_INDUSTRY_KEYWORDS) {
     if (haystack.includes(excluded)) {
       return { primary: rawIndustryText?.trim() || "비대상 업종", tags: [] as string[], isTarget: false };
     }
+  }
+  for (const rule of SPECIALTY_INDUSTRIES) {
+    const matchedTags = rule.keywords.filter((keyword) => haystack.toLowerCase().includes(keyword.toLowerCase()));
+    if (matchedTags.length) return { primary: rule.primary, tags: matchedTags, isTarget: true };
   }
   for (const rule of PERMIT_INDUSTRY_RULES) {
     const matchedTags = rule.keywords.filter((keyword) => haystack.includes(keyword));

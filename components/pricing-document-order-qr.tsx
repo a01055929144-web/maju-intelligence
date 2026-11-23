@@ -4,11 +4,11 @@ import type { DocumentVersion } from "@/domains/pricing/document";
 import { documentLinkLastDay } from "@/domains/pricing/document-share";
 import type { PreparedDocumentShare } from "@/domains/pricing/document-share";
 import { documentRequest } from "@/lib/pricing/document-client";
-import { documentOrderQr } from "@/lib/pricing/document-order-qr";
+import { documentOrderQr, isPublicDocumentPath } from "@/lib/pricing/document-order-qr";
 import { Button } from "./ui/button";
 import { copyText } from "@/lib/copy-text";
 
-export type DocumentOrderQr = { dataUrl: string; customerName: string; audience?: "public"; expiresAt?: string };
+export type DocumentOrderQr = { dataUrl: string; customerName: string; customerId?: string; audience?: "public"; expiresAt?: string };
 type Customer = { id: string; customer_name: string; address?: string | null };
 export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSharingAvailable = false, allowCustomerLink = true, initiallyOpen = false }: {
   companyId: string; version: DocumentVersion; onInsert: (qr: DocumentOrderQr | null) => void;
@@ -31,7 +31,7 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
       }, true);
       stage = "address";
       const url = new URL(result.publicUrl, window.location.origin);
-      if (url.origin !== window.location.origin || url.pathname !== "/pricing-document" || url.search || !url.hash || !Number.isFinite(Date.parse(result.expiresAt)))
+      if (url.origin !== window.location.origin || !isPublicDocumentPath(url.pathname) || url.search || !url.hash || !Number.isFinite(Date.parse(result.expiresAt)))
         throw new Error("공개 링크를 확인하지 못했습니다. 다시 시도해 주세요.");
       setShared({ ...result, publicUrl: url.href });
       stage = "qr";
@@ -80,7 +80,7 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "주문 링크를 만들지 못했습니다.");
       const dataUrl = await documentOrderQr(result.url);
-      setQr({ dataUrl, customerName: customer.customer_name });
+      setQr({ dataUrl, customerName: customer.customer_name, customerId: customer.id });
       setMessage(`${customer.customer_name} · 게시 버전 ${version.version} 주문 QR을 만들었습니다. 이 거래처에만 전달해 주세요.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "QR을 만들지 못했습니다. 다시 시도해 주세요."); }
     finally { setBusy(false); }

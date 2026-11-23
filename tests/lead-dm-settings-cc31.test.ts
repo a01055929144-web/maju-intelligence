@@ -22,7 +22,7 @@ describe("lead DM settings (CC-31b)", () => {
     for (const part of ["target_type=eq.restaurant", "merged_into_lead_id=is.null", "is_duplicate=eq.false", "kstDateDaysAgo(29)"]) expect(fn).toContain(part);
   });
   it("a distributor lead gets the distributor text, ignores 업종·품목 and edits only the distributor text from the lead detail", () => {
-    const ws = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+    const ws = readFileSync("components/map/lead-helpers.ts", "utf8");
     expect(ws).toContain('lead.targetType === "distributor"');
     expect(ws).toContain("LEAD_DM_TEMPLATES.distributor[0].body");
     expect(ws).toContain("target: distributor");

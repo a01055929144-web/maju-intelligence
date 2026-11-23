@@ -35,8 +35,7 @@ for (const width of [1440, 390]) test(`verified store member entry keeps role an
   await expect(page.getByText("첫 가입은 받은 견적서·단가표 링크에서 진행합니다.", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "구성원 관리", exact: true })).toHaveCount(0);
   for (const token of ["owner", "manager", "staff", "anonymous", "off", "retry"]) {
-    await page.goto(`/store#${token}`);
-    await storeTab(page, "내 정보").click();
+    await page.goto(`/store?view=info#${token}`);
     const entry = page.getByRole("link", { name: "구성원 관리", exact: true });
     if (token === "owner" || token === "manager") {
       await expect(entry).toHaveAttribute("href", href);
@@ -72,23 +71,26 @@ for (const width of [1440, 390]) test(`store information reuses address and memb
     expect(url.searchParams.get("storeAccountId")).toBe("20000000-0000-4000-8000-000000000001");
     if (route.request().method() === "PATCH") { saved = route.request().postDataJSON(); return route.fulfill({ json: { saved: true } }); }
     return route.fulfill({ json: { businessRegistrationNumber: "1234567890", canEdit: true, phone: "0212345678", representativeName: "홍대표", storeName: saved?.storeName || "합성 가입 매장",
-      profileSettingsEnabled: true, baseAddress: "서울 중구 세종대로 110", addressDetail: "1층", accessNote: "공동 현관 호출",
-      deliveryContactPhone: "01012345678", preferredDeliveryTime: "오전 9시~11시" } });
+      profileSettingsEnabled: true, deliverySettingsEnabled: true, baseAddress: "서울 중구 세종대로 110", addressDetail: "1층", accessNote: "공동 현관 호출",
+      deliveryContactPhone: "01012345678", preferredDeliveryTime: "오전 9시~11시", taxInvoiceEmail: "tax@example.test", receiveMethod: "dawn", hasAccessPassword: true } });
   });
+  await page.route("**/api/store/information/attachments?*", route => route.fulfill({ json: { attachments: [] } }));
   const scope = "fixture=store-portal-source-document&companyId=00000000-0000-4000-8000-000000000001&storeAccountId=20000000-0000-4000-8000-000000000001";
   await page.goto(`/store?${scope}&view=${width === 1440 ? "home" : "info"}`);
   if (width === 1440) await storeTab(page, "내 정보").click();
-  await expect(page.getByRole("heading", { name: "기본 정보" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "사업자 정보" })).toBeVisible();
   await expect(page.getByLabel("사업자등록번호")).toBeDisabled();
   await expect(page.getByLabel("출입 방법")).toBeDisabled();
   await expect(page.getByLabel("받는 분 연락처")).toBeDisabled();
   await expect(page.getByLabel("받을 수 있는 시간")).toBeDisabled();
-  await expect(page.getByLabel(/비밀번호/)).toHaveCount(0);
+  await expect(page.getByLabel("새벽 출입 비밀번호")).toBeDisabled();
   await expect(page.getByRole("link", { name: "배송지 관리" })).toHaveAttribute("href", /#store-address-management$/);
   await expect(page.getByRole("link", { name: "구성원 관리" })).toHaveAttribute("href", /\/store\/members\?/);
   await expect(page.getByText(/연결 해제·이용 종료는 안전한 처리 절차 승인 후/)).toBeVisible();
   await page.getByRole("button", { name: "정보 수정" }).click();
+  if (width === 390) await page.getByRole("button", { name: "1. 사업자 정보" }).click();
   await page.getByLabel("상호").fill("수정 합성 매장");
+  if (width === 390) await page.getByRole("button", { name: "2. 배송 정보" }).click();
   await page.getByLabel("출입 방법").fill("뒷문 호출");
   await page.getByRole("button", { name: "저장", exact: true }).click();
   await expect(page.getByText("매장 정보를 저장했습니다.")).toBeVisible();

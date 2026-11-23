@@ -58,7 +58,7 @@ Loading(초기 로딩/재조회/느린 네트워크) · Empty(0건) · Error(API
 
 God Component(한 컴포넌트에 책임 과다) · Cross-Domain Coupling(도메인 간 직접 의존) · Duplicate Logic(같은 비즈니스 로직이 여러 곳) · UI Business Logic(컴포넌트 안에 비즈니스 규칙) · Direct DB Dependency(UI가 Supabase 과도하게 직접 호출).
 
-> 현재 `lib/store.ts`(10,744줄, export 함수 138개)와 `app/page.tsx`(5,220줄)가 이미 God Component / Direct DB Dependency 패턴에 해당한다는 것이 확인된 상태다. 당장 전면 리팩터링하지는 않되, 새 기능을 여기 더 얹을 때마다 문제를 키우고 있다는 점을 인지하고, 기회가 될 때 `docs/02_DOMAIN_MAP.md` 기준으로 분리를 제안한다.
+> 현재 `lib/store.ts`(16,100줄, export 함수 226개)와 `app/page.tsx`(4,556줄), 지도 `components/sales-route-map-workspace.tsx`(5,670줄)가 이미 God Component / Direct DB Dependency 패턴에 해당한다는 것이 확인된 상태다. 당장 전면 리팩터링하지는 않되, 새 기능을 여기 더 얹을 때마다 문제를 키우고 있다는 점을 인지하고, 기회가 될 때 `docs/02_DOMAIN_MAP.md` 기준으로 분리를 제안한다.
 
 ## 7. 변경 전 영향 분석 형식
 

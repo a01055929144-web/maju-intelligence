@@ -182,6 +182,13 @@ export type LeadChannelSource = {
   fax?: string | null;
 };
 
+export const LEAD_CONTACT_FILTER_CHANNELS = ["sms", "instagram", "talktalk", "email", "fax"] as const;
+export type LeadContactFilterChannel = (typeof LEAD_CONTACT_FILTER_CHANNELS)[number];
+
+export function isLeadContactFilterChannel(value: string | null | undefined): value is LeadContactFilterChannel {
+  return LEAD_CONTACT_FILTER_CHANNELS.includes(value as LeadContactFilterChannel);
+}
+
 export type LeadChannelAvailability = {
   channel: LeadContactChannel;
   label: string;

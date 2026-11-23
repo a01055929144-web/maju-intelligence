@@ -224,10 +224,12 @@ test("S-4 desktop opens received documents with industry filters and expiry", as
   await expect(page.getByText("합성 농산 단가표", { exact: true })).toBeVisible();
   await expect(page.getByText(/8개 품목/)).toBeVisible();
   await expect(page.getByText(/기간 지남 · 유효기간 2000-01-01/)).toBeVisible();
-  await expect(page.getByRole("link", { name: "보고 주문" })).toHaveCount(1);
-  await expect(page.getByRole("link", { name: "품목 보기" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "문서 보기" })).toHaveCount(2);
+  await expect(page.getByRole("link", { name: "보고 주문" })).toHaveAttribute("href", "/store?view=order#synthetic-s4-valid");
+  await expect(page.getByLabel("다음 주문")).toContainText("합성 유통");
   await expect(page.getByText("2099-01-01 22:00")).toBeVisible();
   await expect(page.getByRole("link", { name: "전체 품목으로 주문" })).toHaveAttribute("href", "/store?view=order#synthetic-catalog");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   await page.screenshot({ path: info.outputPath("S-4-received-documents-1440.png") });
   await page.getByRole("navigation", { name: "단가표 업종" }).getByRole("link", { name: "주류" }).click();
   await expect(page.getByText("합성 농산 단가표", { exact: true })).toBeHidden();
@@ -240,4 +242,48 @@ test("S-4 leaves the mobile member home available", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "받은 단가표", exact: true })).toBeHidden();
   await expect(page.getByRole("heading", { name: "견적서·단가표와 주문" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+});
+
+for (const width of [1440, 390]) test(`CX-101 shows the account only in signed-in store views at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+  await page.goto("/store?fixture=s1-single");
+  await expect(page.getByRole("region", { name: "입금 계좌" })).toBeVisible();
+  await expect(page.getByText("합성은행 · 123-456-7890 · 합성 유통")).toBeVisible();
+  await expect(page.getByRole("button", { name: "계좌 복사" })).toBeVisible();
+  await page.goto("/store?fixture=s6-history&view=history");
+  await expect(page.getByRole("region", { name: "입금 계좌" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+});
+
+for (const width of [1440, 390]) test(`CX-63 searches prices and handles access at ${width}px`, async ({ page }) => {
+  page.setDefaultTimeout(15_000);
+  await page.setViewportSize({ width, height: 844 });
+  let failQuote = true;
+  await page.route("**/api/store/price-search?**", route => {
+    const query = new URL(route.request().url()).searchParams;
+    const kind = query.get("kind");
+    if (kind === "quote" && failQuote) { failQuote = false; return route.fulfill({ status: 503, json: {} }); }
+    if (kind === "catalog" && query.get("q") === "권한") return route.fulfill({ status: 404, json: {} });
+    const rows = query.get("q") === "없는 품목" ? [] : [{
+      id: "synthetic-price", name: kind === "quote" ? "합성 견적 양파" : "합성 양파", spec: "10kg", unit: "박스",
+      price: kind === "catalog" ? null : 12000,
+      recent: kind === "catalog" ? { date: "2026-11-12", price: 9800 } : null,
+    }];
+    return route.fulfill({ json: { rows, hasMore: false } });
+  });
+  await page.goto("/store?fixture=cx63-price-search");
+  const search = page.getByRole("region", { name: "품목 단가 확인" });
+  await expect(search.getByText("12,000원", { exact: true }).filter({ visible: true })).toBeVisible();
+  await search.getByRole("button", { name: "받은 견적서" }).click();
+  await expect(search.getByText("단가를 불러오지 못했습니다.")).toBeVisible();
+  await search.getByRole("button", { name: "다시 시도" }).click();
+  await expect(search.getByText("합성 견적 양파", { exact: true }).filter({ visible: true })).toBeVisible();
+  await search.getByRole("button", { name: "전체 상품" }).click();
+  await expect(search.getByText(/최근 출고가/).filter({ visible: true })).toBeVisible();
+  const input = search.getByRole("searchbox", { name: "품목명 또는 규격 검색" });
+  await input.fill("없는 품목");
+  await expect(search.getByText("검색 조건에 맞는 품목이 없습니다.")).toBeVisible();
+  await input.fill("권한");
+  await expect(search.getByText("이 매장의 단가를 볼 수 없습니다.")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
 });

@@ -29,7 +29,17 @@ for (const width of [1440, 390]) test(`지도 검색 결과 패널: 검색·묶�
   await page.goto("/map");
 
   if (width < 640) await page.getByRole("button", { name: "필터", exact: true }).click(); // 휴대폰은 검색창이 필터 줄 안에 접혀 있다
-  const search = page.getByPlaceholder("상호·주소·전화");
+  if (width >= 1024) {
+    const explorer = page.getByRole("navigation", { name: "지도 통합 탐색" }).first();
+    await expect(explorer.getByRole("button", { name: /^담당자/ })).toBeVisible();
+    await expect(explorer.getByRole("button", { name: /^거래처/ })).toBeVisible();
+    await expect(explorer.getByRole("button", { name: /^신규/ })).toBeVisible();
+    await expect(explorer.getByRole("button", { name: /^영업/ })).toBeVisible();
+  }
+  await expect(page.getByTitle("영업 지역")).toBeVisible();
+  await expect(page.getByTitle("업종")).toBeVisible();
+  await expect(page.getByTitle("우선순위 등급")).toBeVisible();
+  const search = page.getByPlaceholder("거래처·리드·담당자·주소 검색");
   await search.fill("합성");
   const panel = page.getByRole("region", { name: "검색 결과" });
   await expect(panel).toBeVisible();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
-import { buildPurchaseSheet, mergeDuplicateLines, parsePurchaseLines, purchaseSpecification, splitNameSpec, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
-import { matchCostImportRow } from "../domains/pricing/purchase-cost";
+import { buildPurchaseSheet, catalogTaxEvidence, mergeDuplicateLines, parsePurchaseLines, purchaseSpecification, splitNameSpec, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
+import { matchCostImportRow, supplierLinkTargets } from "../domains/pricing/purchase-cost";
 import { buildPurchaseReceiptRows } from "../domains/pricing/purchase-receipt";
 
 const matrix = [
@@ -36,6 +36,46 @@ describe("purchase import", () => {
     expect(lines[0]).toMatchObject({ name: "냉동오징어", spec: "", unit: "EA", cost: 4500, vatIncluded: false, quantity: 5 });
     const included = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "included").lines[0];
     expect(included.cost).toBeCloseTo(4090.91, 2);
+  });
+
+  it.each([0.3, 0.25, 1.5])("keeps the source unit price for decimal quantity %s", (quantity) => {
+    const unitPrice = 39000;
+    const sheet = buildPurchaseSheet([
+      ["품목명", "수량", "단가", "공급가액"],
+      ["합성 채소 [KG]", String(quantity), String(unitPrice), String(quantity * unitPrice)]
+    ]);
+    const lines = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "excluded").lines;
+    const rows = buildPurchaseReceiptRows({ actorName: "대표", companyId: "c", fileName: "decimal.xlsx", lines, receiptDate: "2026-11-18" });
+
+    expect(lines[0]).toMatchObject({ quantity, rawCost: unitPrice, cost: unitPrice });
+    expect(rows[0]).toMatchObject({ quantity, unit_price: unitPrice, unit_cost_ex_vat: unitPrice, supply_amount: quantity * unitPrice });
+  });
+
+  it("keeps brand-only parentheses but splits capacity parentheses and repeated bracket specs", () => {
+    expect(splitNameSpec("합성치킨스탁(가상 1.2KG*6EA)", "")).toEqual({ name: "합성치킨스탁", spec: "가상 1.2KG*6EA", unit: "" });
+    expect(splitNameSpec("합성토마토소스(가상,대상)", "")).toEqual({ name: "합성토마토소스(가상,대상)", spec: "", unit: "" });
+    expect(splitNameSpec("합성고추장[14KG] [[14kg]]", "")).toEqual({ name: "합성고추장", spec: "14KG", unit: "" });
+  });
+
+  it("keeps explicit spec and unit columns ahead of inferred values", () => {
+    expect(splitNameSpec("합성소스(가상 1.2KG*6EA)", "명시 규격", "BOX")).toEqual({ name: "합성소스", spec: "명시 규격", unit: "BOX" });
+    expect(splitNameSpec("합성오징어 [EA]", "", "BOX")).toEqual({ name: "합성오징어", spec: "", unit: "BOX" });
+  });
+
+  it("reuses existing products and supplier links when the same inferred file is uploaded again", () => {
+    const sheet = buildPurchaseSheet([
+      ["품목", "매입처", "단가"],
+      ["합성치킨스탁(가상 1.2KG*6EA)", "합성 매입처", "100"],
+      ["합성토마토소스(가상,대상)", "합성 매입처", "200"],
+      ["합성고추장[14KG] [[14kg]]", "합성 매입처", "300"]
+    ]);
+    const lines = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "excluded").lines;
+    const products = lines.map((line, index) => ({
+      id: `product-${index}`, code: "", name: line.name, spec: line.spec, unit: line.unit, cost: line.cost,
+      supplierName: "합성 매입처", supplierProductId: `supplier-product-${index}`
+    }));
+    expect(lines.map(line => matchCostImportRow(line, products)?.id)).toEqual(products.map(product => product.id));
+    expect(supplierLinkTargets(lines, products)).toEqual([]);
   });
 
   it("merges duplicate items in one file and stores one receipt row per day/item", () => {
@@ -121,6 +161,20 @@ describe("purchase import", () => {
     const parsed = parsePurchaseLines(buildPurchaseSheet(values), { purchaseDate: 0, name: 1, cost: 2 }, "excluded");
     expect(parsed.lines.map((line) => line.purchaseDate)).toEqual(["2026-11-01", "2026-11-17", "2026-11-05"]);
     expect(parsed.dateIssues).toEqual([5, 6]);
+    expect(parsed.lines[0]).toMatchObject({ rawName: "콘센트치킨스타 [1.2KG*6EA]", name: "콘센트치킨스타", spec: "1.2KG*6EA" });
+  });
+
+  it("automatically maps ERP 일자-No. and 거래처명 headers", () => {
+    const sheet = buildPurchaseSheet([
+      ["회사명 : 제이에스리테일 / 2026/11/18 ~ 2026/11/20"],
+      ["일자-No.", "품목명(규격)", "수량", "단가", "공급가액", "부가세", "합계", "거래처명"],
+      ["2026/11/18 -1", "딜 [kg]", "1", "50000", "50000", "", "50000", "(유)로즈마리향기"]
+    ]);
+    const mapping = suggestPurchaseMapping(sheet);
+    expect(mapping).toMatchObject({ purchaseDate: 0, name: 1, cost: 3, supplier: 7 });
+    expect(parsePurchaseLines(sheet, mapping, "excluded").lines[0]).toMatchObject({
+      purchaseDate: "2026-11-18", supplier: "(유)로즈마리향기"
+    });
   });
 
   it("matches existing products ignoring spaces and brackets so daily uploads do not create duplicates", () => {
@@ -130,14 +184,21 @@ describe("purchase import", () => {
 });
 
 describe("purchase import vat column", () => {
+  it("preserves an explicit tax choice when a new catalog product is created", () => {
+    expect(catalogTaxEvidence("taxable")).toEqual({ supplyAmount: 100, vat: 10 });
+    expect(catalogTaxEvidence("exempt")).toEqual({ supplyAmount: 100, vat: 0 });
+  });
+
   it("treats prices as VAT-excluded and records taxable/exempt from a separate VAT column", () => {
     const sheet = buildPurchaseSheet([
       ["품목명", "수량", "단가", "공급가액", "부가세", "합계"],
       ["간장 [1.8L]", "2", "10000", "20000", "2000", "22000"],
-      ["양파 [10kg]", "1", "15000", "15000", "", "15000"]
+      ["양파 [10kg]", "1", "15000", "15000", "0", "15000"],
+      ["두부 [1kg]", "1", "3000", "3000", "", "3000"],
+      ["반품 조정 [1kg]", "1", "1000", "1000", "-100", "900"]
     ]);
     const { lines } = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "auto");
-    expect(lines.map((line) => [line.taxType, line.vatIncluded, line.cost])).toEqual([["taxable", false, 10000], ["exempt", false, 15000]]);
+    expect(lines.map((line) => [line.taxType, line.vatIncluded, line.cost])).toEqual([["taxable", false, 10000], ["exempt", false, 15000], [undefined, false, 3000], [undefined, false, 1000]]);
     expect(buildPurchaseReceiptRows({ actorName: "대표", companyId: "c", fileName: "a", lines, receiptDate: "2026-11-04" })[0]).toMatchObject({ tax_type: "taxable", vat_amount: 2000 });
   });
 });
@@ -177,6 +238,18 @@ describe("product field edits", () => {
 });
 
 describe("purchase history", () => {
+  it("shows the upload date and two earlier purchase dates without changing same-day costs", async () => {
+    const { purchaseHistoryMoments } = await import("../domains/pricing/purchase-receipt");
+    expect(purchaseHistoryMoments([
+      { date: "2026-11-20", cost: 120 }, { date: "2026-11-20", cost: 110 },
+      { date: "2026-11-19", cost: 100 }, { date: "2026-11-18", cost: 90 }
+    ], "2026-11-20")).toEqual({
+      upload: { date: "2026-11-20", costs: [120, 110] },
+      recent: { date: "2026-11-19", costs: [100] },
+      previous: { date: "2026-11-18", costs: [90] }
+    });
+  });
+
   it("fills a blank supplier and unit from a single catalog link without counting the same cost twice", async () => {
     const { mergePurchaseHistoryRows, resolvePurchaseHistoryRows, summarizePurchaseHistory } = await import("../domains/pricing/purchase-receipt");
     const receipt = { id: "receipt", product_catalog_id: "p1", line_key: "raw", product_name: "양파", receipt_date: "2026-11-05", spec: "10kg", unit: null, supplier_name: null, quantity: 3, unit_cost_ex_vat: 1200 };

@@ -2,6 +2,12 @@ import { kstDateKey } from "../domains/shared/kst-date";
 import { isValidKoreanCoordinate } from "../domains/customer/coordinates";
 import { resolveDeliveryAddress } from "../domains/customer/address-line";
 import {
+  buildCustomerBusinessKey,
+  hasSubBusinessNumberConflict,
+  parseCustomerBusinessIdentity,
+  type BusinessEntityType
+} from "../domains/customer/business-identity";
+import {
   buildTodayRoutePlan,
   readRouteOrderConfirmationMap,
   type RoutePlan,
@@ -10,14 +16,16 @@ import {
 export type { RoutePlan, RoutePlanGroup, RoutePlanStop } from "../domains/route/read";
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { readLatestReport, readReportById } from "./analytics/report-read";
+import { readLatestBriefing } from "./analytics/briefing-read";
 import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
+import { getSupabaseConfig, isProductionStoreConfigured, normalizeCompanyKind, supabaseRequest, type CompanyKind, type SupabaseConfig } from "./store/00-core";
 import { accountLoginV2Enabled } from "./account-login-feature";
 import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { getGovAreaCodes, getGovAreaCoverageStatus, getGovChangeCutoff, type GovAreaCursor, type GovDataset } from "./gov-area-scan";
-import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovSyncObservability, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, isGovTimeoutError, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, splitGovTasksByTimeouts, type GovRequestLimiter } from "./gov-area-fanout";
+import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovCollectionOutcome, getGovSyncObservability, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, shouldDeferBlockedGovFirstArea, splitGovTasksByTimeouts, updateGovTimeoutCounts, type GovAreaAttempt, type GovRequestLimiter } from "./gov-area-fanout";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
@@ -46,7 +54,8 @@ import {
   normalizeEmailInput,
   normalizeFaxNumberInput,
   normalizeNaverTalktalkInput,
-  type LeadContactChannel
+  type LeadContactChannel,
+  type LeadContactFilterChannel
 } from "../domains/lead/contact-channels";
 import { displayLeadNextAction, recommendLeadNextAction } from "../domains/lead/next-action";
 export { classifyPermitLeadIndustry } from "../domains/lead/industry-classification";
@@ -73,7 +82,7 @@ import { maskPhoneNumber } from "./phone";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
 import { getSelectableSalesAreaKeys, KOREAN_ADMINISTRATIVE_AREAS, KOREAN_PROVINCES } from "./korean-administrative-areas";
-import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
+import { getSubscription, updateSubscriptionStatus } from "./store/12-subscriptions";
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
 import type { VehicleMaster, VehicleMasterInput, VehicleMasterRepository, VehicleOperationalStatus } from "../domains/delivery/vehicle-master";
 import { validateDeliveryRouteUnitInput, type DeliveryRouteUnit, type DeliveryRouteUnitInput } from "../domains/delivery/route-unit";
@@ -242,10 +251,13 @@ export type CustomerMasterItem = {
   bankAccountFileUrl?: string;
   birthDate?: string;
   businessLicenseFileUrl?: string;
+  businessName?: string;
   businessNumber?: string;
+  businessEntityType?: BusinessEntityType;
   businessStatus?: string;
   businessStatusCheckedAt?: string;
   customerName: string;
+  corporateRegistrationNumber?: string;
   deliveryKm: number;
   deliveryManager?: string;
   deliveryMinutes?: number;
@@ -257,6 +269,7 @@ export type CustomerMasterItem = {
   deliveryTerritoryName?: string;
   deliveryZone?: string;
   email?: string;
+  expectedOpeningDate?: string;
   grade: "A" | "B" | "C";
   industry: string;
   lastOrderDays: number;
@@ -279,6 +292,8 @@ export type CustomerMasterItem = {
   relationshipStatusNote?: string;
   relationshipStatusUpdatedAt?: string;
   representativeName?: string;
+  taxInvoiceEmail?: string;
+  subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
   reviewSource?: string;
@@ -299,9 +314,12 @@ export type CustomerMasterInput = {
   bankAccountFileUrl?: string;
   birthDate?: string;
   businessLicenseFileUrl?: string;
+  businessName?: string;
   businessNumber?: string;
+  businessEntityType?: BusinessEntityType;
   businessStatus?: string;
   customerName: string;
+  corporateRegistrationNumber?: string;
   deliveryKm?: number;
   deliveryManager?: string;
   deliveryMinutes?: number;
@@ -310,6 +328,7 @@ export type CustomerMasterInput = {
   deliveryTerritoryId?: string;
   deliveryZone?: string;
   email?: string;
+  expectedOpeningDate?: string;
   industry?: string;
   lastOrderDays?: number;
   loadingPosition?: string;
@@ -326,6 +345,8 @@ export type CustomerMasterInput = {
   phone?: string;
   region?: string;
   representativeName?: string;
+  taxInvoiceEmail?: string;
+  subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
   reviewSource?: string;
@@ -538,9 +559,6 @@ export type ManagedLoginAccountInput = {
   role: AppUserLoginCredential["role"];
   workspaceRole?: StaffInvitation["role"] | "owner" | "member";
 };
-/** CC-22: 회사 구분. customer=영업할 고객사, pilot=파일럿, internal=본사(지표·결제·알림에서 제외). */
-export type CompanyKind = "customer" | "pilot" | "internal";
-export const normalizeCompanyKind = (value: unknown): CompanyKind => (value === "pilot" || value === "internal" ? value : "customer");
 export type ManagedCompanyAccount = {
   id: string;
   name: string;
@@ -918,10 +936,6 @@ export type DatabaseCheck = {
   description: string;
 };
 
-type SupabaseConfig = {
-  url: string;
-  serviceRoleKey: string;
-};
 
 type SupabaseRow = Record<string, unknown>;
 const DEFAULT_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
@@ -954,6 +968,7 @@ const CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE = `${CUSTOMER_MASTER_SELECT_WIT
 // PHASE 1 assignment IDs are the authoritative references once populated. This remains the
 // outermost tier so older/local databases can still fall back to the legacy text-only model.
 const CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS = `${CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE},assigned_staff_member_id,delivery_vehicle_id,delivery_territory_id`;
+const CUSTOMER_MASTER_SELECT_WITH_BUSINESS_IDENTITY = `${CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS},business_name,sub_business_number,business_entity_type,corporate_registration_number`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -972,44 +987,7 @@ const STAFF_ASSIGNMENT_OVERRIDE_MIGRATION_MESSAGE =
 const SUPABASE_CONNECTION_KEY_MESSAGE =
   "Supabase 연결 키가 현재 프로젝트와 맞지 않습니다. Vercel 환경변수의 SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY를 같은 Supabase 프로젝트 값으로 맞춘 뒤 재배포해주세요.";
 
-export function getSupabaseConfig(): SupabaseConfig | null {
-  if (!publicOwnerTestAccessAllowed()) return null;
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
-  if (!url || !serviceRoleKey) return null;
-  return { url: url.replace(/\/$/, ""), serviceRoleKey };
-}
-
-export async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const config = getSupabaseConfig();
-  if (!config) throw new Error("Supabase is not configured.");
-
-  const response = await fetch(`${config.url}/rest/v1/${path}`, {
-    ...init,
-    headers: {
-      apikey: config.serviceRoleKey,
-      Authorization: `Bearer ${config.serviceRoleKey}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-      ...(init.headers || {})
-    },
-    cache: "no-store"
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Supabase request failed: ${response.status} ${message}`);
-  }
-
-  // Prefer: return=minimal은 PATCH/DELETE에서는 204(본문 없음)로 오지만, POST(insert)에서는
-  // 201에 빈 본문으로 옵니다. 상태 코드 204만 특별 취급하면 이 201-빈 본문 케이스에서
-  // response.json()이 "Unexpected end of JSON input"으로 죽습니다. 상태 코드 대신 본문이
-  // 실제로 비어 있는지로 판단해 두 경우 모두 안전하게 처리합니다.
-  const text = await response.text();
-  if (!text) return undefined as T;
-  return JSON.parse(text) as T;
-}
 
 type TerritoryResolutionContext = {
   territories: DeliveryTerritoryItem[];
@@ -1349,9 +1327,6 @@ export async function supabaseStorageRequest<T>(path: string, init: RequestInit 
   return (await response.json()) as T;
 }
 
-export function isProductionStoreConfigured() {
-  return Boolean(getSupabaseConfig());
-}
 
 function getDefaultCompanyId() {
   return process.env.CUSTOMER_COMPANY_ID || DEFAULT_COMPANY_ID;
@@ -4933,10 +4908,13 @@ export async function getCustomerMaster(
     bank_account_file_url: string | null;
     birth_date: string | null;
     business_license_file_url: string | null;
+    business_name?: string | null;
     business_registration_number: string | null;
+    business_entity_type?: string | null;
     business_status: string | null;
     business_status_checked_at: string | null;
     customer_name: string;
+    corporate_registration_number?: string | null;
     delivery_km: number | string | null;
     delivery_manager: string | null;
     delivery_minutes: number | null;
@@ -4959,6 +4937,8 @@ export async function getCustomerMaster(
     place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
+    tax_invoice_email?: string | null;
+    sub_business_number?: string | null;
     visit_count: number | null;
     loading_position: string | null;
     access_method_type?: string | null;
@@ -4981,6 +4961,7 @@ export async function getCustomerMaster(
   // 때문에, 특정 컬럼 이름으로 좁게 매칭하면 select에 함께 들어있는 다른(더 오래된) 누락 컬럼을
   // 놓치고 상위로 다시 던져버려 정상 동작하던 하위 fallback까지 깨뜨릴 수 있습니다.
   const CUSTOMER_MASTER_SELECT_TIERS = [
+    CUSTOMER_MASTER_SELECT_WITH_BUSINESS_IDENTITY,
     CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS,
     CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE,
     CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY,
@@ -5374,6 +5355,9 @@ export async function upsertCustomerMaster(
 ) {
   const customerName = input.customerName.trim();
   if (!customerName) throw new Error("거래처명은 필수입니다.");
+  const parsedBusinessIdentity = parseCustomerBusinessIdentity(input);
+  if (!parsedBusinessIdentity.ok) throw new Error(parsedBusinessIdentity.message);
+  const businessIdentity = parsedBusinessIdentity.value;
   // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 거래처 다건
   // 재배정(bulkUpdateDeliveryManager/bulkUpdateDeliveryVehicle)은 이미 trim()해서 저장하는데,
   // 거래처 단건 저장 경로인 이 함수만 입력값을 그대로 저장해왔습니다. CRM 타임라인 상세 편집의
@@ -5411,16 +5395,20 @@ export async function upsertCustomerMaster(
       bank_account_file_url: input.bankAccountFileUrl || null,
       birth_date: input.birthDate || null,
       business_license_file_url: input.businessLicenseFileUrl || null,
+      business_name: businessIdentity.businessName || null,
       business_registration_number: normalizeBusinessNumber(input.businessNumber || ""),
+      business_entity_type: businessIdentity.businessEntityType || null,
       business_status: input.businessStatus || "확인 필요",
       business_status_checked_at: null,
       customer_name: customerName,
+      corporate_registration_number: businessIdentity.corporateRegistrationNumber || null,
       delivery_km: input.deliveryKm || 0,
       delivery_manager: deliveryManager || null,
       delivery_minutes: input.deliveryMinutes || null,
       delivery_vehicle: deliveryVehicle || null,
       delivery_zone: input.deliveryZone || null,
       email: input.email || null,
+      expected_opening_date: input.expectedOpeningDate || null,
       industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
       kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,
       last_order_days: input.lastOrderDays || 0,
@@ -5432,6 +5420,8 @@ export async function upsertCustomerMaster(
       place_links_checked_at: resolvedPlaceLinks.checkedAt,
       region: input.region || "미분류",
       representative_name: input.representativeName || null,
+      tax_invoice_email: input.taxInvoiceEmail || null,
+      sub_business_number: businessIdentity.subBusinessNumber || null,
       visit_count: input.visitCount || 0,
       loading_position: input.loadingPosition || null,
       access_method_type: input.accessMethodType || null,
@@ -5469,8 +5459,12 @@ export async function upsertCustomerMaster(
   const exemptBusinessNumbers = businessNumber ? await getExemptBusinessNumberSet(id) : new Set<string>();
   // 종사업자번호 등 중복 허용 목록에 등록된 사업자번호는 상호명+주소 기준 key를 사용해,
   // 같은 사업자번호를 쓰는 다른 거래처가 하나의 레코드로 병합되지 않도록 합니다.
-  const normalizedKey =
-    businessNumber && !exemptBusinessNumbers.has(businessNumber) ? businessNumber : makeCustomerKey(customerName, input.address || "");
+  const normalizedKey = buildCustomerBusinessKey(
+    businessNumber,
+    businessIdentity.subBusinessNumber,
+    exemptBusinessNumbers,
+    makeCustomerKey(customerName, input.address || "")
+  );
   // updated_at도 함께 읽어 아래 동시 편집 감지(낙관적 동시성 제어)에 사용합니다. 이 컬럼이 아직
   // 없는 환경(마이그레이션 미적용)에서도 나머지 저장 로직이 깨지지 않도록 실패 시 컬럼 없이 재시도합니다.
   const existingRows = await supabaseRequest<Array<{ id: string; updated_at?: string | null; delivery_manager?: string | null; assigned_staff_member_id?: string | null }>>(
@@ -5536,18 +5530,24 @@ export async function upsertCustomerMaster(
     bank_account_file_url: input.bankAccountFileUrl || null,
     birth_date: toPostgresDate(input.birthDate),
     business_license_file_url: input.businessLicenseFileUrl || null,
+    business_name: businessIdentity.businessName || null,
     // 병합 키에는 자리채움 값을 빈 값으로 취급하지만(위 businessNumber 계산 참고), 실제 DB 컬럼에는
     // 사용자가 입력한 원래 값을 그대로 저장합니다 — 나중에 진짜 번호로 고칠 수 있어야 하기 때문입니다.
     business_registration_number: rawBusinessNumber || null,
+    business_entity_type: businessIdentity.businessEntityType || null,
     business_status: input.businessStatus || "확인 필요",
     business_status_checked_at: null,
     company_id: id,
     customer_name: customerName,
+    corporate_registration_number: businessIdentity.corporateRegistrationNumber || null,
     delivery_km: input.deliveryKm || 0,
     delivery_manager: resolvedDeliveryManager || null,
     delivery_minutes: input.deliveryMinutes || null,
     delivery_zone: input.deliveryZone || null,
     email: input.email || null,
+    ...(input.expectedOpeningDate !== undefined
+      ? { expected_opening_date: toPostgresDate(input.expectedOpeningDate) }
+      : {}),
     industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
     last_order_days: input.lastOrderDays || 0,
     monthly_revenue: input.monthlyRevenue || 0,
@@ -5556,6 +5556,10 @@ export async function upsertCustomerMaster(
     phone: input.phone || resolvedPlaceLinks.enrichedPhone || null,
     region: input.region || "미분류",
     representative_name: input.representativeName || null,
+    ...(input.taxInvoiceEmail !== undefined
+      ? { tax_invoice_email: input.taxInvoiceEmail || null }
+      : {}),
+    sub_business_number: businessIdentity.subBusinessNumber || null,
     visit_count: input.visitCount || 0,
     loading_position: input.loadingPosition || null
   };
@@ -6917,55 +6921,9 @@ export async function sendCustomerDeliveryMessage(
   }
 }
 
-export type ProductCatalogItem = {
-  id: string;
-  matchStatus: "inactive" | "matched" | "requested" | "unmatched";
-  name: string;
-  purchasePrice: number;
-  salesName?: string;
-  salesPrice?: number;
-  spec?: string;
-  unit: string;
-};
-
-type ProductCatalogRow = {
-  default_sales_price: number | null;
-  id: string;
-  match_status: ProductCatalogItem["matchStatus"];
-  purchase_price: number;
-  purchase_product_name: string;
-  purchase_spec: string | null;
-  purchase_unit: string;
-  sales_product_name: string | null;
-};
-
 function isMissingSalesQuoteSchemaError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
   return /product_catalog|sales_quotes|sales_quote_items|PGRST205|42P01|does not exist|schema cache/i.test(message);
-}
-
-export async function listProductCatalog(companyId: string, query = ""): Promise<ProductCatalogItem[]> {
-  if (!isProductionStoreConfigured()) return [];
-  const token = query.trim();
-  const search = token ? `&purchase_product_name=ilike.*${encodeURIComponent(token)}*` : "";
-  try {
-    const rows = await supabaseRequest<ProductCatalogRow[]>(
-      `product_catalog?select=id,purchase_product_name,purchase_spec,purchase_unit,purchase_price,sales_product_name,default_sales_price,match_status&company_id=eq.${encodeURIComponent(companyId)}&match_status=neq.inactive${search}&order=updated_at.desc&limit=100`
-    );
-    return rows.map((row) => ({
-      id: row.id,
-      matchStatus: row.match_status,
-      name: row.purchase_product_name,
-      purchasePrice: Number(row.purchase_price) || 0,
-      salesName: row.sales_product_name || undefined,
-      salesPrice: row.default_sales_price == null ? undefined : Number(row.default_sales_price),
-      spec: row.purchase_spec || undefined,
-      unit: row.purchase_unit || "EA"
-    }));
-  } catch (error) {
-    if (isMissingSalesQuoteSchemaError(error)) return [];
-    throw error;
-  }
 }
 
 export type CreateSalesQuoteInput = {
@@ -7055,6 +7013,23 @@ export async function uploadSalesQuotePhoto(input: {
   if (!leads[0]) throw new Error("이 회사에서 접근할 수 있는 리드가 아닙니다.");
   const storagePath = `${input.companyId}/sales-quotes/${input.leadId}/${randomUUID()}-${sanitizeStorageFilename(input.filename)}`;
   await supabaseStorageRequest(`object/${SALES_QUOTE_PHOTO_BUCKET}/${storagePath}`, {
+    method: "POST",
+    headers: { "Content-Type": input.contentType, "x-upsert": "false" },
+    body: input.bytes
+  });
+  return storagePath;
+}
+
+export async function uploadLeadVisitPhoto(input: {
+  bytes: ArrayBuffer;
+  companyId: string;
+  contentType: string;
+  filename: string;
+  stopId: string;
+}) {
+  if (!isProductionStoreConfigured()) throw new Error("방문 사진 저장 환경이 준비되지 않았습니다.");
+  const storagePath = `lead-visits/${input.companyId}/${input.stopId}/${randomUUID()}-${sanitizeStorageFilename(input.filename)}`;
+  await supabaseStorageRequest(`object/${CUSTOMER_ATTACHMENT_BUCKET}/${storagePath}`, {
     method: "POST",
     headers: { "Content-Type": input.contentType, "x-upsert": "false" },
     body: input.bytes
@@ -8113,10 +8088,22 @@ export async function saveAnalysis(
     .map((row, index) => {
       const rawRow = options.rawRows?.[index];
       const businessRegistrationNumber = rawRow ? normalizeBusinessNumber(getRawCell(rawRow, options.columnMapping?.businessRegistrationNumber)) : "";
+      const parsedBusinessIdentity = parseCustomerBusinessIdentity({
+        businessName: rawRow ? getRawCell(rawRow, options.columnMapping?.businessName) : undefined,
+        subBusinessNumber: rawRow ? getRawCell(rawRow, options.columnMapping?.subBusinessNumber) : undefined,
+        businessEntityType: rawRow ? getRawCell(rawRow, options.columnMapping?.businessEntityType) : undefined,
+        corporateRegistrationNumber: rawRow ? getRawCell(rawRow, options.columnMapping?.corporateRegistrationNumber) : undefined
+      });
+      if (!parsedBusinessIdentity.ok) throw new Error(`${index + 1}행: ${parsedBusinessIdentity.message}`);
+      const businessIdentity = parsedBusinessIdentity.value;
       // 중복 허용 목록에 등록된 사업자번호(종사업자번호 등)는 상호명+주소 기준 key를 사용해,
       // 같은 사업자번호를 쓰는 다른 거래처가 하나의 레코드로 덮어써지지 않도록 합니다.
-      const normalizedKey =
-        businessRegistrationNumber && !exemptBusinessNumbers.has(businessRegistrationNumber) ? businessRegistrationNumber : makeNormalizedKey(row);
+      const normalizedKey = buildCustomerBusinessKey(
+        businessRegistrationNumber,
+        businessIdentity.subBusinessNumber,
+        exemptBusinessNumbers,
+        makeNormalizedKey(row)
+      );
 
       const nameKey = row.customerName.trim().toLowerCase();
       const existingMatches = existingByNameLower.get(nameKey) || [];
@@ -8135,7 +8122,11 @@ export async function saveAnalysis(
         company_id: companyId,
         import_id: resolvedImportId,
         customer_name: row.customerName,
+        business_name: businessIdentity.businessName || null,
         business_registration_number: businessRegistrationNumber || null,
+        sub_business_number: businessIdentity.subBusinessNumber || null,
+        business_entity_type: businessIdentity.businessEntityType || null,
+        corporate_registration_number: businessIdentity.corporateRegistrationNumber || null,
         representative_name: rawRow ? getRawCell(rawRow, options.columnMapping?.representativeName) || null : null,
         opening_date: rawRow ? toPostgresDate(rawRow[options.columnMapping?.openingDate || ""]) : null,
         region: row.region,
@@ -8193,6 +8184,12 @@ export async function saveAnalysis(
       const customer = { ...row };
       delete customer.company_id;
       delete customer.import_id;
+      // 기존 import_customers_atomic_v1의 허용 목록에는 CX-59 칸이 아직 없습니다. 이 RPC를
+      // 바꾸지 않는 범위에서는 종사업장번호를 key 계산에만 쓰고 새 칸은 보내지 않습니다.
+      delete customer.business_name;
+      delete customer.sub_business_number;
+      delete customer.business_entity_type;
+      delete customer.corporate_registration_number;
       return customer;
     });
     const atomicMappings = Object.entries(options.columnMapping || {}).map(([targetField, sourceHeader]) => ({
@@ -8446,23 +8443,7 @@ export async function getReportById(reportId: string, companyId?: string): Promi
 }
 
 export async function getLatestBriefing(companyId?: string) {
-  const [report, customerMaster] = await Promise.all([
-    getLatestReport(companyId),
-    getCustomerMaster(companyId).catch(() => ({ customers: [], source: "empty" as const }))
-  ]);
-  const currentCustomers = customerMaster.customers.length || report.customers;
-
-  return {
-    greeting: "안녕하세요 정두영님.",
-    currentCustomers,
-    weeklyOpportunities: report.newOpportunities,
-    todayRecommendations: Math.min(12, report.leadRecommendations.length),
-    highProbability: report.highProbabilityCount,
-    routeLeads: report.routeLeads,
-    missingRegions: report.missingRegions,
-    healthScore: report.health.total,
-    source: customerMaster.source
-  };
+  return readLatestBriefing(companyId, getLatestReport, getCustomerMaster);
 }
 
 function getEmptyBriefing(source: "empty" | "supabase" = "supabase") {
@@ -8561,6 +8542,8 @@ export type PermitLeadItem = {
   openDate?: string;
   address?: string;
   phone?: string;
+  ownerMobilePhone?: string;
+  storePhone?: string;
   jurisdiction?: string;
   latitude?: number;
   longitude?: number;
@@ -8641,6 +8624,8 @@ type PermitLeadRow = {
   administrative_area: string | null;
   administrative_subarea: string | null;
   phone: string | null;
+  owner_mobile_phone?: string | null;
+  store_phone?: string | null;
   jurisdiction: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -8799,6 +8784,8 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     openDate: row.open_date || undefined,
     address: row.address || undefined,
     phone: row.phone || undefined,
+    ownerMobilePhone: row.owner_mobile_phone || undefined,
+    storePhone: row.store_phone || undefined,
     jurisdiction: row.jurisdiction || undefined,
     latitude: row.latitude ?? undefined,
     longitude: row.longitude ?? undefined,
@@ -9722,11 +9709,14 @@ export async function syncGovRestaurantLeads(
     if (startPage && startPage > 1 && codes[0] && !savedCursors[codes[0]]) {
       savedCursors[codes[0]] = { areaCode: codes[0], page: startPage, cutoff: startedAt, scanStartedAt: startedAt };
     }
-    const orderedCodes = prioritizeGovAreaCodes(codes, previous?.metadata?.pendingAreas || [], previous?.metadata?.firstArea);
+    const previousTimeoutCounts = previous?.metadata?.timeoutCounts || {};
+    const deferBlockedFirst = shouldDeferBlockedGovFirstArea(dataset, previous?.metadata?.firstArea, previousTimeoutCounts);
+    const rotatePreviousFirst = dataset !== "general_restaurants" ? true : deferBlockedFirst ? "end" : false;
+    const orderedCodes = prioritizeGovAreaCodes(codes, previous?.metadata?.pendingAreas || [], previous?.metadata?.firstArea, rotatePreviousFirst);
     const cutoff = getGovChangeCutoff(new Date(startedAt), previousSuccess?.finished_at, days).toISOString();
     const tasks = buildGovAreaTasks(orderedCodes, savedCursors, cutoff, startedAt);
     const requestDeadlineAt = deadlineAt - GOV_POSTPROCESS_RESERVE_MS;
-    const previousTimeoutCounts = previous?.metadata?.timeoutCounts || {};
+    const attempts: Record<string, GovAreaAttempt[]> = {};
     const loadTask = (task: (typeof tasks)[number]) => (requestLimiter || (async (load) => load()))(async () => {
       const fetchOnce = (pageSize: number) => {
         if (Date.now() + GOV_REQUEST_TIMEOUT_MS > requestDeadlineAt) throw new GovBudgetDeferredError();
@@ -9741,16 +9731,22 @@ export async function syncGovRestaurantLeads(
           retry: false
         });
       };
-      return loadGovAreaWithTimeoutRetry(fetchOnce, previousTimeoutCounts[task.areaCode] || 0);
+      return loadGovAreaWithTimeoutRetry(fetchOnce, previousTimeoutCounts[task.areaCode] || 0, {
+        firstPageSize: dataset === "general_restaurants" ? 20 : undefined,
+        retryPageSize: dataset === "general_restaurants" ? 20 : undefined,
+        onAttempt: (attempt) => (attempts[task.areaCode] ||= []).push(attempt)
+      });
     });
-    const { solo: soloTasks, regular: regularTasks } = splitGovTasksByTimeouts(tasks, previousTimeoutCounts);
-    const soloResults = soloTasks.length ? await runGovAreaTasks({
+    const { solo: soloTasks, regular: regularTasks } = splitGovTasksByTimeouts(tasks, previousTimeoutCounts, dataset === "general_restaurants" ? 1 : 2);
+    const runSoloTasks = () => soloTasks.length ? runGovAreaTasks({
       tasks: soloTasks, deadlineAt: requestDeadlineAt, concurrency: 1, requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS, load: loadTask
-    }) : [];
-    const regularResults = regularTasks.length ? await runGovAreaTasks({
+    }) : Promise.resolve([]);
+    const runRegularTasks = () => regularTasks.length ? runGovAreaTasks({
       tasks: regularTasks, deadlineAt: requestDeadlineAt, concurrency: fanoutConcurrency, requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS, load: loadTask
-    }) : [];
-    const taskResults = [...soloResults, ...regularResults];
+    }) : Promise.resolve([]);
+    const firstResults = deferBlockedFirst ? await runRegularTasks() : await runSoloTasks();
+    const lastResults = deferBlockedFirst ? await runSoloTasks() : await runRegularTasks();
+    const taskResults = [...firstResults, ...lastResults];
     const rows = dedupeGovRows(taskResults.flatMap((result) => result.status === "success" ? result.value?.rows || [] : []));
     const nextCursors: Record<string, GovAreaCursor> = { ...savedCursors };
     for (const result of taskResults) {
@@ -9765,24 +9761,9 @@ export async function syncGovRestaurantLeads(
     const totalPages = taskResults.reduce((sum, result) => sum + (result.value?.totalPages || 0), 0);
     const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
     const pendingAreas = Array.from(new Set(taskResults.filter((result) => result.status !== "success").map((result) => result.areaCode)));
-    const completedAreas = codes.filter((areaCode) => !pendingAreas.includes(areaCode)).length;
     const observability = getGovSyncObservability(codes, pendingAreas, taskResults, orderedCodes[0]);
-    const timeoutCounts = { ...previousTimeoutCounts };
-    for (const areaCode of codes) {
-      const results = taskResults.filter((result) => result.areaCode === areaCode);
-      if (results.some((result) => isGovTimeoutError(result.error))) {
-        timeoutCounts[areaCode] = (timeoutCounts[areaCode] || 0) + 1;
-      } else if (results.length && results.every((result) => result.status === "success")) {
-        timeoutCounts[areaCode] = 0;
-      }
-    }
-    const status: "success" | "error" = rows.length > 0 ? "success" : "error";
-    let message = `${dataset} · 지역 ${codes.length}곳 중 ${completedAreas}곳 완료 · ${pendingAreas.length}곳 다음 실행`;
-    if (status === "error") {
-      const errorCount = taskResults.filter((result) => result.status === "error").length;
-      const deferredCount = taskResults.filter((result) => result.status === "deferred").length;
-      message = `${dataset} 수집 행이 없습니다. 오류 ${errorCount}곳 · 시간 예산 이월 ${deferredCount}곳 · ${pendingAreas.length}곳 다음 실행`;
-    }
+    const timeoutCounts = updateGovTimeoutCounts(codes, previousTimeoutCounts, taskResults, attempts);
+    const { status, message } = getGovCollectionOutcome(dataset, codes, rows.length, taskResults);
     await recordLeadSyncStatus(companyId, "gov", status, {
       trigger,
       startedAt,
@@ -9815,6 +9796,7 @@ export async function syncGovRestaurantLeads(
           newRows: result.value?.rows.length || 0,
           error: result.error
         })),
+        attempts,
         updateKinds: rows.reduce<Record<string, number>>((counts, row) => {
           const kind = row.updateKind || "unknown";
           counts[kind] = (counts[kind] || 0) + 1;
@@ -10297,6 +10279,20 @@ function normalizeLeadNameForDedupe(value: string) {
   return value.toLowerCase().replace(/\s/g, "").replace(/[^0-9a-z가-힣]/g, "");
 }
 
+export function resolveKakaoKeywordLeadIndustry(
+  kakaoCategoryName: string,
+  queryIndustry: string,
+  businessName: string
+) {
+  const categoryName = kakaoCategoryName.trim();
+  if (!categoryName) return queryIndustry;
+
+  const categoryClassification = classifyPermitLeadIndustry(categoryName, businessName);
+  return categoryClassification.tags.length > 0 || !categoryClassification.isTarget
+    ? categoryName
+    : queryIndustry;
+}
+
 /**
  * "영업리드(신규리드, 개업일자 아님)" — 2026-08-31 피드백: 개업일자와 무관하게 이미 운영 중인
  * 매장까지 카카오 로컬 키워드 검색으로 찾아 business_permit_leads에 채워 넣습니다.
@@ -10415,7 +10411,11 @@ export async function runKakaoKeywordLeadSweep(
             businessName: candidate.businessName,
             address: candidate.address,
             phone: candidate.phone || undefined,
-            industry: rule.primary,
+            industry: resolveKakaoKeywordLeadIndustry(
+              candidate.kakaoCategoryName,
+              rule.primary,
+              candidate.businessName
+            ),
             kakaoCategoryName: candidate.kakaoCategoryName,
             latitude: candidate.latitude,
             longitude: candidate.longitude,
@@ -10504,8 +10504,10 @@ export type PermitLeadFilters = {
   targetType?: "restaurant" | "distributor";
   grade?: string;
   hasPhone?: boolean;
+  contactChannel?: LeadContactFilterChannel;
   industry?: string;
   limit?: number;
+  offset?: number;
   /** 전체 건수(count=exact) 조회를 건너뛴다. 건수를 안 쓰는 호출(액션 큐)용. */
   skipTotal?: boolean;
   period?: PermitLeadPeriod | "all";
@@ -10516,6 +10518,15 @@ export type PermitLeadFilters = {
   leadId?: string;
   storeAreaRange?: StoreAreaRange;
 };
+
+export function permitLeadContactChannelParams(channel?: PermitLeadFilters["contactChannel"]): string[] {
+  if (channel === "sms") return ["phone=like.010*"];
+  if (channel === "instagram") return ["instagram_url=not.is.null", "instagram_url=neq."];
+  if (channel === "talktalk") return ["naver_talktalk_url=not.is.null", "naver_talktalk_url=neq."];
+  if (channel === "email") return ["email=not.is.null", "email=neq."];
+  if (channel === "fax") return ["fax=not.is.null", "fax=neq."];
+  return [];
+}
 
 type LeadBusinessHourRow = {
   lead_id: string;
@@ -10587,6 +10598,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.grade) params.push(`grade=eq.${encodeURIComponent(filters.grade)}`);
   if (filters.targetType) params.push(`target_type=eq.${filters.targetType}`);
   if (filters.hasPhone) params.push("phone=not.is.null");
+  params.push(...permitLeadContactChannelParams(filters.contactChannel));
   if (process.env.LEAD_STORE_AREA_ENABLED === "true" && filters.storeAreaRange) {
     const bounds = getStoreAreaSqmFilterBounds(filters.storeAreaRange);
     if (bounds.min !== undefined) params.push(`store_area_sqm=gte.${bounds.min}`);
@@ -10607,9 +10619,10 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   // 않았습니다. 데이터 양이 많아져도 화면(테이블 페이지네이션·지도)이 감당하도록 상한을 대폭
   // 올립니다 -- 실제 병목은 이 조회 상한이지, 목록/지도 렌더링 쪽이 아니었습니다.
   const limit = Math.min(5000, filters.limit || 3000);
+  const offset = Math.max(0, filters.offset || 0);
 
   const rows = await supabaseRequest<PermitLeadRow[]>(
-    `business_permit_leads?select=*&${params.join("&")}&order=score_total.desc,permit_date.desc.nullslast&limit=${limit}`
+    `business_permit_leads?select=*&${params.join("&")}&order=score_total.desc,permit_date.desc.nullslast&limit=${limit}&offset=${offset}`
   ).catch(() => []);
 
   let leads = await attachLatestLeadEnrichmentMetadata(companyId, rows.map(toPermitLeadItem));
@@ -11203,11 +11216,90 @@ export async function getPermitLeadIdentityForCompany(
 
 export type PermitLeadProfileInput = {
   businessNumber?: string | null;
+  subBusinessNumber?: string | null;
   instagramUrl?: string | null;
   fax?: string | null;
   email?: string | null;
   naverTalktalkUrl?: string | null;
 };
+
+export type PermitLeadContactPhoneInput = {
+  ownerMobilePhone?: string | null;
+  storePhone?: string | null;
+};
+
+export function isPermitLeadContactPhoneWriteEnabled(companyId: string) {
+  if (process.env.FEATURE_LEAD_CONTACT_PHONES !== "true") return false;
+  return (process.env.FEATURE_LEAD_CONTACT_PHONES_COMPANY_IDS || "")
+    .split(",")
+    .some((id) => id.trim() === companyId);
+}
+
+export function buildPermitLeadContactPhoneChanges(input: PermitLeadContactPhoneInput) {
+  const changes: PermitLeadContactPhoneInput = {};
+  if ("ownerMobilePhone" in input) {
+    const value = (input.ownerMobilePhone || "").replace(/[ -]/g, "");
+    if (value && !/^010[0-9]{8}$/.test(value)) {
+      return { ok: false as const, message: "점주 휴대폰은 010으로 시작하는 11자리 번호를 입력해주세요." };
+    }
+    changes.ownerMobilePhone = value || null;
+  }
+  if ("storePhone" in input) {
+    const value = (input.storePhone || "").replace(/[ -]/g, "");
+    if (value && !/^(02[0-9]{7,8}|070[0-9]{8}|0(3[1-3]|4[1-4]|5[1-5]|6[1-4])[0-9]{7,8})$/.test(value)) {
+      return { ok: false as const, message: "매장 전화는 02, 070 또는 국내 지역번호를 입력해주세요." };
+    }
+    changes.storePhone = value || null;
+  }
+  if (!Object.keys(changes).length) return { ok: false as const, message: "바꿀 전화번호가 없습니다." };
+  return { changes, ok: true as const };
+}
+
+export async function updatePermitLeadContactPhones(
+  companyId: string,
+  leadId: string,
+  actorCompanyMemberId: string,
+  input: PermitLeadContactPhoneInput
+): Promise<{ ok: boolean; message?: string; ownerMobilePhone?: string; storePhone?: string }> {
+  if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
+  if (!isPermitLeadContactPhoneWriteEnabled(companyId)) {
+    return { ok: false, message: "점주 휴대폰·매장 전화 저장 기능이 아직 이 회사에 활성화되지 않았습니다." };
+  }
+  const normalized = buildPermitLeadContactPhoneChanges(input);
+  if (!normalized.ok) return normalized;
+
+  try {
+    const rows = await supabaseRequest<Array<{ owner_mobile_phone: string | null; store_phone: string | null }>>(
+      "rpc/update_lead_contact_phones_v1",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          p_actor_company_member_id: actorCompanyMemberId,
+          p_changes: normalized.changes,
+          p_company_id: companyId,
+          p_lead_id: leadId
+        })
+      }
+    );
+    const row = rows[0];
+    if (!row) return { ok: false, message: "리드를 찾을 수 없습니다." };
+    return {
+      ok: true,
+      ownerMobilePhone: row.owner_mobile_phone || undefined,
+      storePhone: row.store_phone || undefined
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (/lead_contact_phone_not_found/i.test(message)) return { ok: false, message: "리드를 찾을 수 없습니다." };
+    if (/lead_contact_phone_forbidden/i.test(message)) return { ok: false, message: "이 회사 리드의 전화번호를 수정할 권한이 없습니다." };
+    if (/lead_owner_mobile_phone_invalid/i.test(message)) return { ok: false, message: "점주 휴대폰은 010으로 시작하는 11자리 번호를 입력해주세요." };
+    if (/lead_store_phone_invalid/i.test(message)) return { ok: false, message: "매장 전화는 02, 070 또는 국내 지역번호를 입력해주세요." };
+    if (/PGRST202|42883|does not exist|schema cache/i.test(message)) {
+      return { ok: false, message: "점주 휴대폰·매장 전화 저장 계약이 아직 DB에 적용되지 않았습니다." };
+    }
+    throw error;
+  }
+}
 
 const PERMIT_LEAD_CONTACT_CHANNEL_COLUMNS = ["fax", "email", "naver_talktalk_url", "contact_channels_updated_at"];
 
@@ -11229,6 +11321,8 @@ export async function updatePermitLeadProfile(
   const changed: string[] = [];
   if ("businessNumber" in input) {
     const businessNumber = normalizeBusinessNumber(input.businessNumber || "");
+    const parsedBusinessIdentity = parseCustomerBusinessIdentity({ subBusinessNumber: input.subBusinessNumber });
+    if (!parsedBusinessIdentity.ok) return { ok: false, message: parsedBusinessIdentity.message };
     if (businessNumber && !isValidBusinessRegistrationNumber(businessNumber)) {
       return { ok: false, message: "사업자등록번호 10자리를 확인해주세요." };
     }
@@ -11242,17 +11336,30 @@ export async function updatePermitLeadProfile(
     if (!currentRows.length) return { ok: false, message: "리드를 찾을 수 없습니다." };
     const currentLead = currentRows[0];
     if (businessNumber) {
-      const [duplicateLeadRows, duplicateCustomerRows] = await Promise.all([
+      const [duplicateLeadRows, duplicateCustomerRows, exemptBusinessNumbers] = await Promise.all([
         supabaseRequest<Array<{ id: string }>>(
           `business_permit_leads?select=id&id=neq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&business_number=eq.${encodeURIComponent(businessNumber)}&limit=1`
         ),
-        supabaseRequest<Array<{ id: string }>>(
-          `normalized_customers?select=id&company_id=eq.${encodeURIComponent(companyId)}&business_registration_number=eq.${encodeURIComponent(businessNumber)}&limit=2`
-        )
+        supabaseRequest<Array<{ id: string; sub_business_number: string | null }>>(
+          `normalized_customers?select=id,sub_business_number&company_id=eq.${encodeURIComponent(companyId)}&business_registration_number=eq.${encodeURIComponent(businessNumber)}&limit=100`
+        ),
+        getExemptBusinessNumberSet(companyId)
       ]);
-      const hasOtherCustomer = duplicateCustomerRows.some((row) => row.id !== currentLead.matched_customer_id);
-      if (duplicateLeadRows.length || hasOtherCustomer) {
-        return { ok: false, message: "같은 회사에 이미 등록된 사업자등록번호입니다." };
+      if (!exemptBusinessNumbers.has(businessNumber)) {
+        const currentCustomerSubBusinessNumber = duplicateCustomerRows.find((row) => row.id === currentLead.matched_customer_id)?.sub_business_number || undefined;
+        const subBusinessNumber = parsedBusinessIdentity.value.subBusinessNumber || currentCustomerSubBusinessNumber;
+        const hasConflictingCustomer = hasSubBusinessNumberConflict(
+          subBusinessNumber,
+          duplicateCustomerRows
+            .filter((row) => row.id !== currentLead.matched_customer_id)
+            .map((row) => row.sub_business_number)
+        );
+        if (duplicateLeadRows.length || hasConflictingCustomer) {
+          return {
+            ok: false,
+            message: "같은 회사에 이미 등록된 사업자등록번호입니다. 종사업장이면 종사업장번호를 넣거나 '중복 허용 사업자번호'에 추가하세요."
+          };
+        }
       }
     }
     payload.business_number = businessNumber || null;
@@ -14880,12 +14987,22 @@ async function saveSalesTransactions(companyId: string, importId: string, rawRow
     .map((row) => {
       const customerName = getRawCell(row, columnMapping.customerName);
       const businessRegistrationNumber = normalizeBusinessNumber(getRawCell(row, columnMapping.businessRegistrationNumber));
+      const parsedBusinessIdentity = parseCustomerBusinessIdentity({
+        subBusinessNumber: getRawCell(row, columnMapping.subBusinessNumber)
+      });
+      if (!parsedBusinessIdentity.ok) throw new Error(parsedBusinessIdentity.message);
       // 중복 허용 목록에 등록된 사업자번호는 매출 매칭 key로 쓰지 않고 상호명/주소 기준으로 대체합니다.
       // (사업자번호 자체는 원래 값 그대로 저장하고, key 계산에서만 제외합니다.)
-      const keyEligibleBusinessNumber = exemptBusinessNumbers.has(businessRegistrationNumber) ? "" : businessRegistrationNumber;
       const address = getRawCell(row, columnMapping.address);
-      const nameOnlyMatch = !keyEligibleBusinessNumber && !address ? nameOnlyLookup.get(normalizeNameForDuplicateCheck(customerName)) : undefined;
-      const customerKey = keyEligibleBusinessNumber || nameOnlyMatch || makeCustomerKey(customerName, address);
+      const fallbackKey = !address
+        ? nameOnlyLookup.get(normalizeNameForDuplicateCheck(customerName)) || makeCustomerKey(customerName, address)
+        : makeCustomerKey(customerName, address);
+      const customerKey = buildCustomerBusinessKey(
+        businessRegistrationNumber,
+        parsedBusinessIdentity.value.subBusinessNumber,
+        exemptBusinessNumbers,
+        fallbackKey
+      );
 
       return {
         company_id: companyId,
@@ -15061,10 +15178,13 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     bank_account_file_url: asNullableString(row.bank_account_file_url),
     birth_date: asNullableString(row.birth_date),
     business_license_file_url: asNullableString(row.business_license_file_url),
+    business_name: asNullableString(row.business_name),
     business_registration_number: asNullableString(row.business_registration_number),
+    business_entity_type: asNullableString(row.business_entity_type),
     business_status: asNullableString(row.business_status),
     business_status_checked_at: asNullableString(row.business_status_checked_at),
     customer_name: String(row.customer_name || ""),
+    corporate_registration_number: asNullableString(row.corporate_registration_number),
     delivery_km: row.delivery_km as number | string | null,
     delivery_manager: asNullableString(row.delivery_manager),
     delivery_minutes: typeof row.delivery_minutes === "number" ? row.delivery_minutes : null,
@@ -15085,6 +15205,7 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     place_links_checked_at: asNullableString(row.place_links_checked_at),
     region: asNullableString(row.region),
     representative_name: asNullableString(row.representative_name),
+    sub_business_number: asNullableString(row.sub_business_number),
     visit_count: typeof row.visit_count === "number" ? row.visit_count : 0,
     loading_position: asNullableString(row.loading_position),
     business_hours: asNullableString(row.business_hours),
@@ -15105,10 +15226,13 @@ function toCustomerMasterItem(
     bank_account_file_url: string | null;
     birth_date: string | null;
     business_license_file_url: string | null;
+    business_name?: string | null;
     business_registration_number: string | null;
+    business_entity_type?: string | null;
     business_status: string | null;
     business_status_checked_at: string | null;
     customer_name: string;
+    corporate_registration_number?: string | null;
     delivery_km: number | string | null;
     delivery_manager: string | null;
     delivery_minutes: number | null;
@@ -15119,6 +15243,7 @@ function toCustomerMasterItem(
     delivery_territory_name?: string | null;
     delivery_zone: string | null;
     email: string | null;
+    expected_opening_date?: string | null;
     google_map_url?: string | null;
     grade_override?: string | null;
     industry: string | null;
@@ -15131,6 +15256,8 @@ function toCustomerMasterItem(
     place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
+    tax_invoice_email?: string | null;
+    sub_business_number?: string | null;
     visit_count: number | null;
     loading_position: string | null;
     access_method_type?: string | null;
@@ -15160,10 +15287,13 @@ function toCustomerMasterItem(
     bankAccountFileUrl: row.bank_account_file_url || undefined,
     birthDate: row.birth_date || undefined,
     businessLicenseFileUrl: row.business_license_file_url || undefined,
+    businessName: row.business_name || undefined,
     businessNumber: row.business_registration_number || undefined,
+    businessEntityType: row.business_entity_type === "individual" || row.business_entity_type === "corporation" ? row.business_entity_type : undefined,
     businessStatus: row.business_status || undefined,
     businessStatusCheckedAt: row.business_status_checked_at || undefined,
     customerName: row.customer_name,
+    corporateRegistrationNumber: row.corporate_registration_number || undefined,
     deliveryKm: Number(row.delivery_km || 0),
     deliveryManager: row.delivery_manager || undefined,
     deliveryMinutes: row.delivery_minutes || undefined,
@@ -15188,6 +15318,7 @@ function toCustomerMasterItem(
     kakaoPlaceUrl: row.kakao_place_url || undefined,
     memoCount: 2 + (index % 4),
     monthlyRevenue,
+    expectedOpeningDate: row.expected_opening_date || undefined,
     naverPlaceUrl: row.naver_place_url || undefined,
     openingDate: row.opening_date || undefined,
     phone: row.phone || undefined,
@@ -15197,6 +15328,8 @@ function toCustomerMasterItem(
     relationshipStatusNote: row.relationship_status_note || undefined,
     relationshipStatusUpdatedAt: row.relationship_status_updated_at || undefined,
     representativeName: row.representative_name || undefined,
+    taxInvoiceEmail: row.tax_invoice_email || undefined,
+    subBusinessNumber: row.sub_business_number || undefined,
     reviewSummary: row.review_summary || undefined,
     reviewKeywords: row.review_keywords && row.review_keywords.length ? row.review_keywords : undefined,
     reviewSource: row.review_source || undefined,
@@ -15442,419 +15575,6 @@ function getVisitResultLabel(result: string) {
   return result;
 }
 
-// ---------------------------------------------------------------------------------------------
-// 2026-09-01 피드백: "결제프로그램도 추가해서 넣고 싶어" — 고객사가 마주 인텔리전스 이용료를 매달
-// 카드로 자동결제하는 구독/청구 저장소입니다. 스키마는
-// supabase/migrations/20260901_billing_subscriptions.sql, 토스페이먼츠 API 래퍼는
-// lib/toss-payments.ts를 참고하세요. 사용자 확정: "매달 자동결제는 일시불로만" — 토스 자동결제
-// (빌링) API에는 할부 파라미터가 없어 여기서도 할부를 다루지 않습니다.
-// ---------------------------------------------------------------------------------------------
-
-export type SubscriptionStatus = "pending_card" | "active" | "paused" | "canceled";
-
-export type Subscription = {
-  id: string;
-  companyId: string;
-  tossCustomerKey: string;
-  billingKey: string | null;
-  cardIssuerCode: string | null;
-  cardNumberMasked: string | null;
-  planAmountWon: number;
-  status: SubscriptionStatus;
-  nextBillingDate: string | null;
-  lastPaymentStatus: string | null;
-  lastPaymentAt: string | null;
-  lastPaymentMessage: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type SubscriptionPayment = {
-  id: string;
-  subscriptionId: string;
-  companyId: string;
-  orderId: string;
-  tossPaymentKey: string | null;
-  amount: number;
-  status: "succeeded" | "failed";
-  method: string | null;
-  cardNumberMasked: string | null;
-  receiptUrl: string | null;
-  failureCode: string | null;
-  failureMessage: string | null;
-  billedAt: string;
-};
-
-type SubscriptionRow = {
-  id: string;
-  company_id: string;
-  toss_customer_key: string;
-  billing_key: string | null;
-  card_issuer_code: string | null;
-  card_number_masked: string | null;
-  plan_amount_won: number;
-  status: string;
-  next_billing_date: string | null;
-  last_payment_status: string | null;
-  last_payment_at: string | null;
-  last_payment_message: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type SubscriptionPaymentRow = {
-  id: string;
-  subscription_id: string;
-  company_id: string;
-  order_id: string;
-  toss_payment_key: string | null;
-  amount: number;
-  status: string;
-  method: string | null;
-  card_number_masked: string | null;
-  receipt_url: string | null;
-  failure_code: string | null;
-  failure_message: string | null;
-  billed_at: string;
-};
-
-function isMissingSubscriptionsTableError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("PGRST205") && (message.includes("subscriptions") || message.includes("subscription_payments"));
-}
-
-const MISSING_SUBSCRIPTIONS_TABLE_MESSAGE =
-  "구독/결제 저장소가 아직 준비되지 않았습니다. supabase/migrations/20260901_billing_subscriptions.sql을 Supabase SQL Editor에서 실행한 뒤 다시 시도해주세요.";
-
-function mapSubscriptionRow(row: SubscriptionRow): Subscription {
-  return {
-    id: row.id,
-    companyId: row.company_id,
-    tossCustomerKey: row.toss_customer_key,
-    billingKey: row.billing_key,
-    cardIssuerCode: row.card_issuer_code,
-    cardNumberMasked: row.card_number_masked,
-    planAmountWon: row.plan_amount_won || 0,
-    status: (row.status as SubscriptionStatus) || "pending_card",
-    nextBillingDate: row.next_billing_date,
-    lastPaymentStatus: row.last_payment_status,
-    lastPaymentAt: row.last_payment_at,
-    lastPaymentMessage: row.last_payment_message,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  };
-}
-
-function mapSubscriptionPaymentRow(row: SubscriptionPaymentRow): SubscriptionPayment {
-  return {
-    id: row.id,
-    subscriptionId: row.subscription_id,
-    companyId: row.company_id,
-    orderId: row.order_id,
-    tossPaymentKey: row.toss_payment_key,
-    amount: row.amount,
-    status: (row.status as "succeeded" | "failed") || "failed",
-    method: row.method,
-    cardNumberMasked: row.card_number_masked,
-    receiptUrl: row.receipt_url,
-    failureCode: row.failure_code,
-    failureMessage: row.failure_message,
-    billedAt: row.billed_at
-  };
-}
-
-function toDateOnly(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-// 매달 같은 날짜에 청구하되, 대상 월에 그 날짜가 없으면(예: 1/31 + 1개월 → 2월엔 31일이 없음)
-// 그 달의 마지막 날로 당겨줍니다. Date.setUTCMonth()로 그냥 더하면 없는 날짜가 다음 달로
-// 넘어가버리는(1/31 + 1개월 → 3/3) 문제가 있어 직접 보정합니다.
-function addMonthsClamped(dateOnly: string, months: number) {
-  const [year, month, day] = dateOnly.split("-").map(Number);
-  const targetIndex = month - 1 + months;
-  const targetYear = year + Math.floor(targetIndex / 12);
-  const targetMonth = ((targetIndex % 12) + 12) % 12;
-  const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-  const clampedDay = Math.min(day, lastDayOfTargetMonth);
-  return toDateOnly(new Date(Date.UTC(targetYear, targetMonth, clampedDay)));
-}
-
-/** 카드 등록 위젯 콜백(successUrl)은 customerKey만 돌려줍니다 — 그 값으로 어느 회사의 구독인지 역으로 찾습니다. */
-export async function getSubscriptionByCustomerKey(tossCustomerKey: string): Promise<Subscription | null> {
-  if (!isProductionStoreConfigured()) return null;
-  const rows = await supabaseRequest<SubscriptionRow[]>(
-    `subscriptions?select=*&toss_customer_key=eq.${encodeURIComponent(tossCustomerKey)}&limit=1`
-  ).catch((error) => {
-    if (isMissingSubscriptionsTableError(error)) return [];
-    throw error;
-  });
-  const row = rows[0];
-  return row ? mapSubscriptionRow(row) : null;
-}
-
-export async function getSubscription(companyId: string): Promise<Subscription | null> {
-  if (!isProductionStoreConfigured()) return null;
-  const rows = await supabaseRequest<SubscriptionRow[]>(`subscriptions?select=*&company_id=eq.${encodeURIComponent(companyId)}&limit=1`).catch(
-    (error) => {
-      if (isMissingSubscriptionsTableError(error)) return [];
-      throw error;
-    }
-  );
-  const row = rows[0];
-  return row ? mapSubscriptionRow(row) : null;
-}
-
-/** 구독 행이 없으면(첫 방문) toss_customer_key를 발급해 새로 만들고, 있으면 그대로 반환합니다. */
-export async function ensureSubscription(companyId: string): Promise<Subscription> {
-  if (!isProductionStoreConfigured()) throw new Error("데이터베이스가 연결되어 있지 않습니다.");
-
-  const existing = await getSubscription(companyId);
-  if (existing) return existing;
-
-  try {
-    const rows = await supabaseRequest<SubscriptionRow[]>("subscriptions", {
-      method: "POST",
-      body: JSON.stringify([{ company_id: companyId, toss_customer_key: generateTossKey("cust"), status: "pending_card" }])
-    });
-    return mapSubscriptionRow(rows[0]);
-  } catch (error) {
-    if (isMissingSubscriptionsTableError(error)) throw new Error(MISSING_SUBSCRIPTIONS_TABLE_MESSAGE);
-    // company_id에 unique 제약이 있어, 동시 요청으로 이미 다른 요청이 먼저 만들었을 수 있습니다 — 한 번 더 조회합니다.
-    const retried = await getSubscription(companyId);
-    if (retried) return retried;
-    throw error;
-  }
-}
-
-/** 카드 등록 위젯 콜백에서 발급받은 billingKey를 저장하고 구독을 활성화합니다. */
-export async function saveSubscriptionBillingKey(
-  companyId: string,
-  input: { billingKey: string; cardIssuerCode?: string; cardNumberMasked?: string }
-): Promise<Subscription> {
-  const existing = await ensureSubscription(companyId);
-  const nextBillingDate = existing.nextBillingDate || addMonthsClamped(toDateOnly(new Date()), 1);
-
-  const rows = await supabaseRequest<SubscriptionRow[]>(`subscriptions?company_id=eq.${encodeURIComponent(companyId)}`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      billing_key: input.billingKey,
-      card_issuer_code: input.cardIssuerCode || null,
-      card_number_masked: input.cardNumberMasked || null,
-      status: "active",
-      next_billing_date: nextBillingDate,
-      updated_at: new Date().toISOString()
-    })
-  });
-  return mapSubscriptionRow(rows[0]);
-}
-
-/** MAJU 운영자가 고객사별 월 이용료를 설정합니다. */
-export async function updateSubscriptionPlanAmount(companyId: string, planAmountWon: number): Promise<Subscription> {
-  await ensureSubscription(companyId);
-  const rows = await supabaseRequest<SubscriptionRow[]>(`subscriptions?company_id=eq.${encodeURIComponent(companyId)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ plan_amount_won: Math.max(0, Math.round(planAmountWon)), updated_at: new Date().toISOString() })
-  });
-  return mapSubscriptionRow(rows[0]);
-}
-
-/** 일시중지/재개/해지 — 카드 정보(billingKey)는 그대로 두고 청구 대상 여부만 바꿉니다. */
-export async function updateSubscriptionStatus(companyId: string, status: Extract<SubscriptionStatus, "active" | "paused" | "canceled">): Promise<Subscription> {
-  await ensureSubscription(companyId);
-  const rows = await supabaseRequest<SubscriptionRow[]>(`subscriptions?company_id=eq.${encodeURIComponent(companyId)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status, updated_at: new Date().toISOString() })
-  });
-  return mapSubscriptionRow(rows[0]);
-}
-
-export async function listSubscriptionPayments(companyId: string, limit = 100): Promise<SubscriptionPayment[]> {
-  if (!isProductionStoreConfigured()) return [];
-  const rows = await supabaseRequest<SubscriptionPaymentRow[]>(
-    `subscription_payments?select=*&company_id=eq.${encodeURIComponent(companyId)}&order=billed_at.desc&limit=${limit}`
-  ).catch((error) => {
-    if (isMissingSubscriptionsTableError(error)) return [];
-    throw error;
-  });
-  return rows.map(mapSubscriptionPaymentRow);
-}
-
-/** 관리자용 — 전체 고객사의 구독 상태를 한 번에 조회합니다(고객사명 포함). */
-export async function listSubscriptionsForAdmin(): Promise<
-  Array<Omit<Subscription, "status"> & { companyName: string; companyKind: CompanyKind; status: SubscriptionStatus | "none" }>
-> {
-  if (!isProductionStoreConfigured()) return [];
-  const [subscriptionRows, companies] = await Promise.all([
-    supabaseRequest<SubscriptionRow[]>("subscriptions?select=*&order=updated_at.desc").catch((error) => {
-      if (isMissingSubscriptionsTableError(error)) return [];
-      throw error;
-    }),
-    supabaseRequest<Array<{ id: string; name: string; company_kind?: string | null }>>("companies?select=id,name,company_kind&order=created_at.desc").catch(() => [])
-  ]);
-  const subscriptionByCompany = new Map(subscriptionRows.map((row) => [row.company_id, row]));
-
-  return companies.map((company) => {
-    const row = subscriptionByCompany.get(company.id);
-    const companyKind = normalizeCompanyKind(company.company_kind);
-    if (row) return { ...mapSubscriptionRow(row), companyName: company.name, companyKind };
-    return {
-      id: `none-${company.id}`,
-      companyId: company.id,
-      companyName: company.name,
-      companyKind,
-      tossCustomerKey: "",
-      billingKey: null,
-      cardIssuerCode: null,
-      cardNumberMasked: null,
-      planAmountWon: 0,
-      status: "none" as const,
-      nextBillingDate: null,
-      lastPaymentStatus: null,
-      lastPaymentAt: null,
-      lastPaymentMessage: null,
-      createdAt: "",
-      updatedAt: ""
-    };
-  });
-}
-
-async function chargeSubscriptionOnce(subscription: Subscription): Promise<{ success: boolean; message: string }> {
-  const orderId = generateTossKey("order");
-  const result = await chargeBilling(subscription.billingKey as string, {
-    amount: subscription.planAmountWon,
-    customerKey: subscription.tossCustomerKey,
-    orderId,
-    orderName: "마주 인텔리전스 이용료"
-  });
-  const now = new Date().toISOString();
-
-  if (result.ok) {
-    const payment = result.data as TossPayment;
-    await supabaseRequest("subscription_payments", {
-      method: "POST",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify([
-        {
-          subscription_id: subscription.id,
-          company_id: subscription.companyId,
-          order_id: orderId,
-          toss_payment_key: payment.paymentKey,
-          amount: subscription.planAmountWon,
-          status: "succeeded",
-          method: payment.method || null,
-          card_number_masked: payment.card?.number || subscription.cardNumberMasked,
-          receipt_url: payment.receipt?.url || null,
-          billed_at: now
-        }
-      ])
-    }).catch(() => null);
-
-    // 청구 기준일은 "오늘"이 아니라 원래 예정일(next_billing_date)에서 한 달을 더합니다 — cron이
-    // 하루 늦게 돌아도 매달 청구일이 조금씩 밀리지 않도록 하기 위해서입니다.
-    const nextBillingDate = addMonthsClamped(subscription.nextBillingDate || toDateOnly(new Date()), 1);
-    await supabaseRequest(`subscriptions?company_id=eq.${encodeURIComponent(subscription.companyId)}`, {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({
-        last_payment_status: "succeeded",
-        last_payment_at: now,
-        last_payment_message: null,
-        next_billing_date: nextBillingDate,
-        updated_at: now
-      })
-    }).catch(() => null);
-
-    return { success: true, message: "결제 성공" };
-  }
-
-  const failureMessage = result.error.message || "알 수 없는 오류로 결제에 실패했습니다.";
-  await supabaseRequest("subscription_payments", {
-    method: "POST",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify([
-      {
-        subscription_id: subscription.id,
-        company_id: subscription.companyId,
-        order_id: orderId,
-        amount: subscription.planAmountWon,
-        status: "failed",
-        failure_code: result.error.code || null,
-        failure_message: failureMessage,
-        billed_at: now
-      }
-    ])
-  }).catch(() => null);
-
-  // next_billing_date는 그대로 둡니다 — 다음 날 cron이 다시 돌 때 같은 구독이 여전히
-  // "연체(next_billing_date <= today)" 상태로 잡혀 자동으로 재시도됩니다.
-  await supabaseRequest(`subscriptions?company_id=eq.${encodeURIComponent(subscription.companyId)}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({
-      last_payment_status: "failed",
-      last_payment_at: now,
-      last_payment_message: failureMessage,
-      updated_at: now
-    })
-  }).catch(() => null);
-
-  if (isTelegramConfigured()) {
-    const companies = await supabaseRequest<Array<{ telegram_chat_id: string | null }>>(
-      `companies?select=telegram_chat_id&id=eq.${encodeURIComponent(subscription.companyId)}&limit=1`
-    ).catch(() => []);
-    const chatId = companies[0]?.telegram_chat_id;
-    if (chatId) {
-      await sendTelegramMessage(
-        chatId,
-        `⚠️ 마주 인텔리전스 이용료 자동결제 실패\n금액: ${subscription.planAmountWon.toLocaleString()}원\n사유: ${failureMessage}\n결제 관리 화면에서 카드 정보를 확인해주세요. 내일 자동으로 다시 시도합니다.`
-      ).catch(() => null);
-    }
-  }
-
-  return { success: false, message: failureMessage };
-}
-
-/**
- * 매달 자동청구 cron 진입점입니다(app/api/cron/business-status/route.ts에서 호출 — Vercel Hobby
- * 플랜 cron 슬롯 2개 제한 때문에 새 cron을 추가하지 않고 기존 일일 배치에 합쳤습니다). status가
- * active고 billingKey가 있고 next_billing_date가 오늘까지인 구독만 청구합니다. 월 이용료가 아직
- * 0원(관리자가 설정 전)인 구독은 건너뜁니다.
- */
-export async function chargeDueSubscriptions(referenceDate = new Date()): Promise<{
-  configured: boolean;
-  charged: number;
-  succeeded: number;
-  failed: number;
-  skipped: number;
-}> {
-  if (!isProductionStoreConfigured() || !isTossPaymentsConfigured()) {
-    return { configured: false, charged: 0, succeeded: 0, failed: 0, skipped: 0 };
-  }
-
-  const todayIso = toDateOnly(referenceDate);
-  const rows = await supabaseRequest<SubscriptionRow[]>(
-    `subscriptions?select=*&status=eq.active&billing_key=not.is.null&next_billing_date=lte.${todayIso}`
-  ).catch((error) => {
-    if (isMissingSubscriptionsTableError(error)) return [];
-    throw error;
-  });
-
-  let succeeded = 0;
-  let failed = 0;
-  let skipped = 0;
-
-  for (const row of rows) {
-    const subscription = mapSubscriptionRow(row);
-    if (!subscription.billingKey || subscription.planAmountWon <= 0) {
-      skipped += 1;
-      continue;
-    }
-    const outcome = await chargeSubscriptionOnce(subscription);
-    if (outcome.success) succeeded += 1;
-    else failed += 1;
-  }
-
-  return { configured: true, charged: rows.length, succeeded, failed, skipped };
-}
+export * from "./store/00-core";
 export * from "./store/06-insights";
+export * from "./store/12-subscriptions";

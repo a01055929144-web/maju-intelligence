@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
   const sortHistory = (a: PurchaseHistoryRow, b: PurchaseHistoryRow) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id));
   const combined = mergePurchaseHistoryRows(receiptHistoryRows, supplierHistoryRows).sort(sortHistory);
   let period = mergePurchaseHistoryRows(resolvePurchaseHistoryRows(rows as PurchaseHistoryRow[], supplierHistory.context).filter(matchesReceiptFilter).map((row) => ({ ...row, correctable: correctionEnabled })), supplierHistoryRows.filter((row) => (!from || String(row.receipt_date) >= from) && (!to || String(row.receipt_date) <= to))).sort(sortHistory);
-  if (params.get("summary") === "1") return NextResponse.json({ summary: summarizePurchaseHistory(period), count: period.length }, { headers: { "Cache-Control": "no-store" } });
+  if (params.get("summary") === "1") return NextResponse.json({ canCorrect: correctionEnabled, summary: summarizePurchaseHistory(period), count: period.length }, { headers: { "Cache-Control": "no-store" } });
   if (params.get("changed") === "1") {
     const changed = new Set(summarizePurchaseHistory(attachPurchaseHistoryPreviousCosts(combined, period)).filter((item) => item.changeAmount).map((item) => item.key));
     period = period.filter((row) => changed.has(`${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}`));
@@ -123,30 +123,37 @@ export async function GET(request: NextRequest) {
 
 /** 원본 엑셀 행은 보존하고 정정 값·사유만 한 트랜잭션으로 추가합니다. */
 export async function PATCH(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { companyId?: string; id?: string; productId?: string; cost?: number; reason?: string; expectedRevision?: number } | null;
+  const body = (await request.json().catch(() => null)) as { action?: "correct" | "delete" | "add"; companyId?: string; id?: string; productId?: string; receiptDate?: string; productName?: string; supplier?: string; spec?: string; unit?: string; quantity?: number | null; cost?: number; reason?: string; expectedRevision?: number } | null;
   if (!priceSheetsEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   const auth = await getRequestAuthScope(request, body?.companyId);
   if (!auth.ok || !auth.companyId) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   if (!isFeatureEnabled("PRICING", auth.companyId) || !canCorrect(auth.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   if (auth.customerSession && !canManagePriceSheets(auth.customerSession)) return NextResponse.json({ message: "대표·관리자 권한이 필요합니다." }, { status: 403 });
   const uuid = /^[0-9a-f-]{36}$/i;
-  if (!body?.id || !uuid.test(body.id) || (body.productId && !uuid.test(body.productId)) ||
-    typeof body.cost !== "number" || !Number.isFinite(body.cost) || body.cost < 0 || body.cost > 1_000_000_000 ||
-    Math.abs(Math.round(body.cost * 100) - body.cost * 100) > 1e-8 || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision! < 0 ||
-    !body.reason || body.reason.trim().length < 5 || body.reason.trim().length > 500)
-    return NextResponse.json({ message: "품목·단가·정정 사유를 확인해 주세요." }, { status: 400 });
+  const action = body?.action || "correct";
+  if (!(["correct", "delete", "add"] as const).includes(action) || (action !== "add" && (!body?.id || !uuid.test(body.id))) || (body?.productId && !uuid.test(body.productId)) ||
+    (action === "add" && (!body?.productName?.trim() || !validDate(body.receiptDate || ""))) ||
+    (action !== "delete" && (typeof body?.cost !== "number" || !Number.isFinite(body.cost) || body.cost < 0 || body.cost > 1_000_000_000 || Math.abs(Math.round(body.cost * 100) - body.cost * 100) > 1e-8)) ||
+    (body?.quantity != null && (typeof body.quantity !== "number" || !Number.isFinite(body.quantity) || body.quantity < 0 || body.quantity > 1_000_000_000 || Math.abs(Math.round(body.quantity * 1000) - body.quantity * 1000) > 1e-8)) ||
+    !Number.isSafeInteger(body?.expectedRevision) || body!.expectedRevision! < 0 ||
+    !body?.reason || body.reason.trim().length < 5 || body.reason.trim().length > 500)
+    return NextResponse.json({ message: "날짜·품목·단가·수량·사유를 확인해 주세요." }, { status: 400 });
+  if (body?.productName && body.productName.trim().length > 200 || body?.supplier && body.supplier.trim().length > 120 || body?.spec && body.spec.trim().length > 120 || body?.unit && body.unit.trim().length > 40 ||
+    body?.receiptDate && !validDate(body.receiptDate)) return NextResponse.json({ message: "입력값 길이와 날짜를 확인해 주세요." }, { status: 400 });
   try {
-    const result = await supabaseRequest<{ revision: number }>("rpc/correct_purchase_receipt_line", {
+    const result = await supabaseRequest<{ id: string; revision: number; recalculated: boolean }>("rpc/mutate_purchase_receipt_line", {
       method: "POST",
-      body: JSON.stringify({ p_company: auth.companyId, p_line: body.id, p_product: body.productId || null,
-        p_cost: body.cost, p_reason: body.reason.trim(), p_actor: auth.customerSession?.name || auth.adminSession?.name || "운영자",
-        p_expected_revision: body.expectedRevision })
+      body: JSON.stringify({ p_company: auth.companyId, p_action: action, p_line: body.id || null,
+        p_values: { productId: body.productId || null, receiptDate: body.receiptDate || null, productName: body.productName?.trim() || null,
+          supplier: body.supplier?.trim() || null, spec: body.spec?.trim() || null, unit: body.unit?.trim() || null,
+          quantity: body.quantity ?? null, cost: body.cost ?? null }, p_reason: body.reason.trim(),
+        p_actor: auth.customerSession?.name || auth.adminSession?.name || "운영자", p_expected_revision: body.expectedRevision })
     });
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     return NextResponse.json({ message: message.includes("receipt_correction_conflict") ? "다른 사용자가 먼저 정정했습니다. 새로고침 후 다시 시도해 주세요." :
-      message.includes("product_not_in_company") ? "같은 회사의 상품을 선택해 주세요." : "정정을 저장하지 못했습니다." }, { status: message.includes("receipt_correction_conflict") ? 409 : 500 });
+      message.includes("product_not_in_company") ? "같은 회사의 상품을 선택해 주세요." : "매입 이력 변경을 저장하지 못했습니다." }, { status: message.includes("receipt_correction_conflict") ? 409 : 500 });
   }
 }
 

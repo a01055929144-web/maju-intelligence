@@ -13,7 +13,9 @@ import {
   type DeliveryPolicy,
   type HolidayRule,
 } from "@/domains/order/order-rules";
-import { documentDisplayPrice, parseDisplay, type DocumentContent } from "../../domains/pricing/document";
+import { FIXED_PROMOTION_PRICE_CONTRACT, documentDisplayPrice, parseDisplay, type DocumentContent } from "../../domains/pricing/document";
+import { effectiveCutoff, type CutoffRule } from "@/domains/order/effective-cutoff";
+import { readStoreProductCutoffs } from "./store-product-cutoff";
 
 type Link = {
   id: string;
@@ -186,6 +188,7 @@ export async function readStorefront(
     territoryRules,
     customerRules,
     holidays,
+    productCutoffs,
   ] = await Promise.all([
     productIds.length
       ? supabaseRequest<ProductMode[]>(
@@ -238,6 +241,7 @@ export async function readStorefront(
         `&or=(territory_id.is.null,territory_id.eq.${deliveryTerritoryId ?? "00000000-0000-0000-0000-000000000000"})&select=kind,weekday,month,day,holiday_date&limit=200`,
       ),
     ),
+    readStoreProductCutoffs(company, productIds),
   ]);
   const marketIds = new Set(
     productModes
@@ -293,6 +297,8 @@ export async function readStorefront(
             : { kind: "date", date: item.holiday_date! },
     ),
   };
+  const cutoffRule = (rule: Override): CutoffRule | null => rule.cutoff_days_before === null || rule.cutoff_days_before === undefined || !rule.cutoff_time
+    ? null : { cutoffDaysBefore: rule.cutoff_days_before, cutoffTime: rule.cutoff_time.slice(0, 5) };
   const deliveryDate = policy.weekdays.length ? nextDeliveryDate(policy) : null;
   const priceDate = requestedDeliveryDate ?? deliveryDate ?? today;
   const deliveryAllowed =
@@ -341,8 +347,13 @@ export async function readStorefront(
           `${line.productId}:${line.unit}`,
         );
         const matchingContract =
-          agreement?.sales_unit === line.unit ? agreement : null;
+          agreement?.sales_unit === line.unit && !(version.content.priceContract === FIXED_PROMOTION_PRICE_CONTRACT && line.promotionId) ? agreement : null;
         const market = marketIds.has(line.productId);
+        const productRule = productCutoffs.get(line.productId) ?? null;
+        const productCutoff = productRule && effectiveCutoff(
+          { cutoffDaysBefore: settings.cutoff_days_before, cutoffTime: settings.cutoff_time.slice(0, 5), weekdays: policy.weekdays, holidays: policy.holidays },
+          cutoffRule(territory), cutoffRule(store), productRule, priceDate,
+        );
         return {
           key: `${line.productId}:${line.promotionId ?? ""}`,
           productId: line.productId,
@@ -362,9 +373,9 @@ export async function readStorefront(
           taxType: matchingContract?.tax_type ?? line.taxType,
           unitPrice:
             priceAvailable && !market
-              ? (matchingContract?.unit_price ?? documentDisplayPrice(line.price, line.taxType, priceIncludesTax))
+              ? (matchingContract?.unit_price ?? documentDisplayPrice(line.price, line.taxType, priceIncludesTax, version.content.priceContract === FIXED_PROMOTION_PRICE_CONTRACT && line.priceIncludesTax === true))
               : null,
-          priceIncludesTax: matchingContract?.price_includes_tax ?? priceIncludesTax,
+          priceIncludesTax: matchingContract?.price_includes_tax ?? (priceIncludesTax || (version.content.priceContract === FIXED_PROMOTION_PRICE_CONTRACT && line.priceIncludesTax === true)),
           isMarketPrice: market,
           maximumQuantity: line.promotionId
             ? (livePromotions.get(line.promotionId)?.per_store_limit ?? null)
@@ -373,6 +384,11 @@ export async function readStorefront(
             recentByProduct.get(line.productId)?.unit_price ?? null,
           recentDispatchDate:
             recentByProduct.get(line.productId)?.document_date ?? null,
+          ...(productCutoff?.source === "product" ? { productCutoff: {
+            cutoffAtKst: productCutoff.cutoffAtKst,
+            daysBefore: productRule!.cutoffDaysBefore,
+            time: productRule!.cutoffTime,
+          } } : {}),
         };
       }),
   };

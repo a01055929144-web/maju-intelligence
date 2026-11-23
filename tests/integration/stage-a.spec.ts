@@ -94,7 +94,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     const file=syntheticFile(scenario.existing);
     await page.locator('input[type="file"]').setInputFiles({name:'stage-a-synthetic.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:file.buffer});
     const preview=page.getByRole('region',{name:'업로드 적용일과 단가 확인',exact:true});
-    await page.getByRole('radio',{name:'현재 가격도 변경',exact:true}).check();
+    await expect(page.getByRole('radio',{name:'현재 매입가 변경',exact:true})).toBeChecked();
     await expect(preview).toContainText('미선택 188그룹');
     const conflicts=page.getByRole('region',{name:'상이 단가 선택',exact:true});
     await conflicts.getByRole('combobox').first().selectOption('100');
@@ -130,20 +130,25 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
     const started=Date.now();
     await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
-    await expect(page.getByRole('status').filter({hasText:`현재가 반영 ${745-scenario.held}품목 · 이력 전용 ${scenario.held}품목`})).toBeVisible();
+    const expectedChanged=Array.from({length:745-188},(_,offset)=>offset+188)
+      .filter(i=>i>=scenario.existing || chosenCost(i,scenario.existing)!==100).length;
+    const expectedHistoryOnly=745-expectedChanged;
+    await expect(page.getByRole('region',{name:'매입가 저장 결과',exact:true}))
+      .toContainText(`현재 매입가 변경 ${expectedChanged}품목 / 이력만 ${expectedHistoryOnly}품목`);
     expect(writes).toHaveLength(2); expect(writes[1]).toEqual(writes[0]);
     const saved=state();
     expect(saved.products_count).toBe(745); expect(saved.receipts).toBe(3417); expect(saved.batches).toBe(1);
-    expect(saved.batch).toMatchObject({id:writes[0].id,status:'completed',row_count:3417,history_only_product_count:scenario.held});
+    expect(saved.batch).toMatchObject({id:writes[0].id,status:'completed',row_count:3417,history_only_product_count:expectedHistoryOnly});
     expect(saved.batch!.recalc_run_id).toBeTruthy();
     expect(JSON.parse(db('verify-source',undefined,file.rows))).toMatchObject({verifiedOriginalRows:3417,allRawValuesAndAmountsPreserved:true});
     expect(saved.items).toHaveLength(745);
     expect(new Set(saved.items.map(item=>item.code)).size).toBe(745);
     for(let i=0;i<745;i++) {
       const product=saved.items.find(item=>item.code===code(i))!; expect(product).toBeTruthy();
-      const held=i<scenario.held, cost=held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing);
+      const held=i<188, cost=held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing);
+      const unchangedCurrent=i<scenario.existing && cost===100;
       expect(Number(product.cost)).toBe(cost); expect(Number(product.price)).toBe(Math.ceil(cost*1.2/10)*10);
-      expect(product.date).toBe(held?(i<scenario.existing?priorDate:null):date);
+      expect(product.date).toBe(unchangedCurrent?priorDate:held?null:date);
       // A known source unit must survive standard-product creation and be visible after reload.
       expect(product.purchase_unit).toBe(units[i%4]);
       if(i>=scenario.existing)expect(product.sales_unit).toBe(units[i%4]);
@@ -162,7 +167,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
         const label=name(i,scenario.existing);
         await page.getByRole('searchbox',{name:'품목 검색',exact:true}).fill(saved.items.find(item=>item.code===code(i))!.catalog_code);
         const row=page.getByRole('textbox',{name:`${label} 품목명`,exact:true}).locator('xpath=ancestor::tr[1]');
-        const cost=restored?(i<scenario.existing?100:0):(i<scenario.held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing));
+        const cost=restored?(i<scenario.existing?100:0):(i<188?(i<scenario.existing?100:0):chosenCost(i,scenario.existing));
         await expect(row.getByRole('cell',{name:`${cost}원`,exact:true}).first()).toBeVisible();
         const effectiveDate=restored?(i<scenario.existing?priorDate:null):saved.items.find(item=>item.code===code(i))!.date;
         const headers=await row.locator('xpath=ancestor::table[1]').getByRole('columnheader').allTextContents();
@@ -187,19 +192,18 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await page.getByLabel('정정 사유',{exact:true}).fill('격리 통합 시험 오입력 정정');
     await page.getByRole('button',{name:'정정 저장',exact:true}).click();
     await expect.poll(()=>state().corrections).toBe(1);
-    expect(state().items.map(item=>[item.id,item.cost,item.price])).toEqual(saved.items.map(item=>[item.id,item.cost,item.price]));
+    const corrected=state(), correctedId=saved.items.find(item=>item.code===code(744))!.id;
+    expect(corrected.items.filter(item=>item.id!==correctedId).map(item=>[item.id,item.cost,item.price]))
+      .toEqual(saved.items.filter(item=>item.id!==correctedId).map(item=>[item.id,item.cost,item.price]));
+    expect(corrected.items.find(item=>item.id===correctedId)).toMatchObject({cost:'99.00',price:'120'});
     page.once('dialog',dialog=>dialog.accept());
     await page.getByRole('button',{name:'직전 날짜별 매입가·판매가 함께 되돌리기',exact:true}).click();
-    await expect(page.getByRole('status').filter({hasText:'원본 거래를 함께 복구했습니다'})).toBeVisible();
-    const restored=state();
-    expect(restored.receipts).toBe(0); expect(restored.batch!.status).toBe('restored'); expect(restored.products_count).toBe(745);
-    for(let i=0;i<745;i++) {
-      const product=restored.items.find(item=>item.code===code(i))!, cost=i<scenario.existing?100:0;
-      expect(Number(product.cost)).toBe(cost); expect(Number(product.price)).toBe(i<scenario.existing?120:0);
-    }
-    await checkVisibleCosts(true);
-    await page.screenshot({path:info.outputPath('real-stage-a-restored.png')});
-    expect(Number(restored.other_cost)).toBe(999); expect(standalonePricingWrites).toBe(0);
+    await expect(page.getByRole('alert').filter({hasText:'기존 가격이나 이후 변경 내역이 달라 처리하지 못했습니다'})).toBeVisible();
+    const protectedState=state();
+    expect(protectedState.receipts).toBe(3417); expect(protectedState.batch!.status).toBe('completed'); expect(protectedState.products_count).toBe(745);
+    expect(protectedState.items.find(item=>item.id===correctedId)).toMatchObject({cost:'99.00',price:'120'});
+    await page.screenshot({path:info.outputPath('real-stage-a-later-correction-protected.png')});
+    expect(Number(protectedState.other_cost)).toBe(999); expect(standalonePricingWrites).toBe(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   });
 }
@@ -222,7 +226,8 @@ for (const width of [1280,390]) test(`history-only default retries, reloads and 
   await page.locator('input[type="file"]').setInputFiles({name:'stage-a-history-only.csv',mimeType:'text/csv',buffer:historyOnlyFile()});
   await expect(receiptDateInput).toHaveValue('2026-11-01');
   const preview=page.getByRole('region',{name:'업로드 적용일과 단가 확인',exact:true});
-  await expect(page.getByRole('radio',{name:'현재 가격도 변경',exact:true})).not.toBeChecked();
+  await expect(page.getByRole('radio',{name:'현재 매입가 변경',exact:true})).toBeChecked();
+  await page.getByRole('radio',{name:'이력만 저장',exact:true}).check();
   await expect(preview).toContainText('상이 단가 188품목의 모든 원문 행을 매입 이력에 보존합니다');
   await receiptDateInput.fill('2026-11-02');
   await expect(preview.getByRole('cell',{name:'2026-11-02',exact:true}).first()).toBeVisible();
@@ -264,7 +269,7 @@ for (const width of [1280,390]) test(`history-only default retries, reloads and 
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
-test('real dated multipack registration stays unpriced until conversion is confirmed', async ({page})=>{
+test('real dated multipack receipt saves while current price stays held until conversion is confirmed', async ({page})=>{
   db('seed',0);
   expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:process.env.STAGE_A_OWNER_PASSWORD!}})).status()).toBe(200);
   const preview=buildCatalogPreview([{상품명:'검증 다입수 제트',규격:'100g*10EA',단위:'BOX',매입가:100}],{productName:'상품명',spec:'규격',unit:'단위',cost:'매입가'},'합성 매입처');
@@ -280,7 +285,19 @@ test('real dated multipack registration stays unpriced until conversion is confi
     selectedSourceRowNumber:2,priceSelected:true,priceHeld:false,lineKey:'multipack',productName:'검증 다입수 제트',spec:'100g*10EA',unit:'BOX',supplierName:'합성 매입처',erpCode:'',
     unitPrice:100,priceIncludesVat:false,rawValues:['synthetic']
   }]}});
-  expect(result.status()).toBe(409); expect((await result.json()).message).toContain('환산을 먼저 확인');
+  expect(result.status()).toBe(200);
   const current=state(); expect(current.products_count).toBe(1); expect(current.unpriced).toBe(1);
-  expect(current.items[0].sales_unit).toBeNull(); expect(current.receipts).toBe(0); expect(current.batches).toBe(0);
+  expect(current.items[0].sales_unit).toBeNull(); expect(current.receipts).toBe(1); expect(current.batches).toBe(1);
+});
+
+test('confirmed product unit conversion allows the selected current price on PG17', async ({page})=>{
+  db('seed',1); db('confirm-unit');
+  expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:process.env.STAGE_A_OWNER_PASSWORD!}})).status()).toBe(200);
+  const result=await page.request.post('/api/price-sheets/costs/date-batches',{data:{action:'save',companyId:company,batchId:randomUUID(),receiptDate:date,fileName:'confirmed-unit.xlsx',rows:[{
+    productId:'20000000-0000-4000-8000-000000000001',priceDate:date,cost:250,selectedSourceRowNumber:2,priceSelected:true,priceHeld:false,
+    lineKey:'confirmed-unit',productName:'합성 기존 품목 1',spec:'1kg',unit:'BOX',supplierName:'',erpCode:'ERP-0001',unitPrice:250,priceIncludesVat:false,rawValues:['synthetic']
+  }]}});
+  expect(result.status()).toBe(200);
+  const current=state(); expect(current.receipts).toBe(1); expect(current.batch).toMatchObject({history_only_product_count:0});
+  expect(Number(current.items[0].cost)).toBe(250);
 });

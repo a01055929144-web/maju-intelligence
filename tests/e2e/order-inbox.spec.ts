@@ -38,6 +38,10 @@ for (const width of [1440, 390]) test(`order inbox filters, expands and confirms
   await expect(page.getByText("MAJU", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("합성 송파 시험 매장", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expect(page.getByLabel("보기").locator("option")).toHaveText(["50개", "100개", "300개", "500개"]);
+  await page.getByLabel("줄 선택").first().check();
+  await expect(page.getByRole("button", { name: "선택 엑셀 · 전체 열" })).toBeVisible();
+  await page.getByRole("button", { name: "선택 해제" }).click();
 
   await page.getByText("2개 품목 · 배송지·주문자").first().click();
   await expect(page.getByText("서울 송파구 합성로 1 101호").first()).toBeVisible();
@@ -82,24 +86,26 @@ test("order inbox shows a retry action when loading fails", async ({ page }) => 
   ).toBeVisible();
 });
 
-test("CX-39 order inbox retries a missing document before offering receipt", async ({ page }) => {
+test("CX-62 retries a failed receipt without treating an unlinked order as received", async ({ page }) => {
   await login(page);
-  let linked = false;
+  let attempts = 0;
   await page.route("**/api/orders*", async route => {
     if (route.request().method() === "POST") {
-      expect(route.request().postDataJSON()).toMatchObject({ action: "retry_order_document", orderId: "o1", revision: 1 });
-      linked = true;
-      return route.fulfill({ json: { orderDocumentStatus: "confirmed" } });
+      expect(route.request().postDataJSON()).toMatchObject({ action: "confirm", orderId: "o1", revision: 1 });
+      attempts++;
+      if (attempts === 1) return route.fulfill({ status: 409, json: {
+        code: "order_document_failed", message: "전표 연결에 실패했습니다. 주문을 접수하지 않았습니다.",
+      } });
+      return route.fulfill({ json: { order: { id: "o1", status: "received", revision: 2 } } });
     }
-    return route.fulfill({ json: { hasMore: false, items: [{
-      ...order("o1", "합성 전표 매장"),
-      orderDocument: linked ? { status: "confirmed", number: "S-001" } : { status: "unlinked" },
+    return route.fulfill({ json: { hasMore: false, items: attempts > 1 ? [] : [{
+      ...order("o1", "합성 전표 매장"), draftReceipt: true, orderDocument: { status: "unlinked" },
     }] } });
   });
   await page.goto("/orders");
-  await expect(page.getByText("전표 연결 실패 또는 대기", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "확인", exact: true })).toHaveCount(0);
+  await expect(page.getByText("접수 시 전표 연결", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "확인", exact: true }).click();
+  await expect(page.getByText("전표 연결 실패", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "전표 연결 다시 시도" }).click();
-  await expect(page.getByText("S-001", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "확인", exact: true })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("합성 전표 매장 주문을 확인했습니다.");
 });

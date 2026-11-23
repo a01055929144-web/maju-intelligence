@@ -16,7 +16,8 @@ type Order = {
   id: string; storeAccountId: string | null; customerName: string; deliveryAddress: string | null; orderedBy: string;
   deliveryDate: string | null; status: string; knownTotal: number; hasMarketPrice: boolean;
   requestMemo: string; submittedAt: string; revision: number; lines: Line[];
-  orderDocument?: { status: "confirmed"; number: string } | { status: "unlinked" };
+  draftReceipt?: boolean;
+  orderDocument?: { status: "draft" | "confirmed"; number: string } | { status: "unlinked" };
 };
 
 type Candidate = { customerId: string; name: string; address: string | null; reason: "business_number" | "name_address" };
@@ -41,7 +42,7 @@ export async function confirmExistingCustomerLink({
   return true;
 }
 
-export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabled = false, preview = false }: { canConfirm: boolean; companyId: string; deliveryPhotosEnabled?: boolean; preview?: boolean }) {
+export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabled = false, fulfillmentEnabled = false, listExportEnabled = false, preview = false }: { canConfirm: boolean; companyId: string; deliveryPhotosEnabled?: boolean; fulfillmentEnabled?: boolean; listExportEnabled?: boolean; preview?: boolean }) {
   const { confirm: confirmAction, confirmDialog } = useConfirm();
   const [status, setStatus] = useState("submitted");
   const [query, setQuery] = useState("");
@@ -52,6 +53,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [failedDocumentOrder, setFailedDocumentOrder] = useState("");
   const [review, setReview] = useState<{ order: Order; candidates: Candidate[] | null } | null>(null);
 
   const load = useCallback(async () => {
@@ -68,15 +70,21 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
 
   async function confirm(order: Order) {
     setBusyId(order.id); setNotice("");
-    const response = await fetch("/api/orders", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "confirm", companyId, orderId: order.id, revision: order.revision }),
-    });
-    const result = await response.json().catch(() => ({})) as { message?: string };
-    setBusyId("");
-    setNotice(response.ok ? `${order.customerName} 주문을 확인했습니다.` : result.message || "확인 처리하지 못했습니다.");
-    if (response.ok) window.dispatchEvent(new Event("company-notifications:reload"));
-    await load();
+    try {
+      const response = await fetch("/api/orders", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "confirm", companyId, orderId: order.id, revision: order.revision }),
+      });
+      const result = await response.json().catch(() => ({})) as { message?: string; code?: string };
+      setFailedDocumentOrder(result.code === "order_document_failed" ? order.id : "");
+      setNotice(response.ok ? `${order.customerName} 주문을 확인했습니다.` : result.message || "확인 처리하지 못했습니다.");
+      if (response.ok) window.dispatchEvent(new Event("company-notifications:reload"));
+      await load();
+    } catch {
+      setNotice("확인 결과를 불러오지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setBusyId("");
+    }
   }
 
   // CC-08: 첫 거래 거래처 확인 — 후보 보기, 새 거래처로 확인, 기존 거래처에 연결. 규칙은 서버(DB 함수)가 정한다.
@@ -119,6 +127,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
   }
 
   const columns: CommonTableColumn<Order>[] = [
+    ...(listExportEnabled ? [{ key: "id", label: "주문 ID", defaultHidden: true, value: (row: Order) => row.id }] : []),
     { key: "submittedAt", label: "접수 시각", sortable: true, value: (row) => row.submittedAt, render: (row) => kst(row.submittedAt) },
     { key: "customer", label: "매장", sortable: true, value: (row) => row.customerName, render: (row) => <span>{row.customerName}{row.storeAccountId ? <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-800">거래처 확인 필요</span> : null}</span> },
     { key: "deliveryDate", label: "배송일", sortable: true, value: (row) => row.deliveryDate ?? "", render: (row) => row.deliveryDate ?? "배송일 확인 대기" },
@@ -135,16 +144,31 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
       </li>)}</ul>
       {deliveryPhotosEnabled ? <OrderDeliveryPhotos audience="customer" companyId={companyId} orderId={row.id} /> : null}
     </details> },
+    ...(listExportEnabled ? [
+      { key: "deliveryAddress", label: "배송지", defaultHidden: true, value: (row: Order) => row.deliveryAddress ?? "" },
+      { key: "orderedBy", label: "주문자", defaultHidden: true, value: (row: Order) => row.orderedBy },
+      { key: "lineDetails", label: "품목 전체", defaultHidden: true, value: (row: Order) => row.lines.map((line) =>
+        `${line.name}${line.spec ? ` ${line.spec}` : ""} · ${line.quantity}${line.unit} · ${line.marketPrice || line.total === null ? "시가" : won(line.total)}`
+      ).join(" | ") },
+      { key: "marketPrice", label: "시가 포함", defaultHidden: true, value: (row: Order) => row.hasMarketPrice ? "예" : "아니오" },
+      { key: "revision", label: "수정 번호", defaultHidden: true, value: (row: Order) => row.revision },
+    ] : []),
     { key: "memo", label: "요청사항", value: (row) => row.requestMemo, render: (row) => row.requestMemo || "-" },
     { key: "status", label: "상태", sortable: true, value: (row) => storeOrderStatusLabel(row.status) },
     ...(orders?.some(row => row.orderDocument) ? [{
-      key: "orderDocument", label: "매출 전표", value: (row: Order) => row.orderDocument?.status === "confirmed"
-        ? row.orderDocument.number : row.status === "submitted" ? "전표 연결 실패 또는 대기" : "미연결",
+      key: "orderDocument", label: "매출 전표", value: (row: Order) => row.orderDocument?.status === "draft"
+        ? `작성중 · ${row.orderDocument.number}` : row.orderDocument?.status === "confirmed"
+        ? row.orderDocument.number : row.status === "submitted" ? (row.draftReceipt ? "접수 시 전표 연결" : "전표 연결 실패 또는 대기") : "미연결",
+      render: (row: Order) => failedDocumentOrder === row.id ? "전표 연결 실패" : row.orderDocument?.status === "draft"
+        ? `작성중 · ${row.orderDocument.number}` : row.orderDocument?.status === "confirmed"
+        ? row.orderDocument.number : row.status === "submitted" ? (row.draftReceipt ? "접수 시 전표 연결" : "전표 연결 실패 또는 대기") : "미연결",
     }] : []),
-    { key: "action", label: "처리", value: () => "", render: (row) => canConfirm && row.storeAccountId && canConfirmStoreOrder(row.status)
+    { key: "action", label: "처리", exportable: false, value: () => "", render: (row) => canConfirm && row.storeAccountId && canConfirmStoreOrder(row.status)
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void openReview(row)} size="sm" variant="outline">거래처 확인</Button>
-      : canConfirm && canConfirmStoreOrder(row.status) && row.orderDocument?.status === "unlinked"
+      : canConfirm && canConfirmStoreOrder(row.status) && !row.draftReceipt && row.orderDocument?.status === "unlinked"
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void retryOrderDocument(row)} size="sm" variant="outline">전표 연결 다시 시도</Button>
+      : canConfirm && canConfirmStoreOrder(row.status) && failedDocumentOrder === row.id
+      ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void confirm(row)} size="sm" variant="outline">전표 연결 다시 시도</Button>
       : canConfirm && canConfirmStoreOrder(row.status)
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void confirm(row)} size="sm">{busyId === row.id ? "확인 중…" : "확인"}</Button>
       : null },
@@ -152,6 +176,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
 
   return <section className="space-y-4">
     {!preview ? <StoreNotificationSettings /> : null}
+    {fulfillmentEnabled ? <div className="flex justify-end"><a className="maju-button-secondary min-h-11" href={`/orders/fulfillment?companyId=${encodeURIComponent(companyId)}`}>출고 준비·인쇄</a></div> : null}
     <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); setStoreName(query.trim()); setPage(1); }} role="search">
       <label className="text-sm font-semibold text-slate-700">상태
         <select aria-label="주문 상태" className="maju-input mt-1 block h-11 min-w-[140px]" onChange={(event) => { setStatus(event.target.value); setPage(1); }} value={status}>
@@ -179,7 +204,8 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
     </div> : null}
     {error ? <ErrorState message={error} onRetry={() => void load()} /> : orders === null ? <LoadingState label="주문을 불러오는 중입니다..." /> :
       <CommonDataTable columns={columns} emptyMessage={storeName ? "검색한 매장의 주문이 없습니다." : status === "submitted" ? "아직 주문이 없습니다 — 링크 관리에서 주문 링크를 보내 보세요." : "이 상태의 주문이 없습니다."}
-        filename="주문목록.csv" rowKey={(row) => row.id} rows={orders} settingsKey={`orders:${companyId}`} />}
+        exportAllColumns={listExportEnabled} filename="주문목록.csv" pageSizeMode={listExportEnabled ? "order" : "list"} phoneCards={listExportEnabled}
+        rowKey={(row) => row.id} rows={orders} settingsKey={`orders:${companyId}`} />}
     {(page > 1 || hasMore) && <div className="flex justify-center gap-2">
       <Button disabled={page === 1} onClick={() => setPage(page - 1)} variant="outline">이전</Button>
       <Button disabled={!hasMore} onClick={() => setPage(page + 1)} variant="outline">다음</Button>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoHiddenKeys, COMMON_TABLE_PAGE_SIZES, countByKey, matchesQuery, normalizeColumnState, pickPageSize, setColumnWidth, visibleRange } from "../lib/common-data-table";
+import { autoHiddenKeys, COMMON_TABLE_PAGE_SIZES, countByKey, downloadableColumns, matchesQuery, normalizeColumnState, pickPageSize, setColumnWidth, visibleRange } from "../lib/common-data-table";
 
 const columns = [
   { key: "code", label: "코드", value: (row: { code: string }) => row.code },
@@ -30,6 +30,12 @@ describe("common data table contract", () => {
   it("uses the WO-01 list and order page sizes", () => {
     expect(COMMON_TABLE_PAGE_SIZES.list).toEqual([100, 500, 1000, 0]); // 0 = 전체
     expect(COMMON_TABLE_PAGE_SIZES.order).toEqual([50, 100, 300, 500]);
+  });
+  it("includes hidden columns for selected full-column export and excludes action columns", () => {
+    const visible = [{ key: "store" }];
+    const all = [{ key: "store" }, { key: "address" }, { key: "action", exportable: false }];
+    expect(downloadableColumns(visible, all, true).map((column) => column.key)).toEqual(["store", "address"]);
+    expect(downloadableColumns(visible, all, false).map((column) => column.key)).toEqual(["store"]);
   });
   it("picks the saved page size only when allowed", () => {
     expect(pickPageSize(COMMON_TABLE_PAGE_SIZES.list, 500)).toBe(500);

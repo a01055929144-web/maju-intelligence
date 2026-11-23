@@ -4,6 +4,7 @@ import {
   buildGovAreaTasks,
   createGovRequestLimiter,
   dedupeGovRows,
+  getGovCollectionOutcome,
   getGovSyncObservability,
   getGovSyncRunStatus,
   GOV_COLLECTION_BUDGET_MS,
@@ -17,7 +18,9 @@ import {
   prioritizeGovAreaCodes,
   rotateGovSyncUnits,
   runGovAreaTasks,
-  splitGovTasksByTimeouts
+  shouldDeferBlockedGovFirstArea,
+  splitGovTasksByTimeouts,
+  updateGovTimeoutCounts
 } from "../lib/gov-area-fanout";
 
 describe("정부 데이터 지역 fan-out", () => {
@@ -106,6 +109,23 @@ describe("정부 데이터 지역 fan-out", () => {
   it("모든 지역이 error 또는 deferred이면 성공 상태를 남기지 않는다", () => {
     expect(getGovSyncRunStatus([{ status: "error" }, { status: "deferred" }])).toBe("error");
     expect(getGovSyncRunStatus([{ status: "error" }, { status: "success" }])).toBe("success");
+  });
+
+  it("모든 지역을 오류·이월 없이 확인하고 새 행이 없으면 성공으로 남긴다", () => {
+    expect(getGovCollectionOutcome("general_restaurants", ["1", "2"], 0, [
+      { areaCode: "1", status: "success" },
+      { areaCode: "2", status: "success" }
+    ])).toEqual({ status: "success", message: "새 행 없음(지역 2곳 확인)" });
+  });
+
+  it("새 행이 없어도 지역 오류나 이월이 있으면 기존 실패 판정을 유지한다", () => {
+    expect(getGovCollectionOutcome("general_restaurants", ["1", "2"], 0, [
+      { areaCode: "1", status: "error" },
+      { areaCode: "2", status: "deferred" }
+    ])).toEqual({
+      status: "error",
+      message: "general_restaurants 수집 행이 없습니다. 오류 1곳 · 시간 예산 이월 1곳 · 2곳 다음 실행"
+    });
   });
 
   it("여러 회사 큐가 동시에 제출해도 전체 외부 요청은 2개를 넘지 않는다", async () => {
@@ -248,5 +268,110 @@ describe("splitGovTasksByTimeouts", () => {
   it("모든 작업이 둘 중 하나에 반드시 들어간다", () => {
     const { solo, regular } = splitGovTasksByTimeouts(tasks, { A: undefined, B: 5 });
     expect(solo.length + regular.length).toBe(tasks.length);
+  });
+});
+
+describe("CX-118 일반음식점 시간 초과 복구", () => {
+  it("20초 초과 뒤 재시도가 이월돼도 timeoutCount를 1 올리고 시도 둘을 남긴다", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(0);
+      const attempts: Array<{ pageSize: number; ms: number; result: "timeout" | "deferred" | "success" | "error" }> = [];
+      let call = 0;
+      const loading = loadGovAreaWithTimeoutRetry(async () => {
+        call += 1;
+        if (call === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 20_000));
+          throw new Error("request timeout");
+        }
+        throw new GovBudgetDeferredError();
+      }, 0, { firstPageSize: 20, retryPageSize: 20, onAttempt: (attempt) => attempts.push(attempt) });
+      const rejection = expect(loading).rejects.toBeInstanceOf(GovBudgetDeferredError);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await rejection;
+      expect(attempts).toEqual([
+        { pageSize: 20, ms: 20_000, result: "timeout" },
+        { pageSize: 20, ms: 0, result: "deferred" }
+      ]);
+      expect(updateGovTimeoutCounts(["slow"], {}, [{ areaCode: "slow", status: "deferred" }], { slow: attempts })).toEqual({ slow: 1 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("다음 일반음식점 실행은 20행을 쓰고 시간 초과 1회 지역을 단독으로 분리한다", async () => {
+    vi.useFakeTimers();
+    try {
+      const sizes: number[] = [];
+      await loadGovAreaWithTimeoutRetry(async (pageSize) => {
+        sizes.push(pageSize);
+        return "ok";
+      }, 1, { firstPageSize: 20, retryPageSize: 20 });
+      expect(sizes).toEqual([20]);
+      expect(splitGovTasksByTimeouts([{ areaCode: "slow" }, { areaCode: "fast" }], { slow: 1 }, 1)).toEqual({
+        solo: [{ areaCode: "slow" }],
+        regular: [{ areaCode: "fast" }]
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("두 번 막힌 첫 일반음식점 지역은 나머지 네 지역 실행 뒤로 보낸다", async () => {
+    vi.useFakeTimers();
+    try {
+      expect(shouldDeferBlockedGovFirstArea("general_restaurants", "slow", { slow: 1 })).toBe(false);
+      expect(shouldDeferBlockedGovFirstArea("general_restaurants", "slow", { slow: 2 })).toBe(true);
+      expect(prioritizeGovAreaCodes(["slow", "next", "last"], ["slow", "next"], "slow", false)).toEqual(["slow", "next", "last"]);
+      expect(prioritizeGovAreaCodes(["slow", "next", "last"], ["slow", "next"], "slow", "end")).toEqual(["next", "last", "slow"]);
+      const ordered = prioritizeGovAreaCodes(["slow", "2", "3", "4", "5"], ["slow"], "slow", "end");
+      expect(ordered).toEqual(["2", "3", "4", "5", "slow"]);
+      const tasks = buildGovAreaTasks(ordered, {}, "cutoff", "scan");
+      const { solo, regular } = splitGovTasksByTimeouts(tasks, { slow: 2 }, 1);
+      const calls: string[] = [];
+      const run = (selected: typeof tasks, concurrency: number) => runGovAreaTasks({
+        tasks: selected,
+        concurrency,
+        deadlineAt: 60_000,
+        now: () => 0,
+        load: async (task) => { calls.push(task.areaCode); return task.areaCode; }
+      });
+      await run(regular, 2);
+      await run(solo, 1);
+      expect(calls).toEqual(["2", "3", "4", "5", "slow"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("지역 수집 성공 시 기존 timeoutCount를 0으로 초기화한다", () => {
+    vi.useFakeTimers();
+    try {
+      expect(updateGovTimeoutCounts(["recovered"], { recovered: 2 }, [{ areaCode: "recovered", status: "success" }], {
+        recovered: [
+          { pageSize: 20, ms: 20_000, result: "timeout" },
+          { pageSize: 20, ms: 5, result: "success" }
+        ]
+      })).toEqual({ recovered: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("빵집·카페의 100→50행, 2회 단독, 기존 순서 회전을 유지한다", async () => {
+    vi.useFakeTimers();
+    try {
+      const sizes: number[] = [];
+      await loadGovAreaWithTimeoutRetry(async (pageSize) => {
+        sizes.push(pageSize);
+        if (sizes.length === 1) throw new Error("timeout");
+        return "ok";
+      });
+      expect(sizes).toEqual([100, 50]);
+      expect(splitGovTasksByTimeouts([{ areaCode: "cafe" }], { cafe: 1 }).regular).toEqual([{ areaCode: "cafe" }]);
+      expect(prioritizeGovAreaCodes(["cafe", "bakery"], ["cafe"], "cafe")).toEqual(["bakery", "cafe"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

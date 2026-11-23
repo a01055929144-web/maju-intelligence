@@ -17,6 +17,7 @@ export function updatePurchaseCosts(repository: PurchaseCostRepository) {
     async save(companyId: string, actorName: string, changes: PurchaseCostChange[]) {
       if (!Array.isArray(changes) || !changes.length || changes.length > 100) throw new Error("1~100개 품목을 선택해 주세요.");
       for (const change of changes) {
+        if (change.cost <= 0) throw new Error("0원 확인: 현재 매입가는 0원 또는 음수로 저장할 수 없습니다.");
         if (![change.cost, change.expectedCost].every((value) => Number.isFinite(value) && value >= 0 && value <= 1_000_000_000 && Number(value.toFixed(2)) === value)) throw new Error("매입가는 0~10억원, 소수 둘째 자리까지 입력해 주세요.");
       }
       let saved = 0;

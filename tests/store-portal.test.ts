@@ -3,7 +3,7 @@ import { issueDocumentShareToken } from "../lib/pricing/document-share-token";
 import { issueStoreLinkToken } from "../lib/pricing/store-link-token";
 import { NextRequest } from "next/server";
 
-const mocks = vi.hoisted(() => ({ db: vi.fn(), session: vi.fn(), active: vi.fn(), member: vi.fn(), allowed: vi.fn(), feature: vi.fn() }));
+const mocks = vi.hoisted(() => ({ db: vi.fn(), session: vi.fn(), active: vi.fn(), member: vi.fn(), allowed: vi.fn(), feature: vi.fn(), settlementAccount: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("../lib/auth", () => ({ getStoreSession: mocks.session, createOAuthState: async (value: string) => value,
   getCustomerSession: async () => null, getStoreMemberInvitationProof: async () => null,
@@ -17,6 +17,7 @@ vi.mock("../lib/store/08-store-cost-access", () => ({ hasActiveStoreMembership: 
 vi.mock("../lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: mocks.allowed }));
 vi.mock("@/lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: mocks.allowed }));
 vi.mock("../lib/store/07-store-address-management", () => ({ isStoreAddressCompanyEnabled: () => true }));
+vi.mock("../lib/store/07-store-settlement-account", () => ({ getStoreSettlementAccount: mocks.settlementAccount }));
 vi.mock("../lib/feature-flags", () => ({ isFeatureEnabled: mocks.feature }));
 import { hasAllowedStorePortalMembership, listStorePortalAccounts, listStorePortalOrders } from "../lib/store/07-store-portal";
 import { GET as startKakao } from "../app/api/auth/kakao/start/route";
@@ -32,6 +33,7 @@ beforeEach(() => {
   vi.clearAllMocks(); vi.stubEnv("STORE_LINK_SECRET", "synthetic-store-link-secret-over-32-characters");
   mocks.session.mockResolvedValue({ authUserId: "verified-user" });
   mocks.active.mockResolvedValue(true); mocks.allowed.mockReturnValue(true); mocks.feature.mockImplementation((feature: string) => feature !== "STORE_RECEIVED_DOCUMENTS_HOME");
+  mocks.settlementAccount.mockResolvedValue(null);
   mocks.db.mockImplementation(async (path: string) => {
     if (path.startsWith("store_account_members?")) return [{ company_id: companyId, store_account_id: storeAccountId, role: "owner", store_accounts: { customer_id: customerId } }];
     if (path.startsWith("normalized_customers?")) return [{ customer_name: "합성 매장" }];
@@ -53,6 +55,7 @@ describe("store portal", () => {
   it("shows only the signed member's active company and a matching issued link", async () => {
     const accounts = await listStorePortalAccounts();
     expect(accounts).toEqual([{ companyId, storeAccountId, customerName: "합성 매장", hasCostAccess: true,
+      settlementAccount: undefined,
       canManageMembers: true, canManageAddress: true, documents: [{
       title: "합성 단가표", kind: "sheet", href: `/store#${issueStoreLinkToken(linkId, nonce).token}`,
       canOrder: true, validUntil: "2099-01-01" }] }]);

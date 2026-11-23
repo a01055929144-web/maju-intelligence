@@ -7,6 +7,10 @@ export const COMMON_TABLE_PAGE_SIZES = {
   order: [50, 100, 300, 500],
 } as const;
 
+export function downloadableColumns<Column extends { exportable?: boolean }>(visible: readonly Column[], all: readonly Column[], includeAll: boolean) {
+  return (includeAll ? all : visible).filter((column) => column.exportable !== false);
+}
+
 export const COMMON_COLUMN_MIN_WIDTH = 80;
 export const COMMON_COLUMN_MAX_WIDTH = 640;
 

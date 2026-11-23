@@ -1,6 +1,8 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { publicDocumentLinkExpiry, documentLinkLastDay, publicDocumentOutput } from "../../domains/pricing/document-share";
-import type { DocumentContent, DocumentVersion } from "../../domains/pricing/document";
+import { mkdir } from "node:fs/promises";
+import { publicDocumentLinkExpiry, publicDocumentOutput } from "../../domains/pricing/document-share";
+import type { DocumentContent, DocumentVersion, DocumentOutput } from "../../domains/pricing/document";
+import { DEFAULT_DISPLAY, lineFromCatalog } from "../../domains/pricing/document";
 // CC-14: 휴대폰(≤640px)에서는 보조 버튼이 더보기 메뉴 안에 있다. PC는 툴바 버튼.
 const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) <= 640;
 async function toolbarAction(page: Page, name: string) {
@@ -20,6 +22,10 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   const companyId = "00000000-0000-4000-8000-000000000001", customerId = "80000000-0000-4000-8000-000000000001";
   let releaseOtherVersions: (() => void) | undefined, denyVersionRead = false;
   const product = { id: "30000000-0000-4000-8000-000000000001", name: "합성 공개 품목", displayName: "합성 공개 품목", brand: "합성 브랜드", spec: "18L", unit: "통", price: 1000, taxType: "exempt" };
+  let failOrderFooter = false;
+  let publishedRevision = 0;
+  let qrSettings = { position: "bottom-left", size: "normal" }, failQrSave = true;
+  const qrWrites: unknown[] = [];
   let content: DocumentContent | undefined, documentId = "", revision = 0, published = false, profileRead = false;
   let linkExpiresAt = "2099-01-01T00:00:00Z";
   let failPrepare = true, failSend = true, prepared = false, sent = false, revoked = false, readError = false, expiredPrice = false;
@@ -32,7 +38,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.addInitScript(() => { window.print = () => { void (window as Window & { fixturePrinted: () => Promise<void> }).fixturePrinted(); }; });
   const token = "synthetic-purpose-signed-token", publicUrl = `/pricing-document#${token}`;
   const draft = () => ({ id: documentId, revision, content, updatedAt: "2026-11-06T00:00:00Z", recalculation: { publishedAt: published ? "2026-11-06T00:00:00Z" : null, needsRecalculation: false, changedProductCount: 0 } });
-  const version = (): DocumentVersion => ({ id: versionId, documentId, version: 1, revision, content: publishedContent!, publishedAt: "2026-11-06T00:00:00Z", unavailablePromotions: [] });
+  const version = (): DocumentVersion => ({ id: versionId, documentId, version: 1, revision: publishedRevision, content: publishedContent!, publishedAt: "2026-11-06T00:00:00Z", unavailablePromotions: [] });
   const publicExpiry = () => publicDocumentLinkExpiry(version().content.validUntil);
   await page.route("**/api/pricing-store-links*", route => {
     if (route.request().method() === "POST") {
@@ -58,8 +64,21 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       // Deliberately replay an old document's response for the new selection.
       result = published ? [version()] : [];
     }
+    if (action === "order-footer") {
+      if (failOrderFooter) return route.fulfill({ status: 503, json: { message: "합성 주문 설정 읽기 실패" } });
+      result = [{ key: "next_day_cutoff_time", label: "주문 마감", place: "footer", value: url.searchParams.get("customerId") === customerId ? "당일 18:30" : "전날 23:59 (권역·매장별 예외)" },
+        { key: "delivery_weekdays", label: "배송 요일", place: "footer", value: url.searchParams.get("customerId") === customerId ? "화·목" : "권역·매장별 확인" }];
+    }
+    if (action === "qr-display") result = { id: documentId, revision, settings: qrSettings };
+    if (action === "save-qr-display") {
+      expect(b.id).toBe(documentId); expect(b.expected).toBe(revision); expect(b).not.toHaveProperty("content");
+      if (failQrSave) { failQrSave = false; return route.fulfill({ status: 409, json: { message: "합성 표시 설정 저장 실패" } }); }
+      const previousRevision = revision; qrSettings = b.settings; revision++; qrWrites.push(b);
+      content = { ...content!, display: { ...content!.display!, qr: b.settings } };
+      result = { id: documentId, previousRevision, revision, settings: qrSettings };
+    }
     if (action === "save") { content = b.content; documentId = b.id; revision++; result = draft(); }
-    if (action === "publish") { published = true; publishedContent = structuredClone(content!); result = version(); }
+    if (action === "publish") { publishedRevision = revision; published = true; publishedContent = structuredClone(content!); publishedContent.display = { ...DEFAULT_DISPLAY, ...publishedContent.display, info: [{ key: "next_day_cutoff_time", label: "주문 마감", place: "footer", value: "전날 00:00" }, { key: "delivery_weekdays", label: "배송 요일", place: "footer", value: "월" }] }; result = version(); }
     if (action === "prepare-share" && b.leadId === null) {
       publicInputs.push(b); expect(b).not.toHaveProperty("ttlDays");
       expect(b.documentId).toBe(documentId); expect(b.documentVersionId).toBe(versionId);
@@ -88,7 +107,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     }
     if (action === "revoke-share") { revoked = true; result = { shareLinkId, revoked: true }; }
     expect(url.pathname).not.toContain("store");
-    return route.fulfill({ json: { result, manager: true } });
+    return route.fulfill({ json: { result, manager: true, qrDisplayAvailable: true, orderFooterAvailable: true } });
   });
   const publicHandler = async (route: Route) => {
     expect(route.request().method()).toBe("POST"); expect(route.request().postDataJSON()).toEqual({ token });
@@ -121,7 +140,14 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.goto("/revenue/pricing/documents");
   await page.getByRole(isPhone(page) ? "listitem" : "row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   await expect(page.getByRole("region", { name: "리드 문서 공유", exact: true })).toHaveCount(0);
+  failOrderFooter = true;
   await (await toolbarAction(page, "미리보기·인쇄")).click();
+  const failedFooterPreview = page.getByRole("dialog", { name: "미리보기", exact: true });
+  await expect(failedFooterPreview.getByRole("alert")).toContainText("주문 설정을 불러오지 못했습니다");
+  await failedFooterPreview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
+  await expect(failedFooterPreview.getByRole("alert")).toContainText("주문 설정을 불러오지 못했습니다");
+  expect(printed).toBe(0);
+  failOrderFooter = false;
   await expect(page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "주문 링크 QR 만들기", exact: true })).toHaveCount(0);
   await page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
   await (await toolbarAction(page, "공개 링크·QR · 버전 1")).click();
@@ -142,12 +168,12 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true })).toBeVisible();
   await expect(preview.getByRole("combobox", { name: "QR을 받을 거래처", exact: true })).toHaveCount(0);
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
-  await expect(preview.getByRole("status")).toContainText("합성 공개 링크 재시도");
+  await expect(preview.getByRole("region", { name: "주문 링크 QR", exact: true }).getByRole("status")).toContainText("합성 공개 링크 재시도");
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
-  await expect(preview.getByRole("status")).toContainText("문서 응답을 확인하지 못했습니다");
+  await expect(preview.getByRole("region", { name: "주문 링크 QR", exact: true }).getByRole("status")).toContainText("문서 응답을 확인하지 못했습니다");
   await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveCount(0);
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
-  await expect(preview.getByRole("status")).toContainText("발급된 공개 주소를 확인하지 못했습니다");
+  await expect(preview.getByRole("region", { name: "주문 링크 QR", exact: true }).getByRole("status")).toContainText("발급된 공개 주소를 확인하지 못했습니다");
   await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveCount(0);
   await page.evaluate(() => {
     const original = HTMLCanvasElement.prototype.toDataURL;
@@ -155,26 +181,93 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     HTMLCanvasElement.prototype.toDataURL = () => { throw new Error("synthetic QR render failure"); };
   });
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
-  await expect(preview.getByRole("status")).toContainText("공개 링크는 발급됐지만 QR 이미지를 만들지 못했습니다");
+  await expect(preview.getByRole("region", { name: "주문 링크 QR", exact: true }).getByRole("status")).toContainText("공개 링크는 발급됐지만 QR 이미지를 만들지 못했습니다");
   await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveAttribute("href", new URL(publicUrl, page.url()).href);
   await expect(preview.getByRole("button", { name: "공개 링크 복사", exact: true })).toBeVisible();
   await page.evaluate(() => window.dispatchEvent(new Event("restore-synthetic-qr")));
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
-  await expect(preview.getByRole("status")).toContainText("거래처 선택 없이");
+  await expect(preview.getByRole("region", { name: "주문 링크 QR", exact: true }).getByRole("status")).toContainText("거래처 선택 없이");
   expect(publicInputs).toHaveLength(5); for (const input of publicInputs) expect(input).toEqual(publicInputs[0]);
   await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveAttribute("href", new URL(publicUrl, page.url()).href);
   await expect(preview.getByRole("img", { name: "공개 문서 주문 QR 미리보기", exact: true })).toHaveAttribute("src", /^data:image\/png;base64,/);
   await expect(preview.getByRole("button", { name: "공개 링크 복사", exact: true })).toBeVisible();
   expect(orderLinks).toBe(0); expect(deliveryRecords.size).toBe(0); expect(contactRecords.size).toBe(0);
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
-  await expect(preview.locator(".pricing-paper").first()).toContainText("QR로 문서를 열고 주문·가입을 시작하세요");
-  await expect(preview.locator(".pricing-paper").first()).toContainText(`가격·주문: ${version().content.validUntil}까지`);
-  await expect(preview.locator(".pricing-paper").first()).toContainText(`QR 품목 열람: ${documentLinkLastDay(publicExpiry())}까지`);
-  let signupReady = false, intentReady = false;
+  for (const surface of [".pricing-online", ".pricing-paper"]) {
+    await expect(preview.locator(surface).first().locator("footer")).toContainText("전날 23:59");
+    await expect(preview.locator(surface).first().locator("footer")).toContainText("권역·매장별 확인");
+    await expect(preview.locator(surface).first().locator("footer")).not.toContainText("전날 00:00");
+  }
+  const savedVersion = JSON.stringify(version());
+  const linkRequests = publicInputs.length;
+  const qr = preview.locator(".pricing-paper footer img").first();
+  await expect(qr).toBeVisible();
+  const qrSource = await qr.getAttribute("src");
+  const qrRow = qr.locator("..");
+  await expect(qrRow).toHaveText("");
+  await expect(preview.locator(".pricing-online footer img").locator("..")).toHaveText("");
+  await preview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
+  await expect(qr).toHaveAttribute("src", qrSource!);
+  expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+  const cx128Artifacts = "test-results/readonly-pg17/cx128-b";
+  await mkdir(cx128Artifacts, { recursive: true });
+  await page.screenshot({ path: `${cx128Artifacts}/cx128-${kind}-${width}.png`, fullPage: true });
+  if (width === 1440) await page.pdf({ path: `${cx128Artifacts}/cx128-${kind}-a4.pdf`, format: "A4", printBackground: true });
+  const cx128AArtifacts = "test-results/readonly-pg17/cx128-a";
+  await mkdir(cx128AArtifacts, { recursive: true });
+  const positionControl = preview.getByRole("combobox", { name: "QR 위치", exact: true });
+  const sizeControl = preview.getByRole("combobox", { name: "QR 크기", exact: true });
+  await expect(positionControl).toHaveValue("bottom-left"); await expect(sizeControl).toHaveValue("normal");
+  for (const position of ["bottom-left", "bottom-right", "top-right", "top-left"]) {
+    await positionControl.selectOption(position);
+    for (const size of ["small", "normal", "large"]) {
+      await sizeControl.selectOption(size);
+      const saveQr = preview.getByRole("button", { name: "QR 표시 설정 저장", exact: true });
+      await saveQr.click();
+      if (failQrSave === false && qrWrites.length === 0) {
+        await expect(preview.getByRole("alert")).toContainText("합성 표시 설정 저장 실패");
+        expect(qrSettings).toEqual({ position: "bottom-left", size: "normal" });
+        await saveQr.click();
+      }
+      await expect(preview.getByRole("status", { name: "QR 표시 설정 저장 결과", exact: true })).toBeVisible();
+      const rendered = preview.locator(".pricing-paper [data-document-qr]").first();
+      await expect(rendered).toHaveAttribute("data-qr-position", position);
+      await expect(rendered).toHaveAttribute("data-qr-size", size);
+      await expect(rendered.locator("img")).toHaveAttribute("src", qrSource!);
+      const metrics = await rendered.evaluate(element => {
+        const box = element.getBoundingClientRect(), image = element.querySelector("img")!.getBoundingClientRect();
+        const paper = element.closest(".pricing-paper")!, output = paper.querySelector(".pricing-output-content")!;
+        const style = getComputedStyle(paper);
+        return { left: image.left - box.left, right: box.right - image.right, size: image.width, top: element === output.firstElementChild,
+          content: output.getBoundingClientRect().height, available: paper.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) };
+      });
+      expect(position.endsWith("left") ? metrics.left : metrics.right).toBeLessThan(2);
+      expect(metrics.top).toBe(position.startsWith("top"));
+      expect(metrics.size).toBeCloseTo(({ small: 24, normal: 30, large: 36 }[size as "small" | "normal" | "large"]) * 96 / 25.4, 0);
+      expect(metrics.content).toBeLessThanOrEqual(metrics.available + 2);
+      await expect(preview.locator(".pricing-online [data-document-qr]")).toHaveAttribute("data-qr-position", position);
+      await expect(preview.locator(".pricing-online [data-document-qr]")).toHaveAttribute("data-qr-size", size);
+      expect((await preview.locator(".pricing-online [data-document-qr] img").boundingBox())!.width).toBe(({ small: 96, normal: 128, large: 160 }[size as "small" | "normal" | "large"]));
+      expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
+    }
+    await preview.locator(width === 390 ? ".pricing-online" : ".pricing-paper").first().screenshot({ path: cx128AArtifacts + "/cx128-a-" + kind + "-" + width + "-" + position + ".png" });
+    if (width === 1440) await page.pdf({ path: cx128AArtifacts + "/cx128-a-" + kind + "-" + position + ".pdf", format: "A4", printBackground: true });
+  }
+  const paperDownload = page.waitForEvent("download", { timeout: 60_000 });
+  await preview.getByRole("button", { name: "1쪽 PNG 저장", exact: true }).click();
+  await (await paperDownload).saveAs(cx128AArtifacts + "/cx128-a-" + kind + "-" + width + "-export.png");
+  expect(qrWrites).toHaveLength(12); expect(publicInputs).toHaveLength(linkRequests);
+  expect(JSON.stringify(version())).toBe(savedVersion);
+  let signupReady = false, intentReady = false, publicOrderFooterFailure = false;
   const publicViewer = await browser.newPage({ viewport: { width, height: 900 } });
   await publicViewer.route("**/api/pricing-documents/public", route => publicRevoked
     ? route.fulfill({ status: 404, json: { message: "공유 문서를 사용할 수 없습니다." } })
     : route.fulfill({ json: { document: publicDocumentOutput(version()), expiresAt: publicExpiry(), acceptanceAvailable: false,
+      orderFooter: publicOrderFooterFailure ? { status: "unavailable" } : { status: "available", items: [
+        { key: "next_day_cutoff_time", label: "주문 마감", place: "footer", value: "전날 23:59 (권역·매장별 예외)" },
+        { key: "delivery_weekdays", label: "배송 요일", place: "footer", value: "권역·매장별 확인" },
+      ] },
       orderEntry: { available: signupReady, companyName: content!.companyName, title: content!.title, version: 1 } } }));
   await publicViewer.route("**/api/pricing-documents/order-intent", route => {
     expect(route.request().postDataJSON()).toEqual({ token });
@@ -182,34 +275,44 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       : route.fulfill({ status: 503, json: { message: "카카오 가입 연결 준비 중입니다. 현재 주문은 접수되지 않습니다." } });
   });
   await publicViewer.goto(new URL(publicUrl, page.url()).href);
-  await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
+  await expect(publicViewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible();
+  const publicPolicy = publicViewer.getByRole("region", { name: "현재 주문·배송 기준", exact: true });
+  await expect(publicPolicy).toContainText("전날 23:59"); await expect(publicPolicy).toContainText("권역·매장별 확인");
+  await expect(publicViewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
+  publicOrderFooterFailure = true; await publicViewer.reload();
+  await expect(publicPolicy).toContainText("주문·배송 설정을 확인하지 못했습니다");
+  await expect(publicViewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
+  publicOrderFooterFailure = false; await publicPolicy.getByRole("button", { name: "주문·배송 설정 다시 확인", exact: true }).click();
+  await expect(publicPolicy).toContainText("전날 23:59");
+  expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
+  await publicViewer.screenshot({ path: cx128AArtifacts + "/cx129-public-" + kind + "-" + width + ".png", fullPage: true });
   const order = publicViewer.getByRole("region", { name: "공개 문서 주문 안내" });
   await expect(order.getByRole("button", { name: "주문 연결 준비 중", exact: true })).toBeDisabled();
   signupReady = true;
-  await publicViewer.getByRole("button", { name: "다시 확인", exact: true }).click();
-  await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).click();
+  await publicViewer.reload();
+  await order.getByRole("button", { name: "이 단가로 주문 시작", exact: true }).click();
   await expect(order.getByRole("status")).toContainText("현재 주문은 접수되지 않습니다");
   expect(await publicViewer.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
-  expect((await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect((await order.getByRole("button", { name: "이 단가로 주문 시작", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await publicViewer.screenshot({ path: info.outputPath(`public-order-entry-${kind}-${width}.png`), fullPage: true });
   intentReady = true;
   await publicViewer.route(url => url.pathname === "/store/activate", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: "<!doctype html><meta charset=\"utf-8\"><h1>합성 07 점주 가입</h1>" }));
-  await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).click();
+  await order.getByRole("button", { name: "이 단가로 주문 시작", exact: true }).click();
   await expect(publicViewer).toHaveURL(/\/store\/activate#synthetic\.intent$/);
   await expect(publicViewer.getByRole("heading", { name: "합성 07 점주 가입" })).toBeVisible();
   await publicViewer.clock.install({ time: new Date(`${version().content.validUntil}T14:59:59Z`) });
   await publicViewer.goto(new URL(publicUrl, page.url()).href);
-  await expect(publicViewer.getByText("1,000원", { exact: true })).toBeVisible();
+  await expect(publicViewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
   await publicViewer.clock.fastForward(2_000);
   await expect(publicViewer.getByRole("status")).toContainText("가격·주문 유효기간이 지났습니다");
-  await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
-  await expect(publicViewer.getByText("1,000원", { exact: true })).toHaveCount(0);
+  await expect(publicViewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(publicViewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await expect(publicViewer.getByRole("button", { name: "주문 기간 종료", exact: true })).toBeDisabled();
   await publicViewer.clock.setSystemTime(new Date(Date.parse(publicExpiry()) + 1000));
   expect(await publicViewer.evaluate(() => Date.now())).toBeGreaterThanOrEqual(Date.parse(publicExpiry()));
   await publicViewer.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(publicViewer.getByRole("status")).toContainText("링크 열람기간이 끝났습니다");
-  await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
+  await expect(publicViewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await preview.getByText("관리 · 회수와 기존 거래처 전용 QR", { exact: true }).click();
   await preview.getByRole("button", { name: "공개 링크 회수", exact: true }).click();
   await publicViewer.goto(new URL(publicUrl, page.url()).href);
@@ -220,14 +323,23 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await preview.getByRole("button", { name: "선택 거래처 QR 생성", exact: true }).click();
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
   await expect(preview.locator(".pricing-paper").first().getByRole("img", { name: "합성 QR 매장 주문 링크 QR", exact: true })).toBeVisible();
+  for (const surface of [".pricing-online", ".pricing-paper"]) {
+    await expect(preview.locator(surface).first().locator("footer")).toContainText("당일 18:30");
+    await expect(preview.locator(surface).first().locator("footer")).toContainText("화·목");
+  }
   await preview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
-  await expect.poll(() => printed).toBe(1);
+  await expect.poll(() => printed).toBe(2);
   const qrDownload = page.waitForEvent("download");
   await preview.getByRole("button", { name: "QR PNG 저장", exact: true }).click();
   expect((await qrDownload).suggestedFilename()).toBe("order-qr-v1.png");
   expect(orderLinks).toBe(1); expect(deliveryRecords.size).toBe(0); expect(contactRecords.size).toBe(0);
   expect(JSON.stringify(version())).toBe(frozenVersion);
   await page.screenshot({ path: info.outputPath(`stage-b-print-qr-${kind}-${width}.png`), fullPage: true });
+  await preview.getByRole("button", { name: "닫기", exact: true }).click();
+  await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
+  await expect(preview.getByRole("combobox", { name: "QR 위치", exact: true })).toHaveValue("top-left");
+  await expect(preview.getByRole("combobox", { name: "QR 크기", exact: true })).toHaveValue("large");
+  expect(orderLinks).toBe(1); expect(publicInputs).toHaveLength(linkRequests);
   await preview.getByRole("button", { name: "닫기", exact: true }).click();
   await page.goto(`/revenue/pricing/documents?start=${kind}&leadId=${leadId}`);
   await page.getByRole("dialog", { name: "새 문서 시작", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
@@ -248,8 +360,8 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await viewer.route("**/api/pricing-documents/public", publicHandler);
   await viewer.clock.install({ time: new Date("2026-11-08T00:00:00Z") });
   await viewer.goto(new URL(publicUrl, page.url()).href);
-  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
-  await expect(viewer.getByText("1,000원", { exact: true })).toBeVisible();
+  await expect(viewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
   expect(deliveryRecords.size).toBe(0); expect(contactRecords.size).toBe(0);
   await share.getByRole("checkbox").check();
   await share.getByRole("button", { name: "실제 전달 완료 기록", exact: true }).click();
@@ -265,30 +377,30 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   await page.screenshot({ path: info.outputPath(`lead-share-${kind}-${width}.png`), fullPage: true });
   await viewer.reload();
-  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
-  await expect(viewer.getByText("1,000원", { exact: true })).toBeVisible();
-  await expect(viewer.getByText(/^18L\s*(?:·\s*)?통$/)).toBeVisible();
+  await expect(viewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(viewer.getByText(/^18L\s*(?:·\s*)?통(?: \/|$)/).filter({ visible: true })).toBeVisible();
   await expect(viewer.getByText(/PRIVATE-|CANARY/)).toHaveCount(0);
   expect(await viewer.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
-  expect((await viewer.getByRole("button", { name: "다시 확인", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await expect(viewer.getByRole("button", { name: "다시 확인", exact: true })).toHaveCount(0);
   await viewer.screenshot({ path: info.outputPath(`public-${kind}-${width}.png`), fullPage: true });
-  readError = true; await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
-  await expect(viewer.getByRole("status")).toContainText("합성 열람 확인 실패"); await expect(viewer.getByText("1,000원", { exact: true })).toHaveCount(0);
+  readError = true; await viewer.reload();
+  await expect(viewer.getByRole("status")).toContainText("합성 열람 확인 실패"); await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toHaveCount(0);
   readError = false; linkExpiresAt = "2026-11-08T00:01:00Z";
   await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
-  await expect(viewer.getByText("1,000원", { exact: true })).toBeVisible();
+  await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
   await viewer.clock.fastForward(61_000);
   await expect(viewer.getByRole("status")).toContainText("링크 열람기간이 끝났습니다");
-  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
-  await expect(viewer.getByText("1,000원", { exact: true })).toHaveCount(0);
-  linkExpiresAt = "2099-01-01T00:00:00Z"; expiredPrice = true; await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
-  await expect(viewer.getByText("유효기간이 지나 가격을 표시하지 않습니다.", { exact: true })).toBeVisible();
-  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toBeVisible(); await expect(viewer.getByText("1,000원", { exact: true })).toHaveCount(0);
+  await expect(viewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toHaveCount(0);
+  await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toHaveCount(0);
+  linkExpiresAt = "2099-01-01T00:00:00Z"; expiredPrice = true; await viewer.reload();
+  await expect(viewer.getByText("유효기간이 지나 가격을 표시하지 않습니다.", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(viewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible(); await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await share.getByRole("button", { name: "링크 회수", exact: true }).click();
   await expect(share.getByRole("status")).toContainText("링크를 회수했습니다");
   expect(revoked).toBe(true);
   await viewer.reload(); await expect(viewer.getByRole("status")).toContainText("공유 문서를 사용할 수 없습니다");
-  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
+  await expect(viewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await viewerContext.close();
   const prepareCount = prepareInputs.length;
   await page.getByRole("button", { name: "← 문서 목록", exact: true }).click();
@@ -310,4 +422,83 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(history).toContainText("합성 담당");
   await page.screenshot({ path: info.outputPath(`lead-contact-${kind}-${width}.png`), fullPage: true });
 
+});
+
+test("CX-45 keeps mobile prices on one line and preserves print columns", async ({ page }, info) => {
+  const lines = Array.from({ length: 16 }, (_, index) => ({
+    displayName: index ? `합성 완숙 토마토 ${index}` : "합성 특대 새우 베트남",
+    spec: "1kg", unit: "봉", brand: "", price: 29700, badge: "",
+  }));
+  await page.route("**/api/pricing-documents/public", route => route.fulfill({ json: {
+    expiresAt: "2099-12-31T15:00:00Z",
+    document: {
+      title: "합성 공개 단가표", companyName: "합성 유통", kind: "sheet", layout: "table", theme: "green",
+      display: { columns: 2, info: [], productWidth: 65, promoLayout: "table", priceIncludesTax: false },
+      validUntil: "2099-12-31", publishedAt: "2026-11-16T00:00:00Z", version: 1, expired: false, lines,
+    },
+    orderEntry: { available: true },
+  } }));
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto("/pricing-document#cx45");
+  const list = page.getByRole("region", { name: "문서 품목" });
+  await expect(list.getByRole("listitem")).toHaveCount(16);
+  const price = list.getByText("29,700원", { exact: true }).first();
+  await expect(price).toHaveCSS("white-space", "nowrap");
+  expect((await price.boundingBox())!.height).toBeLessThan(28);
+  await expect(list.getByText(lines[0].displayName, { exact: true })).toHaveCSS("word-break", "keep-all");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  const order = page.getByRole("button", { name: "이 단가로 주문 시작", exact: true });
+  const position = await order.boundingBox();
+  expect(position?.height).toBe(48);
+  await page.screenshot({ path: info.outputPath("cx45-390-after.png") });
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  expect(await order.boundingBox()).toEqual(position);
+  const search = page.getByRole("searchbox", { name: "문서 품목 검색" });
+  await search.fill("특대 새우");
+  await expect(list.getByRole("listitem")).toHaveCount(1);
+  await search.press("Escape");
+  await expect(list.getByRole("listitem")).toHaveCount(16);
+  for (const width of [768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(list).toBeHidden();
+    await expect(page.getByRole("table")).toHaveCount(2);
+  }
+  await page.setViewportSize({ width: 390, height: 700 });
+  await search.fill("특대 새우");
+  await page.emulateMedia({ media: "print" });
+  await expect(search).toBeHidden();
+  await expect(order).toBeHidden();
+  await expect(page.getByRole("table")).toHaveCount(2);
+  await expect(page.getByRole("table").getByText("합성 완숙 토마토 15")).toBeVisible();
+});
+
+
+for (const width of [1440, 390]) test(`public document excludes legacy settlement info on screen and print at ${width}px`, async ({ page }, info) => {
+  const marker = 'PRIVATE-DOCUMENT-INFO-CANARY';
+  const content: DocumentContent = {
+    kind: 'sheet', title: 'Synthetic public document', companyName: 'Synthetic distributor', contact: '', recipient: '', footer: '',
+    validUntil: '2099-12-31', theme: 'blue', layout: 'table', showPrice: true, showBrand: true, showSpec: true,
+    display: { ...DEFAULT_DISPLAY, info: [] },
+    lines: [lineFromCatalog({ id: '10000000-0000-4000-8000-000000000001', name: 'Synthetic product', displayName: 'Synthetic product', brand: '', spec: '1L', unit: 'BOX', price: 1200, taxType: 'exempt' })],
+  };
+  const document: DocumentOutput = publicDocumentOutput({ id: '10000000-0000-4000-8000-000000000002', documentId: '10000000-0000-4000-8000-000000000003',
+    version: 1, revision: 1, publishedAt: '2026-11-18T00:00:00Z', unavailablePromotions: [], content });
+  // Deliberately emulate a legacy/unsafe response to exercise the render boundary too.
+  document.display.info = [
+    { key: 'delivery_time_window', label: 'Delivery window', value: 'SAFE-DELIVERY-CANARY', place: 'footer' },
+    ...['settlement_account', 'settlement_bank', 'settlement_account_number', 'settlement_account_holder'].map(key => ({ key, label: 'Private info', value: marker, place: 'footer' as const })),
+  ];
+  await page.route('**/api/pricing-documents/public', route => route.fulfill({ json: { document, expiresAt: '2099-12-31T15:00:00Z',
+    acceptanceAvailable: false, orderEntry: { available: true, companyName: content.companyName, title: content.title, version: 1 } } }));
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto('/pricing-document#synthetic-account-boundary');
+  const title = page.getByText('Synthetic public document', { exact: true });
+  await expect(width === 390 ? title.first() : title.last()).toBeVisible();
+  await expect(page.locator('body')).not.toContainText(marker);
+  await expect(page.locator('body')).toContainText('SAFE-DELIVERY-CANARY');
+  expect(await page.evaluate(() => window.document.documentElement.scrollWidth)).toBe(width);
+  await page.screenshot({ path: info.outputPath(`public-account-boundary-${width}.png`) });
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('body')).not.toContainText(marker);
+  await expect(page.getByText('Delivery window · SAFE-DELIVERY-CANARY', { exact: true })).toBeVisible();
 });

@@ -44,7 +44,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getDefaultVisitFollowUpDate, needsVisitFollowUp, STANDARD_VISIT_RESULTS, VISIT_RESULT_ACTION_TYPE } from "@/domains/lead/visit-results";
 import { formatLeadBusinessHours, getLeadVisitAvailability } from "@/domains/lead/business-hours";
-import { formatKoreanPhoneNumber, getSafeNaverTalktalkUrl, isMobilePhoneNumber } from "@/domains/lead/contact-channels";
+import { formatKoreanPhoneNumber, getSafeNaverTalktalkUrl, isMobilePhoneNumber, type LeadContactFilterChannel } from "@/domains/lead/contact-channels";
 import { compareLeadListDefault, formatLeadOpenDateAge, leadPriorityBadge } from "@/domains/lead/lead-list";
 import { displayLeadNextAction, isLeadUncontacted } from "@/domains/lead/next-action";
 import { leadDocumentEntryHref, type LeadDocumentEntryAccess } from "@/domains/lead/document-entry";
@@ -61,11 +61,13 @@ import { LoadingState } from "@/components/ui/state";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SalesAreaSelector } from "@/components/sales-area-selector";
-import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
+import { LeadContactChannelsPanel, type LeadContactChannelTarget } from "@/components/lead-contact-channels-panel";
 import { LeadStageSelect } from "@/components/lead-stage-select";
 import { InstagramCandidateFinder } from "@/components/instagram-candidate-finder";
 import { GovSyncOverview } from "@/components/gov-sync-overview";
 import { LeadRouteStopButton } from "@/components/lead-route-stop-button";
+import { LeadFavoriteButton, LeadFavoriteFilter } from "@/components/lead-favorite-button";
+import { useLeadFavorites } from "@/components/use-lead-favorites";
 import { PlaceLinkBadges } from "@/components/place-link-badges";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
@@ -213,6 +215,8 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   const [leadPage, setLeadPage] = useState(1);
   const [leadPageSize, setLeadPageSize] = useState<ListPageSize>(30);
   const [showMoreLeadColumns, setShowMoreLeadColumns] = useState(false);
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const favorites = useLeadFavorites(leads.map((lead) => lead.id));
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -462,8 +466,44 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     if (initialLeadId) params.set("leadId", initialLeadId);
     if (targetType === "distributor") params.set("targetType", "distributor");
 
-    fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" }, 12000)
-      .then((response) => (response.ok ? response.json() : null))
+    const contactChannel: LeadContactFilterChannel | undefined = hasPhoneOnly
+      ? "sms"
+      : hasInstagramOnly
+        ? "instagram"
+        : hasTalktalkOnly
+          ? "talktalk"
+          : hasEmailOnly
+            ? "email"
+            : hasFaxOnly
+              ? "fax"
+              : undefined;
+    if (contactChannel) {
+      params.set("contactChannel", contactChannel);
+      params.set("pageSize", "50");
+    }
+
+    const fetchLeadPage = async (page: number) => {
+      const pageParams = new URLSearchParams(params);
+      if (contactChannel) pageParams.set("page", String(page));
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits?${pageParams.toString()}`), { cache: "no-store" }, 12000);
+      if (!response.ok) throw new Error("리드를 불러오지 못했습니다.");
+      return response.json();
+    };
+
+    const fetchCompanyWideLeads = async () => {
+      const first = await fetchLeadPage(1);
+      if (!contactChannel) return first;
+      const total = Number(first?.total) || 0;
+      const allLeads = Array.isArray(first?.leads) ? [...first.leads] : [];
+      const totalPages = Math.ceil(total / 50);
+      for (let page = 2; page <= totalPages; page += 1) {
+        const payload = await fetchLeadPage(page);
+        if (Array.isArray(payload?.leads)) allLeads.push(...payload.leads);
+      }
+      return { ...first, leads: allLeads, page: 1, pageSize: 50, total };
+    };
+
+    void fetchCompanyWideLeads()
       .then((payload) => {
         if (!payload) {
           setLoadState("error");
@@ -480,7 +520,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
       })
       .catch(() => setLoadState("error"))
       .finally(() => setRefreshingLeads(false));
-  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, initialLeadId, showExistingCustomers, showOutsideSalesArea, showTemporaryOperations, targetType]);
+  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, excludeExcluded, initialLeadId, showExistingCustomers, showOutsideSalesArea, showTemporaryOperations, targetType]);
 
   useEffect(() => {
     loadLeads();
@@ -655,6 +695,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     return leads
       .filter((lead) => showClosedOrNonTarget || (lead.isActive && lead.isTargetIndustry && !isClosedLead(lead)))
       .filter((lead) => !showNearbyOnly || nearbyLeadIds.has(lead.id))
+      .filter((lead) => !favoriteOnly || favorites.favoriteIds.has(lead.id))
       .filter((lead) => leadTypeFilter === "all" || getPermitLeadType(lead) === leadTypeFilter)
       .filter((lead) => isPermitLeadInOpenDateFilter(lead, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd))
       .filter((lead) => !actionFilter || !["오늘 문자", "오늘 DM"].includes(actionFilter) || displayLeadNextAction(lead) === actionFilter)
@@ -690,7 +731,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
               return text.includes(keyword) || (normalizedKeyword && normalizeLeadSearchToken(text).includes(normalizedKeyword));
             })
       );
-  }, [actionFilter, leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter, regionFilter, sizeFilter, reminderOnly]);
+  }, [actionFilter, leads, tableSearch, showNearbyOnly, nearbyLeadIds, favoriteOnly, favorites.favoriteIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter, regionFilter, sizeFilter, reminderOnly]);
   const regionOptions = useMemo(() => {
     const counts = new Map<string, number>();
     leads.forEach((lead) => { const label = getLeadSigunguLabel(lead.address); if (label) counts.set(label, (counts.get(label) || 0) + 1); });
@@ -2092,6 +2133,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
+            <LeadFavoriteFilter active={favoriteOnly} count={favorites.favoriteIds.size} error={favorites.error} onChange={() => setFavoriteOnly((value) => !value)} onRetry={favorites.retry} status={favorites.status} />
             {(["table", "map"] as const).map((mode) => (
               <button
                 className={`rounded-md border px-3 py-1.5 text-xs font-black transition ${
@@ -2264,15 +2306,15 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             </div>
           ) : !filteredLeads.length ? (
             <div className="rounded-md border border-dashed border-slate-200 bg-white p-8 text-center">
-              <p className="text-sm font-bold text-slate-600">{leads.length ? "현재 조건에 맞는 리드가 없습니다." : "아직 등록된 신규 리드가 없습니다."}</p>
+              <p className="text-sm font-bold text-slate-600">{favoriteOnly ? "즐겨찾기한 리드가 없습니다." : hasActiveLeadFilters ? "현재 조건에 맞는 리드가 없습니다." : "아직 등록된 신규 리드가 없습니다."}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">
-                {leads.length && hasActiveLeadFilters
+                {hasActiveLeadFilters
                   ? openDateFilterMode !== "all"
                     ? `${openDateFilterLabel} 기준에 맞는 리드가 없습니다. 기간을 넓히거나 필터를 초기화하세요.`
                     : "검색어, 업종, 액션, 상태 조건을 줄이면 리드를 다시 확인할 수 있습니다."
                   : "사업자 인허가 데이터를 업로드하면 여기에 표시됩니다."}
               </p>
-              {leads.length && hasActiveLeadFilters ? (
+              {hasActiveLeadFilters ? (
                 <button className="maju-button-secondary mx-auto mt-4 h-9 justify-center px-3 text-xs" onClick={clearLeadFilters} type="button">
                   필터 초기화
                 </button>
@@ -2641,6 +2683,12 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-nowrap items-center justify-end gap-1">
+                            {favorites.status === "ready" ? <LeadFavoriteButton
+                              busy={favorites.busyLeadId === lead.id}
+                              leadName={lead.businessName}
+                              onToggle={() => void favorites.toggle(lead.id)}
+                              starred={favorites.favoriteIds.has(lead.id)}
+                            /> : null}
                             <button
                               aria-label={`${lead.businessName} 관심 없음 · 숨김 처리`}
                               className="maju-icon-btn grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
@@ -2969,6 +3017,7 @@ function PermitLeadDetailPanel({
   const [historyVisibleCount, setHistoryVisibleCount] = useState(5);
   const [savingAction, setSavingAction] = useState("");
   const [detailActionMessage, setDetailActionMessage] = useState("");
+  const [requestedContactChannel, setRequestedContactChannel] = useState<{ channel: LeadContactChannelTarget; requestId: number } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(Boolean(intent));
   const [detailTab, setDetailTab] = useState<"overview" | "delivery" | "sales" | "files" | "changes">("overview");
@@ -3501,27 +3550,63 @@ function PermitLeadDetailPanel({
               {detailActionMessage}
             </p>
           ) : null}
-          <div className="grid grid-cols-4 gap-2">
-            <PermitLeadActionRailButton
-              disabled={!lead.phone || Boolean(savingAction)}
-              icon={Phone}
-              label="전화"
-              loading={savingAction === "통화 성공"}
-              onClick={() => void recordAction("call", "통화 성공")}
-              primary={intent === "call"}
-            />
-            <PermitLeadActionRailButton icon={Instagram} label="DM 문구" onClick={() => void copyDmScript()} primary={intent === "dm"} />
-            {onOpenQuote ? <PermitLeadActionRailButton icon={FileImage} label="견적" onClick={openQuoteDraft} primary={intent === "followup"} /> : <span />}
-            <PermitLeadActionRailButton
-              disabled={converting || Boolean(convertedCustomerId)}
-              icon={UserCheck}
-              label={convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처" : "전환 완료") : conversionFailed ? "거래처 연결 다시 시도" : "거래처 전환"}
-              loading={converting}
-              onClick={() => void convertLeadToCustomer()}
-            />
+          <div aria-label="연락 채널 바로가기" className="flex flex-wrap items-stretch justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2">
+            <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+              {([
+                ["visit", "방문", lead.address, Boolean(lead.address), false],
+                ["contact", "연락처", isMobilePhoneNumber(lead.phone) ? formatKoreanPhoneNumber(lead.phone) : "", isMobilePhoneNumber(lead.phone), false],
+                ["kakao", "카톡", lead.phone ? formatKoreanPhoneNumber(lead.phone) : "", true, false],
+                ["instagram", "인스타 DM", lead.instagramUrl || "", true, true],
+                ["talktalk", "네이버 톡톡", lead.naverTalktalkUrl || "", true, true],
+                ["email", "이메일", lead.email || "", true, true],
+                ["fax", "팩스", lead.fax ? formatKoreanPhoneNumber(lead.fax) : "", true, true]
+              ] as Array<[LeadContactChannelTarget, string, string, boolean, boolean]>).map(([channel, label, value, available, editable]) => {
+                const content = (
+                  <>
+                    <span className="block text-[11px] font-black text-slate-900">{label}</span>
+                    <span className={`block max-w-32 truncate text-[10px] font-bold ${value ? "text-slate-600" : editable ? "text-teal-700" : "text-slate-400"}`}>
+                      {value || (editable ? "[입력]" : <span aria-hidden="true">&nbsp;</span>)}
+                    </span>
+                  </>
+                );
+                return available ? (
+                  <button
+                    className="min-h-11 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left hover:border-teal-400 hover:bg-teal-50"
+                    key={channel}
+                    onClick={() => setRequestedContactChannel({ channel, requestId: Date.now() })}
+                    type="button"
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div aria-disabled="true" className="min-h-11 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left opacity-60" key={channel}>
+                    {content}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-1.5 sm:flex">
+              <PermitLeadActionRailButton
+                disabled={!lead.phone || Boolean(savingAction)}
+                icon={Phone}
+                label="전화"
+                loading={savingAction === "통화 성공"}
+                onClick={() => void recordAction("call", "통화 성공")}
+                primary={intent === "call"}
+              />
+              <PermitLeadActionRailButton icon={Instagram} label="DM 문구" onClick={() => void copyDmScript()} primary={intent === "dm"} />
+              {onOpenQuote ? <PermitLeadActionRailButton icon={FileImage} label="견적" onClick={openQuoteDraft} primary={intent === "followup"} /> : null}
+              <PermitLeadActionRailButton
+                disabled={converting || Boolean(convertedCustomerId)}
+                icon={UserCheck}
+                label={convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처" : "전환 완료") : conversionFailed ? "거래처 연결 다시 시도" : "거래처 전환"}
+                loading={converting}
+                onClick={() => void convertLeadToCustomer()}
+              />
+            </div>
           </div>
 
-          <LeadContactChannelsPanel lead={lead} onAction={onAction} onLeadUpdated={onLeadUpdated} />
+          <LeadContactChannelsPanel lead={lead} onAction={onAction} onLeadUpdated={onLeadUpdated} requestedChannel={requestedContactChannel} />
 
           {convertedCustomerId ? (
             <div className="rounded-xl border border-teal-200 bg-teal-50/50 p-3">

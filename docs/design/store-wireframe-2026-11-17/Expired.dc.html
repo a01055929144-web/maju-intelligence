@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>⑦ 기간 지난 단가표</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap">
+<style>html,body{margin:0;overflow-x:hidden}*{box-sizing:border-box}</style>
+</helmet>
+<div style="width: 100%; max-width: 390px; height: 844px; overflow: hidden; background: #f4f5f6; font-family: 'Noto Sans KR', sans-serif; color: #111827; display: flex; flex-direction: column">
+<header style="background: #ffffff; padding: 10px 12px; border-bottom: 1px solid #e5e7eb"><p style="margin: 0; font-size: 13px; color: #4b5563">[유통사 1] · 11/01 ~ 11/15 (끝남)</p><p style="margin: 0; font-size: 18px; font-weight: 700">⑦ 기간 지난 단가표</p></header>
+<div style="flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 10px; display: flex; flex-direction: column; gap: 8px"><section style="background: #ffffff; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0"><div style="opacity: 0.45"><div style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3f4f6"><div style="flex: 1; min-width: 0"><p style="margin: 0; font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">[품목 A] </p><p style="margin: 0; font-size: 13px; color: #4b5563">1kg · 봉 · <strong style="color: #111827">[단가]</strong></p></div><span style="display: inline-flex; align-items: center; gap: 4px"><button type="button" aria-label="빼기" style="width: 32px; height: 32px; border: 1px solid #d1d5db; border-radius: 6px; background: #ffffff; font-family: inherit">−</button><label for="x[품목 A]" style="position: absolute; left: -9999px">수량</label><input id="x[품목 A]" type="number" value="0" style="width: 40px; height: 32px; border: 1px solid #d1d5db; border-radius: 6px; text-align: right; padding: 0 6px; font-size: 15px; font-family: inherit"><button type="button" aria-label="더하기" style="width: 32px; height: 32px; border: 1px solid #d1d5db; border-radius: 6px; background: #ffffff; font-family: inherit">＋</button></span></div><div style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f3f4f6"><div style="flex: 1; min-width: 0"><p style="margin: 0; font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">[품목 B] </p><p style="margin: 0; font-size: 13px; color: #4b5563">10kg · 박스 · <strong style="color: #111827">[단가]</strong></p></div><span style="display: inline-flex; align-items: center; gap: 4px"><button type="button" aria-label="빼기" style="width: 32px; height: 32px; border: 1px solid #d1d5db; border-radius: 6px; background: #ffffff; font-family: inherit">−</button><label for="x[품목 B]" style="position: absolute; left: -9999px">수량</label><input id="x[품목 B]" type="number" value="0" style="width: 40px; height: 32px; border: 1px solid #d1d5db; border-radius: 6px; text-align: right; padding: 0 6px; font-size: 15px; font-family: inherit"><button type="button" aria-label="더하기" style="width: 32px; height: 32px; border: 1px solid #d1d5db; border-radius: 6px; background: #ffffff; font-family: inherit">＋</button></span></div></div><p style="margin: 0; font-size: 14px; color: #4b5563">기간이 지나 이 단가표로는 주문할 수 없어요</p></section><section style="background: #ffffff; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0"><p style="margin: 0; font-size: 15px; font-weight: 700">새 단가표를 받으세요</p><p style="margin: 0; font-size: 24px; font-weight: 700">[전화번호]</p><button type="button" style="width: 100%; height: 48px; border: 0; border-radius: 8px; background: {{accent}}; color: #ffffff; font-size: 16px; font-weight: 700; font-family: inherit">담당자에게 전화</button></section></div>
+<nav aria-label="매장 메뉴" style="display: grid; grid-template-columns: repeat(4, 1fr); background: #ffffff; border-top: 1px solid #e5e7eb"><a href="#" aria-current="page" style="height: 52px; display: flex; align-items: center; justify-content: center; font-size: 13px; text-decoration: none; color: #0f766e; font-weight: 700">홈</a><a href="#" style="height: 52px; display: flex; align-items: center; justify-content: center; font-size: 13px; text-decoration: none; color: #4b5563; font-weight: 400">주문</a><a href="#" style="height: 52px; display: flex; align-items: center; justify-content: center; font-size: 13px; text-decoration: none; color: #4b5563; font-weight: 400">주문 내역</a><a href="#" style="height: 52px; display: flex; align-items: center; justify-content: center; font-size: 13px; text-decoration: none; color: #4b5563; font-weight: 400">매장 정보</a></nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent": {"editor": "color", "default": "#0f766e"}, "$preview": {"width": 390, "height": 844}}'>
+class Component extends DCLogic {
+renderVals() { return { accent: this.props.accent ?? '#0f766e' }; }
+}
+</script>
+</body>
+</html>

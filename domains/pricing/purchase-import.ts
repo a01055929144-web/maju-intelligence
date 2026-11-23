@@ -15,8 +15,8 @@ export const PURCHASE_IMPORT_FIELDS = [
   { key: "vatAmount", label: "부가세", aliases: ["부가세", "세액", "vat"] },
   { key: "totalAmount", label: "합계", aliases: ["합계", "합계금액", "총액", "금액"] },
   { key: "code", label: "ERP 코드", aliases: ["erp코드", "기본코드", "상품코드", "품목코드", "코드"] },
-  { key: "supplier", label: "매입처", aliases: ["매입처", "유통사", "공급처", "거래처"] },
-  { key: "purchaseDate", label: "구매일", aliases: ["구매일", "매입일", "입고일", "거래일", "일자", "날짜"] }
+  { key: "supplier", label: "매입처", aliases: ["매입처", "유통사", "공급처", "거래처", "거래처명"] },
+  { key: "purchaseDate", label: "구매일", aliases: ["구매일", "매입일", "입고일", "거래일", "일자", "일자-No.", "날짜"] }
 ] as const;
 export type PurchaseImportFieldKey = (typeof PURCHASE_IMPORT_FIELDS)[number]["key"];
 export type PurchaseImportMapping = Partial<Record<PurchaseImportFieldKey, number>>;
@@ -135,14 +135,30 @@ export function isUnitWord(value: string) {
  * "냉동오징어 [EA]" → 이름 냉동오징어 · 단위 EA
  * "껍질가리비 [180G*10EA]" → 이름 껍질가리비 · 규격 180G*10EA (단위는 확인 필요)
  * 대괄호 안이 단위 낱말이면 단위, 숫자가 섞여 있으면 규격으로 봅니다.
+ * 끝 괄호에 용량이 있거나 같은 규격이 이중 대괄호로 반복돼도 원문은 보존하고 한 번만 분리합니다.
  */
 export function splitNameSpec(name: string, spec: string, unit = "") {
-  const trimmed = name.trim();
-  const match = trimmed.match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
-  if (!match) return { name: trimmed, spec: spec.trim(), unit: unit.trim() };
-  const inner = match[2].trim();
-  if (isUnitWord(inner)) return { name: match[1].trim(), spec: spec.trim(), unit: unit.trim() || inner };
-  return { name: match[1].trim(), spec: spec.trim() || inner, unit: unit.trim() };
+  let base = name.trim().replace(/\[\[([^\[\]]+)\]\]\s*$/, "[$1]");
+  const inferredSpecs: string[] = [];
+  let parsedUnit = unit.trim();
+  for (;;) {
+    const match = base.match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
+    if (!match) break;
+    const inner = match[2].trim();
+    base = match[1].trim();
+    if (isUnitWord(inner)) parsedUnit ||= inner;
+    else {
+      const duplicate = inferredSpecs.findIndex(value => norm(value) === norm(inner));
+      if (duplicate >= 0) inferredSpecs[duplicate] = inner;
+      else inferredSpecs.unshift(inner);
+    }
+  }
+  const parenthetical = base.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+  if (parenthetical && /\d+(?:[.,]\d+)?\s*(?:ml|kg|l|g)\b/i.test(parenthetical[2])) {
+    base = parenthetical[1].trim();
+    if (!inferredSpecs.some(value => norm(value) === norm(parenthetical[2]))) inferredSpecs.unshift(parenthetical[2].trim());
+  }
+  return { name: base, spec: spec.trim() || inferredSpecs.join(" "), unit: parsedUnit };
 }
 
 /** 품목 비교 키: 이름+규격, 대소문자·띄어쓰기·괄호 무시. 같은 키는 같은 품목으로 봅니다. */
@@ -179,7 +195,7 @@ export type PurchaseImportLine = {
   vatAmount?: number;
   totalAmount?: number;
   vatIncluded: boolean;
-  /** 부가세 열을 골랐을 때만: 금액 있음=과세, 0·빈칸=면세. 부가세가 따로 적힌 파일은 단가가 '별도' 금액입니다. */
+  /** 부가세 열을 골랐을 때만: 금액 있음=과세, 명시적 0=면세, 빈칸=미정. */
   taxType?: "taxable" | "exempt";
   cost: number;
   lineKey: string;
@@ -189,6 +205,10 @@ export type PurchaseImportLine = {
   /** 파일에 구매일 열이 있을 때만 설정됩니다. 없으면 업로드 화면의 날짜를 사용합니다. */
   purchaseDate?: string;
 };
+
+export function catalogTaxEvidence(taxType: "taxable" | "exempt") {
+  return { supplyAmount: 100, vat: taxType === "taxable" ? 10 : 0 };
+}
 
 export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImportMapping, vatMode: VatMode): { lines: PurchaseImportLine[]; skipped: number[]; dateIssues: number[] } {
   if (mapping.name === undefined || mapping.cost === undefined) throw new Error("필수 열(품목·단가)을 골라 주세요.");
@@ -214,7 +234,9 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
     const vatAmount = toNumber(read(row.cells, "vatAmount"));
     const totalAmount = toNumber(read(row.cells, "totalAmount"));
     const vatIncluded = vatMode === "auto" ? inferVatIncluded({ cost: rawCost, quantity, supplyAmount, totalAmount, vatAmount }) : vatMode === "included";
-    const taxType = mapping.vatAmount === undefined ? undefined : vatAmount && vatAmount > 0 ? "taxable" as const : "exempt" as const;
+    const taxType = mapping.vatAmount === undefined || vatAmount === undefined || vatAmount < 0
+      ? undefined
+      : vatAmount > 0 ? "taxable" as const : "exempt" as const;
     lines.push({
       code: read(row.cells, "code"),
       cost: costExcludingVat(rawCost, vatIncluded),

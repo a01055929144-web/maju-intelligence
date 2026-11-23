@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -93,6 +94,9 @@ jobs:
         run: |
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-16-CX-38-order-sale-documents.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-62-order-receipt.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-66-order-dispatch.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-66-partial-dispatch-final-cancel.pg17.test.sql
 
       - name: Verify purchase date replace draft on PostgreSQL 17
         working-directory: docs/sql-drafts
@@ -118,6 +122,74 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-16-CX-46c-delivery-route-stops.pg17.test.sql
 
+      - name: Verify CX-120 store price v2 draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: cx120_store_price_v2_test
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-120-store-price-v2.pg17.test.sql
+
+      - name: Verify CX-73 store access password read boundary on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx73_store_access_password_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=20261118-CX-73-store-access-password-read.pg17.test.sql
+
+      - name: Verify CX-121 document extension draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: cx121_document_extension_test
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-20-CX-121-document-extension.pg17.test.sql
+
+      - name: Verify CX-123 store catalog v2 draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: cx123_store_catalog_v2_test
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-20-CX-123-store-catalog-v2.pg17.test.sql
+
+      - name: Verify CX-81 lead bulk jobs on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx81_lead_bulk_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/lead-bulk-enrichment-cx81.pg17.test.sql
+
+      - name: Verify CX-65 driver route actions draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx65_driver_route_actions_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-65-driver-route-actions.pg17.test.sql
+
       - name: Verify CX-58 customer business identity draft on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
@@ -129,6 +201,54 @@ jobs:
         run: |
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-58-customer-business-identity.pg17.test.sql
+
+      - name: Verify CX-64 document cancellation guards draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx64_document_cancellation_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-64-document-cancellation-guards.pg17.test.sql
+
+      - name: Verify CX-69 partner payments and offset draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx69_partner_payments_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-69-partner-payments-offset.pg17.test.sql
+
+      - name: Verify CX-126 partner registration draft on PostgreSQL 17
+        working-directory: tests/sql
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx126_partner_registration_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=partner-registration-cx126.pg17.test.sql
+
+      - name: Verify CX-124 new store customer review draft on PostgreSQL 17
+        working-directory: tests/sql
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx124_new_store_customer_review_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=new-store-customer-review-cx124.pg17.test.sql
 
       - name: Verify lead-customer continuity on PostgreSQL 17
         working-directory: docs/sql-drafts
@@ -208,6 +328,18 @@ jobs:
         run: |
           psql --set=ON_ERROR_STOP=1 --command='create database cc46_enrichment_targets_test'
           PGDATABASE=cc46_enrichment_targets_test psql --set=ON_ERROR_STOP=1 --file=20261114-CC-46-enrichment-targets.pg17.test.sql
+
+      - name: Verify lead contact phone separation draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: maju_continuity_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          psql --set=ON_ERROR_STOP=1 --command='create database lead_contact_phones_test'
+          PGDATABASE=lead_contact_phones_test psql --set=ON_ERROR_STOP=1 --file=20261119-lead-contact-phones.pg17.test.sql
 
       - name: Verify WO-03 MAJU category match draft on PostgreSQL 17
         working-directory: docs/sql-drafts
@@ -307,6 +439,16 @@ jobs:
         run: |
           createdb customer_items_test_ui
           psql --dbname=customer_items_test_ui --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261102-WO-25-customer-items-audit.pg17.test.sql
+
+      - name: Verify CX-111 manual customer coordinate draft on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb customer_manual_coordinate_test
+          psql --dbname=customer_manual_coordinate_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/2026-11-22-CX-111-customer-manual-coordinate.pg17.test.sql
 
       - name: Verify first supplier import to P0 recalculation on PostgreSQL 17
         env:
@@ -436,6 +578,17 @@ jobs:
           cd docs/sql-drafts
           psql --dbname=purchase_receipt_correction_test --set=ON_ERROR_STOP=1 --file=20261105-purchase-receipt-corrections.pg17.test.sql
 
+      - name: Verify CX-89 purchase history edits on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb purchase_history_edits_test
+          cd docs/sql-drafts
+          psql --dbname=purchase_history_edits_test --set=ON_ERROR_STOP=1 --file=2026-11-18-cx89-purchase-history-edits.pg17.test.sql
+
       - name: Verify store-owned cost draft on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
@@ -533,6 +686,18 @@ jobs:
         run: |
           createdb pricing_document_archive_test
           psql --dbname=pricing_document_archive_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-archive.pg17.test.sql
+          createdb pricing_document_save_errors_test
+          psql --dbname=pricing_document_save_errors_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-save-errors.pg17.test.sql
+          createdb pricing_promotion_tax_source_test
+          psql --dbname=pricing_promotion_tax_source_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-promotion-tax-source.pg17.test.sql
+          createdb document_display_storage_test
+          psql --dbname=document_display_storage_test --set=ON_ERROR_STOP=1 --file=tests/sql/document-display-storage.pg17.test.sql
+          createdb pricing_document_tax_refresh_test
+          psql --dbname=pricing_document_tax_refresh_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-tax-refresh.pg17.test.sql
+          createdb document_footer_format_test
+          psql --dbname=document_footer_format_test --set=ON_ERROR_STOP=1 --file=tests/sql/document-footer-format.pg17.test.sql
+          createdb document_vat_contract_test
+          psql --dbname=document_vat_contract_test --set=ON_ERROR_STOP=1 --file=tests/sql/document-vat-contract.pg17.test.sql
 
       # Read-only dependency on #285's unapproved SQL contract. Never apply to an operating database.
       - name: Checkout pinned lead-share SQL draft for isolated tests
@@ -590,6 +755,13 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Checkout pinned delivery producer for CX-75 isolated tests
+        uses: actions/checkout@v5
+        with:
+          ref: 220b9c1011368570873f61be467e651cf22a6cec
+          path: .ci-cx75-delivery
+          persist-credentials: false
+
       - name: Verify compatible member ordering on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
@@ -615,6 +787,26 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-customer-review-cx13.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profile-notifications-s2b.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-account-order-s2a.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-cx60-identity-settings.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profile-delivery-cx71.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --set=CX75_DELIVERY_SQL="$GITHUB_WORKSPACE/.ci-cx75-delivery/docs/sql-drafts/20261108-09-order-delivery-producer.sql" --file=tests/sql/store-order-core-cx75.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-order-vat-consistency.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profile-member-invitations-cx77.pg17.test.sql
+          createdb store_price_visibility_cx122_test
+          psql --dbname=store_price_visibility_cx122_test --set=ON_ERROR_STOP=1 --file=tests/sql/store-price-visibility-cx122.pg17.test.sql
+          createdb store_promotion_availability_09_test
+          psql --dbname=store_promotion_availability_09_test --set=ON_ERROR_STOP=1 --file=tests/sql/storefront-promotion-availability.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-settlement-account-cx101.pg17.test.sql
+
+      - name: Verify CX-68 order money safety and performance on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb order_money_safety_cx68_test
+          psql --dbname=order_money_safety_cx68_test --set=ON_ERROR_STOP=1 --file=tests/sql/order-money-safety-cx68.pg17.test.sql
 
       - name: Verify CX-08 promotion reservations on PostgreSQL 17
         env:
@@ -706,6 +898,7 @@ jobs:
           LEAD_DOCUMENT_SHARING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
           PRICE_SHEETS_ENABLED: "true"
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+          FEATURE_STORE_PROFILE_DELIVERY_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
       - name: Install Playwright browser
         # GitHub's Ubuntu image already contains Chromium's system libraries.
@@ -724,9 +917,13 @@ jobs:
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
       - name: Responsive layout and route smoke checks
-        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/store-member-management-entry.spec.ts tests/e2e/store-shell.spec.ts tests/e2e/store-direct-signup.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/shared-pricing-acceptance.spec.ts tests/e2e/store-member-journey.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts tests/e2e/purchase-cost-atomic-batch.spec.ts tests/e2e/store-delivery-eligibility.spec.ts tests/e2e/pricing-paper-columns.spec.ts tests/e2e/order-inbox.spec.ts tests/e2e/map-search-panel.spec.ts tests/e2e/search-input-clear.spec.ts tests/e2e/confirm-dialog.spec.ts tests/e2e/map-baseline.spec.ts tests/e2e/lead-contact-channels.spec.ts tests/e2e/lead-reject-flow.spec.ts tests/e2e/delivery-proof-photos.spec.ts tests/e2e/mobile-bottom-nav.spec.ts tests/e2e/gov-sync-overview.spec.ts tests/e2e/lead-route-stop.spec.ts tests/e2e/route-stops-history.spec.ts tests/e2e/store-connection.spec.ts tests/e2e/cx56-new-screen-regression.spec.ts
+        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-document-extension.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/store-member-management.spec.ts tests/e2e/store-member-management-entry.spec.ts tests/e2e/store-shell.spec.ts tests/e2e/store-direct-signup.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/pricing-document-vat.spec.ts tests/e2e/shared-pricing-acceptance.spec.ts tests/e2e/store-member-journey.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts tests/e2e/purchase-cost-atomic-batch.spec.ts tests/e2e/store-delivery-eligibility.spec.ts tests/e2e/store-price-visibility.spec.ts tests/e2e/pricing-paper-columns.spec.ts tests/e2e/order-inbox.spec.ts tests/e2e/order-fulfillment.spec.ts tests/e2e/map-search-panel.spec.ts tests/e2e/search-input-clear.spec.ts tests/e2e/confirm-dialog.spec.ts tests/e2e/map-baseline.spec.ts tests/e2e/lead-contact-channels.spec.ts tests/e2e/lead-contact-server-filter.spec.ts tests/e2e/lead-favorites.spec.ts tests/e2e/lead-reject-flow.spec.ts tests/e2e/delivery-proof-photos.spec.ts tests/e2e/mobile-bottom-nav.spec.ts tests/e2e/gov-sync-overview.spec.ts tests/e2e/lead-route-stop.spec.ts tests/e2e/route-stops-history.spec.ts tests/e2e/partner-directory.spec.ts tests/e2e/customer-business-identity.spec.ts tests/e2e/store-connection.spec.ts tests/e2e/cx56-new-screen-regression.spec.ts tests/e2e/cx65-driver-run-experience.spec.ts tests/e2e/cx79-lead-status-sync.spec.ts tests/e2e/product-inventory-history.spec.ts tests/e2e/common-category-mapping.spec.ts
         env:
           CI_LAYOUT_FIXTURES: enabled
+          PRICING_DOCUMENT_FOOTER_FORMAT_ENABLED: "true"
+          PRICING_DOCUMENT_FOOTER_FORMAT_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+          PRICING_DOCUMENT_VAT_ENABLED: "true"
+          PRICING_DOCUMENT_VAT_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
           PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED: "true"
           LEAD_DOCUMENT_SHARING_ENABLED: "true"
@@ -745,6 +942,17 @@ jobs:
           createdb readonly_storefront_browser_test
           psql --dbname=readonly_storefront_browser_test --set=ON_ERROR_STOP=1 --file=tests/sql/readonly-storefront-browser.pg17.fixture.sql
           node scripts/test-pricing-p2-browser.mjs
+
+      - name: CX-121 real API handler and isolated PG17 connection
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: cx121_api_connection_test
+          CX121_API_PG17: "true"
+        run: |
+          createdb cx121_api_connection_test
+          npx vitest run tests/pricing-document-extension-api-pg17.test.ts --maxWorkers=1
 
       - name: Upload responsive layout report
         if: always()

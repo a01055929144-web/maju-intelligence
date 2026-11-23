@@ -9,6 +9,9 @@ import { SearchInput } from "@/components/ui/search-input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { attachmentLabel, attachmentTitleFromType, buildPlaceSearchLinks, extractRegion, formatBusinessNumberInput, formatBusinessRegistrationNumber, formatPhoneNumberInput, gradeClassName, guessMimeType, isValidBusinessRegistrationNumber, normalizeBusinessRegistrationNumber, noteTypeLabel } from "@/components/customers/customer-format";
 import { SalesPartnerPanel } from "@/components/customers/sales-partner-panels";
+import { SalesPartnerDirectory } from "@/components/customers/sales-partner-directory";
+import { BusinessIdentityFields, businessIdentityBlocked } from "@/components/partners/business-identity-fields";
+import { businessIdentityNotice } from "@/domains/partner/business-identity-notice";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-toolbar";
 import { LinkifiedText } from "@/components/linkified-text";
@@ -70,6 +73,11 @@ type CustomerView = {
   representativeName?: string;
   relationshipStatus?: string;
   visitCount: number;
+  // CC-70: 사업자 정보(CX-58·59). 사업자 상호 · 종사업장번호(숫자 4자리) · 개인/법인 · 법인등록번호.
+  businessName?: string;
+  subBusinessNumber?: string;
+  businessEntityType?: "individual" | "corporation";
+  corporateRegistrationNumber?: string;
 };
 type TerritoryOption = { id: string; name: string; isActive: boolean; areas: string[]; defaultStaff: Array<{ staffMemberId: string; staffName: string; priority: number }> };
 type StaffOption = { id: string; name: string; role: string };
@@ -552,11 +560,14 @@ export default function CrmTimelinePage() {
   const [noteMessage, setNoteMessage] = useState("");
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
   const [attachmentMessage, setAttachmentMessage] = useState("");
-  const [workspaceSection] = useState<"list" | "ledger" | "history" | "products" | "transactions">(() => {
+  const [workspaceSection] = useState<"partners" | "list" | "ledger" | "history" | "products" | "transactions">(() => {
     if (typeof window === "undefined") return "list";
     const requested = new URLSearchParams(window.location.search).get("section");
-    return requested === "ledger" || requested === "history" || requested === "products" || requested === "transactions" ? requested : "list";
+    return requested === "partners" || requested === "ledger" || requested === "history" || requested === "products" || requested === "transactions" ? requested : "list";
   });
+  // CC-73: 주소의 section을 처음 그릴 때 읽기 때문에 서버가 그린 모양과 달라지는 새 섹션(partners)은 브라우저가 붙은 뒤에만 그린다(하이드레이션 불일치 방지).
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => { setClientReady(true); }, []);
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>(() => (workspaceSection === "history" ? "history" : "ledger"));
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const businessNumberInputRef = useRef<HTMLInputElement | null>(null);
@@ -924,7 +935,9 @@ export default function CrmTimelinePage() {
   // 체크섬 검증은 참고용 안내로만 보여주고, 저장 자체는 막지 않습니다. 실제 현장에서는 등록 시점에
   // 사업자번호를 모르거나 나중에 확인해야 하는 거래처가 많아, 번호 형식이 의심스러워도 우선 저장할
   // 수 있어야 합니다(회사 자체 가입 화면의 엄격한 검증과는 별개 기준입니다).
-  const canSaveCustomer = !isSaving;
+  // CC-70: 같은 사업자번호 안내 · 입력 검사. 종사업장이 모두 다르면 저장 허용, 같거나 비면 저장 막고 중복 허용 사업자번호 링크를 보인다.
+  const identityNotice = useMemo(() => draftCustomer ? businessIdentityNotice({ id: draftCustomer.id, businessNumber: draftCustomer.businessNumber, subBusinessNumber: draftCustomer.subBusinessNumber }, customers) : ({ kind: "none" } as const), [customers, draftCustomer]);
+  const canSaveCustomer = !isSaving && !(draftCustomer && businessIdentityBlocked(draftCustomer, identityNotice));
 
   function applyOperationFilter(nextFilter: OperationFilter) {
     const resolvedFilter = operationFilter === nextFilter ? "all" : nextFilter;
@@ -1038,6 +1051,10 @@ export default function CrmTimelinePage() {
             phone: draftCustomer.phone,
             region: draftCustomer.region,
             representativeName: draftCustomer.representativeName,
+            businessName: draftCustomer.businessName,
+            subBusinessNumber: draftCustomer.subBusinessNumber,
+            businessEntityType: draftCustomer.businessEntityType,
+            corporateRegistrationNumber: draftCustomer.corporateRegistrationNumber,
             // 사업자번호를 몰라 임시값을 넣거나 나중에 정정하는 경우가 흔해, 저장 자체는 항상 허용합니다
             // (검증은 위 helper 텍스트로만 참고 안내).
             validateBusinessNumber: false,
@@ -1334,6 +1351,7 @@ export default function CrmTimelinePage() {
       <section className="w-full">
         <WorkspaceSectionNav
           items={[
+            { active: workspaceSection === "partners", description: "매입처와 같은 틀(목록 · 기본 정보 · 품목/단가 · 전표 · 원장 · 메모)로 봅니다.", href: withCompanyQuery("/crm/timeline?section=partners"), icon: Building2, label: "통합 화면" },
             { active: workspaceSection === "list", description: "거래처를 검색하고 등급·보완 항목으로 좁힙니다.", href: withCompanyQuery("/crm/timeline?section=list"), icon: Search, label: "목록" },
             { active: workspaceSection === "ledger", description: "사업자정보, 배송 기준값, 첨부자료를 수정합니다.", href: withCompanyQuery("/crm/timeline?section=ledger"), icon: Pencil, label: "원장" },
             { active: workspaceSection === "history", description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: withCompanyQuery("/crm/timeline?section=history"), icon: FileText, label: "기록" },
@@ -1342,6 +1360,10 @@ export default function CrmTimelinePage() {
           ]}
           title="거래처 관리"
         />
+
+        {workspaceSection === "partners" && clientReady ? (
+          <SalesPartnerDirectory companyId={adminCompanyId || ""} customers={customers} query={(path, customerId) => withCompanyQuery(customerId ? `${path}${path.includes("?") ? "&" : "?"}customerId=${encodeURIComponent(customerId)}` : path)} />
+        ) : null}
 
         {workspaceSection === "products" || workspaceSection === "transactions" ? (
           <div className="mb-4 min-w-0 space-y-3">
@@ -2042,6 +2064,15 @@ export default function CrmTimelinePage() {
                         onChange={(value) => updateDraft("businessNumber", formatBusinessNumberInput(value))}
                       />
                       <EditableField label="대표자명" value={draftCustomer.representativeName || ""} onChange={(value) => updateDraft("representativeName", value)} />
+                      <div className="sm:col-span-2">
+                        <BusinessIdentityFields
+                          displayName={draftCustomer.customerName}
+                          exceptionsHref={withCompanyQuery("/dashboard/settings/advanced")}
+                          notice={identityNotice}
+                          onChange={(next) => setDraftCustomer((current) => (current ? { ...current, ...next, businessEntityType: next.businessEntityType || undefined } : current))}
+                          value={draftCustomer}
+                        />
+                      </div>
                       <EditableField
                         label="연락처"
                         value={draftCustomer.phone || ""}
@@ -2118,6 +2149,9 @@ export default function CrmTimelinePage() {
                       <LedgerSectionLabel eyebrow="Business" title="사업자 정보" />
                       <DetailRow label="상호명" value={selectedCustomer.customerName} />
                       <DetailRow label="사업자번호" value={selectedCustomer.businessNumber} />
+                      <DetailRow label="사업자 상호" value={selectedCustomer.businessName} />
+                      <DetailRow label="종사업장번호" value={selectedCustomer.subBusinessNumber} />
+                      <DetailRow label="개인/법인" value={selectedCustomer.businessEntityType === "corporation" ? "법인" : selectedCustomer.businessEntityType === "individual" ? "개인" : undefined} />
                       <DetailRow label="대표자명" value={selectedCustomer.representativeName} />
                       <DetailRow label="업종" value={selectedCustomer.industry} />
                       <DetailRow label="사업자상태" value={selectedCustomer.businessStatus} />

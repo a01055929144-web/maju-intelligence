@@ -6,6 +6,8 @@ import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { OrderInboxWorkspace } from "@/components/order-inbox-workspace";
+import { orderFulfillmentEnabled } from "@/lib/order-fulfillment-feature";
+import { orderListExportEnabled } from "@/lib/order-list-export-feature";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +26,8 @@ export default async function OrdersPage({ searchParams }: {
     <main className="w-full p-4">
       {/* 확인 처리는 고객사 대표·관리자만. 영업과 MAJU 관리자 미리보기는 보기만 한다. */}
       <OrderInboxWorkspace canConfirm={Boolean(customer && canManagePriceSheets(customer))} companyId={companyId}
-        deliveryPhotosEnabled={Boolean(customer && isFeatureEnabled("DELIVERY_ORDER_PHOTOS", companyId))} preview={preview} />
+        deliveryPhotosEnabled={Boolean(customer && isFeatureEnabled("DELIVERY_ORDER_PHOTOS", companyId))}
+        fulfillmentEnabled={orderFulfillmentEnabled(companyId)} listExportEnabled={orderListExportEnabled(companyId)} preview={preview} />
     </main>
   </CustomerAppShell>;
 }

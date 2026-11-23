@@ -1,16 +1,18 @@
 "use client";
+import { useDocumentOrderFooter } from "./use-document-order-footer";
+import { ORDER_FOOTER_KEYS, withOrderFooter } from "@/domains/pricing/document-order-footer";
 import { formatMoneyInput, formatWon } from "@/domains/shared/money";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Notice } from "@/components/ui/notice";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { DocumentContent, DocumentInfoItem, PriceSource } from "@/domains/pricing/document";
-import { DEFAULT_DISPLAY } from "@/domains/pricing/document";
+import { parseDisplay } from "@/domains/pricing/document";
 import { PAYMENT_CYCLE_OPTIONS } from "@/domains/organization/company-profile";
 import { formatPhoneNumber } from "@/lib/phone";
 
 type Profile = { company?: { name?: string; businessRegistrationNumber?: string; originAddress?: string }; values?: Record<string, unknown>; canEdit?: boolean };
-type Editor = "text" | "phone" | "time" | "number" | "weekdays" | "cycle" | "methods" | "account" | "none";
+type Editor = "text" | "phone" | "time" | "number" | "weekdays" | "cycle" | "methods" | "none";
 type Candidate = { key: string; label: string; place: "header" | "footer"; value: string; editor: Editor; field?: string; placeholder?: string };
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -23,15 +25,14 @@ export function formatBusinessNumber(value: string) {
 }
 
 /** 회사 정보 값 → 문서에 넣을 수 있는 줄 목록. 주소는 사업장 주소가 없으면 출발지 주소를 씁니다. */
-export function buildInfoCandidates(profile: Profile): Candidate[] {
+export function buildInfoCandidates(profile: Profile, orderInfo?: DocumentInfoItem[]): Candidate[] {
   const v = profile.values || {};
   const days = Array.isArray(v.delivery_weekdays) ? (v.delivery_weekdays as number[]).filter((d) => d >= 0 && d <= 6).sort().map((d) => WEEKDAYS[d]).join("·") : "";
   const cutoff = text(v.next_day_cutoff_time).slice(0, 5);
   const minimum = typeof v.first_order_minimum_won === "number" && v.first_order_minimum_won > 0 ? formatWon(v.first_order_minimum_won) : "";
-  const account = [text(v.settlement_bank), text(v.settlement_account_number), text(v.settlement_account_holder)].filter(Boolean).join(" ");
   const methods = Array.isArray(v.payment_methods) ? (v.payment_methods as string[]).join("·") : "";
   const address = [text(v.business_address), text(v.business_address_detail)].filter(Boolean).join(" ") || text(profile.company?.originAddress);
-  return [
+  const candidates: Candidate[] = [
     { editor: "phone", field: "main_phone", key: "main_phone", label: "대표 연락처", place: "header", value: formatPhoneNumber(text(v.main_phone)), placeholder: "010-0000-0000" },
     { editor: "none", key: "business_number", label: "사업자번호", place: "header", value: formatBusinessNumber(text(profile.company?.businessRegistrationNumber)) },
     { editor: "text", field: "business_address", key: "business_address", label: "주소", place: "header", value: address, placeholder: "도로명 주소" },
@@ -43,16 +44,18 @@ export function buildInfoCandidates(profile: Profile): Candidate[] {
     { editor: "text", field: "delivery_time_window", key: "delivery_time_window", label: "배송 시간", place: "footer", value: text(v.delivery_time_window), placeholder: "04:00~08:00" },
     { editor: "number", field: "first_order_minimum_won", key: "first_order_minimum_won", label: "최소 주문", place: "footer", value: minimum, placeholder: "원" },
     { editor: "cycle", field: "payment_cycle", key: "payment_cycle", label: "결제 조건", place: "footer", value: text(v.payment_cycle) },
-    { editor: "methods", field: "payment_methods", key: "payment_methods", label: "결제 방식", place: "footer", value: methods },
-    { editor: "account", key: "settlement_account", label: "입금 계좌", place: "footer", value: account }
+    { editor: "methods", field: "payment_methods", key: "payment_methods", label: "결제 방식", place: "footer", value: methods }
   ];
+  return orderInfo ? candidates.map(item => {
+    const current = orderInfo.find(row => row.key === item.key);
+    return current ? { ...item, value: current.value, editor: "none" as const } : item;
+  }) : candidates;
 }
 
 function initialDraft(candidate: Candidate, values: Record<string, unknown>): Record<string, unknown> {
   switch (candidate.editor) {
     case "weekdays": return { delivery_weekdays: Array.isArray(values.delivery_weekdays) ? values.delivery_weekdays : [] };
     case "methods": return { payment_methods: Array.isArray(values.payment_methods) ? values.payment_methods : [] };
-    case "account": return { settlement_bank: text(values.settlement_bank), settlement_account_number: text(values.settlement_account_number), settlement_account_holder: text(values.settlement_account_holder) };
     case "number": return { first_order_minimum_won: values.first_order_minimum_won ?? "" };
     case "time": return { next_day_cutoff_time: text(values.next_day_cutoff_time).slice(0, 5) };
     case "phone": return { main_phone: formatPhoneNumber(text(values.main_phone)) };
@@ -64,7 +67,8 @@ function initialDraft(candidate: Candidate, values: Record<string, unknown>): Re
  * 11/4: 오른쪽 '보여줄 정보' — 회사 정보에서 골라 넣고 빼기. 비었거나 고칠 값은 그 자리에서 입력하면
  * 회사 정보에 바로 저장되고 문서에도 체크됩니다(회사 정보 화면을 오가지 않음).
  */
-export function PricingInfoPanel({ companyId, content, editable, onContent }: {
+export function PricingInfoPanel({ companyId, content, editable, onContent, orderFooterAvailable = false }: {
+  readonly orderFooterAvailable?: boolean;
   readonly companyId: string;
   readonly content: DocumentContent;
   readonly editable: boolean;
@@ -78,7 +82,8 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   const [message, setMessage] = useState("");
   const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
   const [basisBusy, setBasisBusy] = useState(false);
-  const display = content.display || DEFAULT_DISPLAY;
+  const orderFooter = useDocumentOrderFooter(companyId, content.customerId, orderFooterAvailable);
+  const display = parseDisplay(content.display);
   const latest = useRef(content);
   latest.current = content;
 
@@ -160,12 +165,12 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     if (!current.companyName.trim() && profile.company?.name) onContent({ ...current, companyName: profile.company.name.slice(0, 100) });
   }, [profile, editable]);
 
-  const candidates = profile ? buildInfoCandidates(profile) : [];
+  const candidates = profile ? buildInfoCandidates(profile, orderFooter.items) : [];
   const setDisplay = (patch: Partial<typeof display>) => onContent({ ...content, display: { ...display, ...patch } });
   const isOn = (key: string) => display.info.some((item) => item.key === key);
 
   function toggle(candidate: Candidate, on: boolean, base = content) {
-    const disp = base.display || DEFAULT_DISPLAY;
+    const disp = parseDisplay(base.display);
     const rest = disp.info.filter((item) => item.key !== candidate.key);
     const item: DocumentInfoItem = { key: candidate.key, label: candidate.label, place: candidate.place, value: candidate.value };
     onContent({ ...base, display: { ...disp, info: on ? [...rest, item] : rest } });
@@ -215,9 +220,6 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
         control = <div className="flex flex-wrap gap-1">{METHODS.map((m) => <button aria-pressed={list.includes(m)} className={`rounded px-2 py-1 text-xs font-bold ${list.includes(m) ? "bg-teal-700 text-white" : "bg-slate-100"}`} key={m} onClick={() => set({ [field]: list.includes(m) ? list.filter((x) => x !== m) : [...list, m] })} type="button">{m}</button>)}</div>;
         break;
       }
-      case "account":
-        control = <div className="grid gap-1">{([["settlement_bank", "은행"], ["settlement_account_number", "계좌번호"], ["settlement_account_holder", "예금주"]] as const).map(([k, l], i) => <input aria-label={`입금 ${l}`} autoFocus={i === 0} className={input} key={k} onChange={(e) => set({ [k]: e.target.value })} onKeyDown={onKey} placeholder={l} value={String(draft[k] ?? "")} />)}</div>;
-        break;
       default: control = <input aria-label={`${candidate.label} 입력`} autoFocus className={input} onChange={(e) => set({ [field]: e.target.value })} onKeyDown={onKey} placeholder={candidate.placeholder} value={String(draft[field] ?? "")} />;
     }
     return (
@@ -285,7 +287,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
             <span aria-hidden className="cursor-grab select-none pt-1 text-slate-400">⠿</span>
             <div className="min-w-0 flex-1 space-y-0.5">
               <input aria-label="정보 이름" className="w-full rounded border border-transparent px-1 text-xs font-bold hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={30} onChange={(e) => updateItem(item.key, { label: e.target.value })} value={item.label} />
-              <input aria-label={`${item.label} 문서에 표시할 값`} className="w-full rounded border border-transparent px-1 text-xs text-slate-700 hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={200} onChange={(e) => updateItem(item.key, { value: e.target.value })} value={item.value} />
+              <input aria-label={`${item.label} 문서에 표시할 값`} className="w-full rounded border border-transparent px-1 text-xs text-slate-700 hover:border-slate-200 focus:border-teal-500" disabled={!editable || orderFooterAvailable && (ORDER_FOOTER_KEYS as readonly string[]).includes(item.key)} maxLength={200} onChange={(e) => updateItem(item.key, { value: e.target.value })} value={withOrderFooter([item], orderFooter.items)[0].value} />
             </div>
             {editable ? (
               <div className="flex shrink-0 flex-col items-center text-[11px] text-slate-500">
@@ -310,7 +312,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
           <div className="flex min-h-7 items-center gap-2 text-xs">
             <span className={`shrink-0 font-semibold ${c.value ? "" : "text-slate-400"}`}>{c.label}</span>
             <span className="min-w-0 flex-1 truncate text-slate-500" title={c.value}>{c.value || "회사 정보에 없음"}</span>
-            {editable && c.value ? <button className="shrink-0 font-bold text-teal-700" onClick={() => toggle(c, true)} type="button">+ 넣기</button> : null}
+            {editable && c.value ? <button disabled={orderFooterAvailable && (ORDER_FOOTER_KEYS as readonly string[]).includes(c.key) && (orderFooter.loading || Boolean(orderFooter.error))} className="shrink-0 font-bold text-teal-700" onClick={() => toggle(c, true)} type="button">+ 넣기</button> : null}
             {canEditProfile && !c.value && c.editor !== "none" && editing?.key !== c.key ? <button className="shrink-0 font-bold text-teal-700" onClick={() => { setMessage(""); setEditing({ key: c.key, draft: initialDraft(c, profile?.values || {}) }); }} type="button">+ 입력</button> : null}
           </div>
           {editing?.key === c.key ? editorFor(c) : null}
@@ -325,6 +327,8 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   return (
     <aside aria-label="보여줄 정보" className="min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-4 xl:sticky xl:top-24">
       {confirmDialog}
+      {orderFooterAvailable ? <p className="text-sm">주문 마감·배송 요일은 실제 주문 설정을 따릅니다. 매장 미지정 시 권역·매장별로 확인해 주세요.</p> : null}
+      {orderFooter.error ? <Notice kind="error">{orderFooter.error}</Notice> : null}
       <div>
         <h2 className="text-sm font-black text-slate-900">보여줄 정보</h2>
         <p className="mt-0.5 text-xs text-slate-500">끌어서 위쪽·아래쪽과 순서를 바꾸세요. 문서에서 고친 값은 이 문서에만 쓰이고 회사 정보는 바뀌지 않습니다.</p>
