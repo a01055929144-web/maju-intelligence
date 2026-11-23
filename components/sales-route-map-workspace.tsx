@@ -5,6 +5,7 @@ import { QuickRegisterDrawer } from "@/components/map/quick-register-drawer";
 import { copyText } from "@/lib/copy-text";
 import { leadLayerColor } from "@/domains/route/map-layer-colors";
 import { DEFAULT_LEAD_SEARCH_RADIUS_KM, useLeadRadiusState } from "@/components/map/use-lead-radius-state";
+import { useMapSalesAreaState } from "@/components/map/use-map-sales-area-state";
 import { useMapFullscreen } from "@/components/map/use-map-fullscreen";
 import { MapExplorerTabs, MapLayerControl, MapLayerLegend, type MapPanelMode } from "@/components/map/map-layer-controls";
 
@@ -413,10 +414,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // M9: 같은 종류 요청은 마지막 것만 살린다(옛 응답이 새 목록을 덮지 않게).
   const beginAllLeadsRequest = useLatestRequest();
   const beginRadiusRequest = useLatestRequest();
-  const [mapSalesRegionsConfigured, setMapSalesRegionsConfigured] = useState<boolean | null>(null);
-  // 시안 ⑫: 영업 지역 칩 팝오버를 "내 영업 지역 / 영업 필요 지역"으로 묶기 위한 지역 라벨.
-  const [mapAssignedAreaLabels, setMapAssignedAreaLabels] = useState<string[]>([]);
-  const [mapExpansionAreaLabels, setMapExpansionAreaLabels] = useState<string[]>([]);
+  const {
+    mapSalesRegionsConfigured,
+    setMapSalesRegionsConfigured,
+    mapAssignedAreaLabels,
+    setMapAssignedAreaLabels,
+    mapExpansionAreaLabels,
+    setMapExpansionAreaLabels
+  } = useMapSalesAreaState();
   // 시안 ⑫ 필터 칩 팝오버(한 번에 하나만 열림). left는 필터 줄 기준 px입니다.
   // M3b: 리드 필터 상태·저장 필터(프리셋)는 훅 한 곳(묶음은 useMemo로 고정). 이름은 그대로 꺼내 쓴다.
   const {
