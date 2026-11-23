@@ -37,7 +37,7 @@ export function publicDocumentOutput(version: DocumentVersion, day?: string) {
       price: l.price, taxType: l.taxType, badge: l.badge, endsOn: l.endsOn, remaining: l.remaining })),
   };
 }
-/** Reuse the random preview UUID: UUID-v4 opaque namespace, distinct from 10-character store codes. */
+/** Encode the immutable share identity; metadata IDs alone never authorize document access. */
 export function documentShareCode(shareLinkId: string) {
   if (!isId(shareLinkId)) throw new Error("Invalid document share");
   return shareLinkId.replaceAll("-", "").toLowerCase();
@@ -48,9 +48,15 @@ export function documentShareLinkId(code: string) {
   const id = [code.slice(0, 8), code.slice(8, 12), code.slice(12, 16), code.slice(16, 20), code.slice(20)].join("-");
   return isId(id) ? id : null;
 }
+export const DOCUMENT_SHARE_BRAND = {
+  name: "MAJU", operator: "운영 비브(BIV)", headline: "식자재 단가 비교·주문",
+  benefits: ["받은 단가표를 한곳에서 확인", "필요한 품목과 가격 비교", "매장 연결 후 간편 주문"],
+} as const;
+export type DocumentShareImage = { companyName: string; title: string; itemCount: number; validUntil: string };
+
 export function brandedDocumentSharePreview(input: { companyName: string; title: string }) {
-  return { title: `MAJU · ${input.companyName.trim().slice(0, 80) || "유통사"} ${input.title.trim().slice(0, 70) || "단가표"}`,
-    description: "가입 전 단가표 확인 · 가입 후 식자재 단가 비교와 간편 주문을 MAJU에서 시작하세요." };
+  return { title: `${DOCUMENT_SHARE_BRAND.name} · ${input.companyName.trim().slice(0, 80) || "유통사"} ${input.title.trim().slice(0, 70) || "단가표"}`,
+    description: `가입 전 단가표 확인 · 가입 후 식자재 단가 비교와 간편 주문을 ${DOCUMENT_SHARE_BRAND.name}에서 시작하세요.` };
 }
 
 export type PublicDocumentOutput = ReturnType<typeof publicDocumentOutput>;

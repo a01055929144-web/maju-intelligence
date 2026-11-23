@@ -34,12 +34,14 @@ let links: Row[], sends: Row[], actions: Row[], content: DocumentContent, owner:
 let failInsert: boolean, failBinding: boolean, limit: string, stock: number;
 let inquiryBody: string | null, inquiryFailure: boolean, orderFooterFailure: boolean;
 let publishedNumber = 2;
+let linkedContent: DocumentContent | null = null;
+const linkedVersionId = "a0000000-0000-4000-8000-000000000001";
 const seen: string[] = [];
 
 beforeEach(() => {
   vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", "");
   vi.clearAllMocks(); links = []; sends = []; actions = []; seen.length = 0; owner = actor; merged = archived = failInsert = failBinding = false; limit = "allowed"; stock = 2;
-  inquiryBody = null; inquiryFailure = false; orderFooterFailure = false; publishedNumber = 2;
+  inquiryBody = null; inquiryFailure = false; orderFooterFailure = false; publishedNumber = 2; linkedContent = null;
   mocks.capability.mockReturnValue(false);
   mocks.connection.mockResolvedValue(null);
   vi.stubEnv("STORE_PUBLIC_OWNER_ONBOARDING_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS", company);
@@ -58,6 +60,7 @@ beforeEach(() => {
   mocks.db.mockImplementation(async (url: string, init?: RequestInit) => {
     seen.push(url);
     const u = new URL(url, "https://fixture.test/"), table = u.pathname.slice(1), p = u.searchParams;
+    if (table === "rpc/resolve_pricing_document_link_head_v1") return linkedContent ? linkedVersionId : null;
     if (table === "store_order_settings") {
       expect(p.get("company_id")).toBe(`eq.${company}`);
       expect(init?.method || "GET").toBe("GET");
@@ -120,6 +123,8 @@ beforeEach(() => {
       return inquiryBody === null ? [] : [{ company_id: company, template_key: "lead_dm_kit", body: inquiryBody }];
     }
     if (p.get("company_id") !== `eq.${company}`) return [];
+    if (table === "pricing_document_versions" && p.get("id") === `eq.${linkedVersionId}` && linkedContent)
+      return [{ id: linkedVersionId, document_id: doc, version: 3, revision: 4, published_at: "2026-11-23T00:00:00Z", content: linkedContent }];
     if (table === "pricing_document_versions") return p.get("id") === `eq.${version}` ? [{ id: version, document_id: doc, version: publishedNumber, revision: 3, published_at: "2026-11-06T00:00:00Z", content: { ...content, cost: "COST-CANARY", supplier: "SUPPLIER-CANARY" } }] : [];
     if (table === "pricing_documents") return [{ id: doc, kind: content.kind, owner_key: owner, archived_at: archived ? "2026-11-06" : null }];
     if (table === "business_permit_leads") return merged ? [] : [{ id: lead }];
@@ -730,4 +735,34 @@ it("CX-132 refuses ambiguous metadata IDs instead of selecting another share", a
   const previewId = String(links[0].preview_id);
   links.push({ ...links[0], id: previewId, preview_id: null, idempotency_key: "90000000-0000-4000-8000-000000000002" });
   expect(await readDocumentSharePreview(previewId)).toBeNull();
+});
+
+it("CX-132 image metadata follows the same current publication head and excludes hidden/private fields", async () => {
+  const result = await brandedShare(), frozen = JSON.stringify(links);
+  vi.stubEnv("PRICING_DOCUMENT_EXTENSION_ENABLED", "true"); vi.stubEnv("PRICING_DOCUMENT_EXTENSION_COMPANY_IDS", company);
+  linkedContent = { ...structuredClone(content), title: "합성 연장 단가표", validUntil: "2100-01-31" };
+  linkedContent.lines.push({ ...linkedContent.lines[0], productId: "50000000-0000-4000-8000-000000000002", visible: false });
+  const preview = await readDocumentSharePreview(String(links[0].preview_id));
+  expect(preview).toMatchObject({ title: "MAJU · 합성 회사 합성 연장 단가표", image: { companyName: "합성 회사", title: "합성 연장 단가표", itemCount: 1, validUntil: "2100-01-31" } });
+  expect(JSON.stringify(preview)).not.toMatch(/PRIVATE-|777777|token_hash|token_nonce|customer_id/);
+  const redirect = await openShort(result.publicUrl.slice(3));
+  const opened = await publicPost(request({ token: new URL(redirect.headers.get("location")!).hash.slice(1) }));
+  expect((await opened.json()).document).toMatchObject({ title: "합성 연장 단가표", version: 3, validUntil: "2100-01-31" });
+  expect(JSON.stringify(links)).toBe(frozen);
+});
+it("CX-132 exposes only a branding switch to the verified general reader and preserves OFF responses", async () => {
+  const result = await brandedShare(); const redirect = await openShort(result.publicUrl.slice(3));
+  const signedToken = new URL(redirect.headers.get("location")!).hash.slice(1);
+  expect(await (await publicPost(request({ token: signedToken }))).json()).toHaveProperty("brandingAvailable", true);
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", "");
+  expect(await (await publicPost(request({ token: signedToken }))).json()).not.toHaveProperty("brandingAvailable");
+});
+
+it("CX-132 leaves lead sales previews and reader branding unchanged", async () => {
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", company);
+  vi.stubEnv("INDUSTRY_BASKETS", "true"); vi.stubEnv("INDUSTRY_BASKETS_COMPANY_IDS", company);
+  const result = await prepared();
+  const preview = await readDocumentSharePreview(String(links[0].preview_id));
+  expect(preview?.title).toBe("합성 회사 · 합성 견적"); expect(preview).not.toHaveProperty("image");
+  expect(await (await publicPost(request({ token: token(result.publicUrl) }))).json()).not.toHaveProperty("brandingAvailable");
 });

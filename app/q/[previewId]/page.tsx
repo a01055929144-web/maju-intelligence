@@ -8,11 +8,13 @@ const read = (previewId: string) => readDocumentSharePreview(previewId).catch(()
 const privateMetadata: Metadata = { referrer: "no-referrer", robots: { index: false, follow: false } };
 
 export async function generateMetadata({ params }: { params: Promise<{ previewId: string }> }): Promise<Metadata> {
-  const preview = await read((await params).previewId);
+  const previewId = (await params).previewId;
+  const preview = await read(previewId);
   const title = preview?.title || "공유 단가표", description = preview?.description || "";
+  const image = preview?.image ? "/q/" + previewId + "/image" : null;
   return { ...privateMetadata, title, description,
-    openGraph: { title, description, siteName: "MAJU", locale: "ko_KR", type: "website" },
-    twitter: { card: "summary_large_image", title, description } };
+    openGraph: { title, description, siteName: "MAJU", locale: "ko_KR", type: "website", ...(image ? { images: [{ url: image, width: 1200, height: 630, alt: title }] } : {}) },
+    twitter: { card: "summary_large_image", title, description, ...(image ? { images: [image] } : {}) } };
 }
 
 export default async function PricingPreviewPage({ params }: { params: Promise<{ previewId: string }> }) {
