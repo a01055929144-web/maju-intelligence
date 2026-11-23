@@ -2,31 +2,36 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import type { CustomerSession } from "@/lib/auth";
+import { customerHasCapability, type CustomerSession } from "@/lib/auth";
 import { MyAccountLoginCard } from "@/components/my-account-login-card";
 import { getAppUserLoginMethods } from "@/lib/store";
+import { isStorePriceVisibilityEnabled } from "@/lib/store/07-store-price-visibility-feature";
 
 const SETTINGS_TABS = [
   ["/dashboard/settings/company", "회사 정보"],
   ["/dashboard/settings/sales", "영업 정보"],
   ["/dashboard/settings/staff", "직원 관리"],
+  ["/dashboard/settings/store-price-visibility", "매장 가격 공개"],
   ["/dashboard/settings/routes", "권역·호차"],
   ["/dashboard/settings/security", "보안 기록"],
   ["/dashboard/settings/advanced", "고급 설정"],
   ["/dashboard/settings/messaging", "문자 발송"]
 ] as const;
 
-export async function SettingsShell({ accountStatus, activePath, children, session, showHoldModules, subtitle, title }: {
+export async function SettingsShell({ accountStatus, activePath, children, session, showHoldModules, showStorePriceVisibility, subtitle, title }: {
   /** 카카오 연결 결과(linked/already/in_use) — 회사 정보 페이지에서만 넘깁니다. */
   accountStatus?: string;
   activePath: string;
   children: ReactNode;
   session: CustomerSession;
   showHoldModules: boolean;
+  showStorePriceVisibility?: boolean;
   subtitle: string;
   title: string;
 }) {
   const workspaceActive = activePath === "/dashboard/settings/staff" ? "settings-staff" : "settings";
+  const canSeeStorePriceVisibility = (showStorePriceVisibility ?? isStorePriceVisibilityEnabled(session.companyId)) &&
+    customerHasCapability(session, "manage_company");
   // 11/3: 내 계정 로그인 카드는 설정 탭 줄 위(회사 정보·영업 정보·직원 관리 공통).
   const loginMethods = session.userId ? await getAppUserLoginMethods(session.userId) : null;
   return (
@@ -34,7 +39,9 @@ export async function SettingsShell({ accountStatus, activePath, children, sessi
       <section className="mx-auto w-full min-w-0 max-w-[1560px] px-3 py-3 sm:px-4 sm:py-4">
         {loginMethods ? <div className="mb-4"><MyAccountLoginCard kakao={loginMethods.kakao} loginId={loginMethods.loginId} status={accountStatus} /></div> : null}
         <nav aria-label="회사 설정 페이지" className="maju-toolbar-scroll mb-4 flex items-center gap-1 overflow-x-auto border-b border-slate-200">
-          {SETTINGS_TABS.filter(([href]) => !["/dashboard/settings/advanced", "/dashboard/settings/security"].includes(href) || session.workspaceRole === "owner").map(([href, label]) => <Link className={`flex h-11 shrink-0 items-center border-b-2 px-3 text-sm font-semibold transition ${activePath === href ? "border-teal-700 text-teal-800" : "border-transparent text-slate-500 hover:bg-slate-100/70 hover:text-slate-950"}`} href={href} key={href}>{label}</Link>)}
+          {SETTINGS_TABS.filter(([href]) => href !== "/dashboard/settings/store-price-visibility" ?
+            (!["/dashboard/settings/advanced", "/dashboard/settings/security"].includes(href) || session.workspaceRole === "owner") : canSeeStorePriceVisibility)
+            .map(([href, label]) => <Link className={`flex h-11 shrink-0 items-center border-b-2 px-3 text-sm font-semibold transition ${activePath === href ? "border-teal-700 text-teal-800" : "border-transparent text-slate-500 hover:bg-slate-100/70 hover:text-slate-950"}`} href={href} key={href}>{label}</Link>)}
         </nav>
         <div className="space-y-5">{children}</div>
       </section>
