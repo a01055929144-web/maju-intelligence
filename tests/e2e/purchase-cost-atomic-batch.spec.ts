@@ -692,7 +692,8 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
     [2, 150, 1, 150, 15, 165], [3, 80, 2, 160, 16, 176], [4, 100, 3, 300, 30, 330],
     [5, 120, 4, 480, 48, 528], [6, 130, 5, 650, 65, 715], [7, 90, 6, 540, 54, 594]
   ]);
-  expect(rows.filter(row => row.priceSelected)).toHaveLength(3); expect(rows.filter(row => row.priceHeld)).toHaveLength(1);
+  expect(rows.filter(row => row.priceSelected)).toHaveLength(3); expect(rows.filter(row => row.priceHeld)).toHaveLength(2);
+  expect(rows[2]).toMatchObject({ cost: 100, priceSelected: false, priceHeld: true });
   expect(rows[4].priceSelected).toBe(false);
   expect(rows[4].rawValues[5]).toBe("130");
   expect(rows[5]).toMatchObject({ productId: "20000000-0000-4000-8000-000000000005", unit: "병", spec: "750ml" });
