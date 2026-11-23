@@ -643,7 +643,7 @@ it("CX-132 issues an opaque code once, keeps prices/version and supports origina
   const original = new URL(response.headers.get("location")!);
   expect(original.pathname).toBe("/pricing-document"); expect(original.search).toBe("");
   const opened = await publicPost(request({ token: original.hash.slice(1) }));
-  expect(opened.status).toBe(200); expect((await opened.json()).document.lines[0].price).toBe(1000);
+  expect(opened.status).toBe(200); expect((await opened.json()).document.lines[0].price).toBe(1100); // Existing taxable fixture: 1,000 supply + 100 VAT.
   expect(JSON.stringify({ links, content })).toBe(frozen);
   expect(sends).toEqual([]); expect(actions).toEqual([]);
 });
