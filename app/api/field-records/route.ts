@@ -1,14 +1,13 @@
-import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { getCustomerAssignmentKeys, getCustomerOperationalName, getRequestAuthScope, scopeHasCapability, shouldScopeCustomerData } from "@/lib/auth";
-import { isFeatureEnabled } from "@/lib/feature-flags";
-import { canAccessAssignedCustomer, createCustomerAttachmentSignedUrl, CUSTOMER_ATTACHMENT_BUCKET, supabaseRequest, supabaseStorageRequest } from "@/lib/store";
-import { fieldMediaExtension, parseFieldRecord, validateFieldMedia, FIELD_MEDIA_MAX_COUNT } from "@/domains/field-record/field-record";
+import { getCustomerAssignmentKeys, getCustomerOperationalName, scopeHasCapability, shouldScopeCustomerData } from "@/lib/auth";
+import { fieldRecordGuard, fieldRecordReply as reply, readSmallJson } from "@/lib/field-records/guard";
+import { claimKind, verifyUploadedMedia } from "@/lib/field-records/storage";
+import { canAccessAssignedCustomer, createCustomerAttachmentSignedUrl, supabaseRequest } from "@/lib/store";
+import { FIELD_MEDIA_MAX_COUNT, parseFieldRecord } from "@/domains/field-record/field-record";
 
 export const dynamic = "force-dynamic";
 const q = encodeURIComponent;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const reply = (status: number, message: string) => NextResponse.json({ message }, { status, headers: { "Cache-Control": "no-store" } });
 
 type RecordRow = {
   id: string; kind: string; placement_types: string[]; actor_user_id: string; customer_id: string | null; lead_id: string | null;
@@ -16,52 +15,39 @@ type RecordRow = {
   field_record_photos?: Array<{ id: string; media_kind: string; storage_path: string; mime_type: string; sort_order: number }>;
 };
 
-/** 기능 플래그(기본 OFF + 회사 allowlist) 뒤. 쓰기는 서버(service role)만, 기록자는 로그인한 활성 구성원. */
-async function guard(request: NextRequest) {
-  const scope = await getRequestAuthScope(request);
-  if (!scope.ok || !scope.companyId || !scope.customerSession?.userId) return { error: reply(401, "로그인이 필요합니다.") };
-  if (!isFeatureEnabled("FIELD_RECORDS", scope.companyId)) return { error: reply(404, "현장 기록 기능이 아직 열리지 않았습니다.") };
-  return { companyId: scope.companyId, scope, session: scope.customerSession };
-}
-
+/**
+ * 2단계: 파일은 이미 저장소에 올라가 있다(upload-urls 주소로 브라우저가 직접 업로드). 이 요청은 작은 JSON만 받는다.
+ * 서버는 올라간 객체의 존재·경로·크기·종류를 저장소에서 확인한 뒤 create_field_record_v1을 부른다(경로의 회사 폴더 검사는 DB 함수가 한 번 더).
+ */
 export async function POST(request: NextRequest) {
-  const auth = await guard(request);
+  const auth = await fieldRecordGuard(request);
   if ("error" in auth) return auth.error;
-  const form = await request.formData().catch(() => null);
-  if (!form) return reply(400, "기록 값을 확인해 주세요.");
-  const parsed = parseFieldRecord({
-    accuracyM: form.get("accuracyM"), capturedAt: form.get("capturedAt"), customerId: form.get("customerId"), idempotencyKey: form.get("idempotencyKey"),
-    kind: form.get("kind"), latitude: form.get("latitude"), leadId: form.get("leadId"), longitude: form.get("longitude"), memo: form.get("memo"),
-    placementTypes: form.getAll("placementTypes").map(String)
-  });
+  const body = await readSmallJson(request, 32 * 1024) as (Record<string, unknown> & { media?: unknown }) | null;
+  if (!body || typeof body !== "object" || Array.isArray(body)) return reply(400, "기록 값을 확인해 주세요.");
+  const parsed = parseFieldRecord(body);
   if (!parsed.ok) return reply(400, parsed.message);
   const input = parsed.value;
-  const files = form.getAll("media").filter((item): item is File => item instanceof File);
-  const duration = Number(form.get("videoDurationSeconds"));
-  const media = validateFieldMedia(files.map((file) => ({ durationSeconds: file.type.startsWith("video/") ? duration : undefined, mimeType: file.type, size: file.size })));
-  if (!media.ok) return reply(400, media.message ?? "사진·영상을 확인해 주세요.");
+  const list = Array.isArray(body.media) ? body.media : [];
+  if (list.length > FIELD_MEDIA_MAX_COUNT) return reply(400, `사진·영상은 ${FIELD_MEDIA_MAX_COUNT}개까지 올릴 수 있습니다.`);
+  const media = list.map((item) => {
+    const entry = (item ?? {}) as { durationSeconds?: unknown; mimeType?: unknown; path?: unknown; size?: unknown };
+    const mimeType = typeof entry.mimeType === "string" ? entry.mimeType : "";
+    return { durationSeconds: typeof entry.durationSeconds === "number" ? entry.durationSeconds : undefined, kind: claimKind(mimeType), mimeType,
+      path: typeof entry.path === "string" ? entry.path : "", size: typeof entry.size === "number" ? entry.size : Number.NaN };
+  });
   if (input.customerId && shouldScopeCustomerData(auth.session) &&
     !await canAccessAssignedCustomer(auth.companyId, input.customerId, getCustomerAssignmentKeys(auth.session)))
     return reply(403, "배정된 매장에만 기록할 수 있습니다.");
   try {
-    // 같은 기록 식별값으로 다시 보내도 같은 경로에 덮어쓴다(재전송 안전). 경로에는 식별값 해시만 쓴다.
-    const folder = `${auth.companyId}/field-records/${createHash("sha256").update(input.idempotencyKey).digest("hex").slice(0, 32)}`;
-    const uploaded = [] as Array<{ duration_seconds?: number; kind: string; mime_type: string; size_bytes: number; storage_path: string }>;
-    for (let index = 0; index < files.length; index += 1) {
-      const file = files[index];
-      const storagePath = `${folder}/${index}.${fieldMediaExtension(file.type)}`;
-      await supabaseStorageRequest(`object/${CUSTOMER_ATTACHMENT_BUCKET}/${storagePath}`, {
-        method: "POST", headers: { "Content-Type": file.type, "x-upsert": "true" }, body: await file.arrayBuffer()
-      });
-      const isVideo = file.type.startsWith("video/");
-      uploaded.push({ kind: isVideo ? "video" : "photo", mime_type: file.type, size_bytes: file.size, storage_path: storagePath, ...(isVideo ? { duration_seconds: duration } : {}) });
-    }
+    const verified = await verifyUploadedMedia(auth.companyId, input.idempotencyKey, media);
+    if (!verified.ok) return reply(400, verified.message ?? "사진·영상을 확인해 주세요.");
     const result = await supabaseRequest<{ countsAsVisit: boolean; id: string; leadActionId?: string; reused: boolean }>("rpc/create_field_record_v1", {
       method: "POST", body: JSON.stringify({
         p_company_id: auth.companyId, p_actor_user_id: auth.session.userId, p_actor_member_id: auth.session.companyMemberId ?? null, p_kind: input.kind,
         p_placement_types: input.placementTypes, p_customer_id: input.customerId, p_lead_id: input.leadId, p_assignment_id: null,
         p_latitude: input.latitude, p_longitude: input.longitude, p_accuracy_m: input.accuracyM, p_captured_at: input.capturedAt, p_memo: input.memo,
-        p_idempotency_key: input.idempotencyKey, p_media: uploaded, p_actor_name: getCustomerOperationalName(auth.session)
+        p_idempotency_key: input.idempotencyKey, p_actor_name: getCustomerOperationalName(auth.session),
+        p_media: media.map((item) => ({ kind: item.kind, mime_type: item.mimeType, size_bytes: item.size, storage_path: item.path, ...(item.kind === "video" ? { duration_seconds: item.durationSeconds } : {}) }))
       })
     });
     return NextResponse.json({ countsAsVisit: result.countsAsVisit, id: result.id, reused: result.reused }, { headers: { "Cache-Control": "no-store" } });
@@ -76,7 +62,7 @@ export async function POST(request: NextRequest) {
 
 /** 내 기록, 또는 회사 운영 권한이 있으면 전체(대상 매장·리드 필터). 사진·영상은 10분짜리 서명 주소로만 보인다. */
 export async function GET(request: NextRequest) {
-  const auth = await guard(request);
+  const auth = await fieldRecordGuard(request);
   if ("error" in auth) return auth.error;
   const params = request.nextUrl.searchParams;
   const customerId = params.get("customerId") || "", leadId = params.get("leadId") || "";

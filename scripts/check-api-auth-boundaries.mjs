@@ -42,6 +42,7 @@ const sessionGuardPatterns = [
   /\bpromotionAudienceGate\s*\(/, // lib/pricing/promotion-audience-gate.ts: getRequestAuthScope + PROMOTION_AUDIENCE switch + manage_sales + owner/manager
   /\bstoreGradeGate\s*\(/, // lib/pricing/store-grade-gate.ts: getRequestAuthScope + STORE_GRADES switch + manage_sales + owner/manager
   /\bdistributorGate\s*\(/, // lib/distributor-gate.ts: getRequestAuthScope + manage_customers + DISTRIBUTOR_SALES // lib/pricing/margin-template-gate.ts wraps getRequestAuthScope + feature switch + manage_sales
+  /\bfieldRecordGuard\s*\(/, // lib/field-records/guard.ts: getRequestAuthScope + FIELD_RECORDS switch + real staff account (userId)
   /\bgetCustomerSession\s*\(/,
   /\bgetStoreMemberContext\s*\(/,
   /\bgetStoreOrderMemberContextForCompany\s*\(/, // verified store session and single active membership for the server-resolved company

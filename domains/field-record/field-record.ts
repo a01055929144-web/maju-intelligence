@@ -11,8 +11,9 @@ export const FIELD_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 export const FIELD_VIDEO_MAX_SECONDS = 30;
 export const FIELD_MEDIA_MAX_COUNT = 10;
 export const FIELD_MEMO_MAX = 500;
-const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
-const VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
+// 저장소 버킷(customer-attachments)이 받는 형식만 허용한다(운영 확인: PNG·JPEG·WEBP·MP4·MOV). HEIC·WEBM은 화면이 JPEG로 바꾸거나 거절한다.
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const VIDEO_TYPES = ["video/mp4", "video/quicktime"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type FieldRecordInput = {
@@ -68,14 +69,14 @@ export function validateFieldMedia(files: readonly FieldMediaMeta[]): { message?
   if (files.length > FIELD_MEDIA_MAX_COUNT) return { message: `사진·영상은 ${FIELD_MEDIA_MAX_COUNT}개까지 올릴 수 있습니다.`, ok: false, photoCount: 0 };
   for (const file of files) {
     if (PHOTO_TYPES.includes(file.mimeType)) {
-      if (file.size <= 0 || file.size > FIELD_PHOTO_MAX_BYTES) return { message: "사진은 8MB 이하만 올릴 수 있습니다.", ok: false, photoCount: 0 };
+      if (!Number.isFinite(file.size) || file.size <= 0 || file.size > FIELD_PHOTO_MAX_BYTES) return { message: "사진은 8MB 이하만 올릴 수 있습니다.", ok: false, photoCount: 0 };
       photos += 1;
     } else if (VIDEO_TYPES.includes(file.mimeType)) {
-      if (file.size <= 0 || file.size > FIELD_VIDEO_MAX_BYTES) return { message: "영상은 50MB 이하만 올릴 수 있습니다.", ok: false, photoCount: 0 };
+      if (!Number.isFinite(file.size) || file.size <= 0 || file.size > FIELD_VIDEO_MAX_BYTES) return { message: "영상은 50MB 이하만 올릴 수 있습니다.", ok: false, photoCount: 0 };
       if (!Number.isFinite(file.durationSeconds) || !file.durationSeconds || file.durationSeconds <= 0 || file.durationSeconds > FIELD_VIDEO_MAX_SECONDS)
         return { message: "영상은 30초 이하만 올릴 수 있습니다.", ok: false, photoCount: 0 };
       videos += 1;
-    } else return { message: "JPG·PNG·WEBP·HEIC 사진 또는 MP4·MOV·WEBM 영상만 올릴 수 있습니다.", ok: false, photoCount: 0 };
+    } else return { message: "JPG·PNG·WEBP 사진 또는 MP4·MOV 영상만 올릴 수 있습니다.", ok: false, photoCount: 0 };
   }
   if (videos > 1) return { message: "영상은 1개까지 올릴 수 있습니다.", ok: false, photoCount: 0 };
   return { ok: true, photoCount: photos };
@@ -85,5 +86,5 @@ export function validateFieldMedia(files: readonly FieldMediaMeta[]): { message?
 export const countsAsVisit = (photoCount: number) => photoCount >= 1;
 
 export function fieldMediaExtension(mimeType: string) {
-  return ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif", "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm" } as Record<string, string>)[mimeType] ?? "bin";
+  return ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "video/quicktime": "mov" } as Record<string, string>)[mimeType] ?? "bin";
 }
