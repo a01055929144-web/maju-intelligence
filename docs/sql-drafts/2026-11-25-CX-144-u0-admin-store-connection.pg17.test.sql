@@ -76,7 +76,40 @@ alter table public.store_accounts add column updated_at timestamptz not null def
 
 \ir 20261105-store-kakao-membership.sql
 \ir 20261107-store-owner-activation.sql
+-- 운영 check2(11/10 개업 준비 반영본)와 똑같은 정의로 시험 준비: 번호 없는 개업 준비 공개 요청(4개 있고 사업자번호 null) 분기가 있다
+alter table public.store_owner_activation_requests drop constraint store_owner_activation_requests_check2;
+alter table public.store_owner_activation_requests add constraint store_owner_activation_requests_check2
+  check ((customer_id is not null and prepared_by_company_member_id is not null and public_idempotency_key is null)
+    or (prepared_by_company_member_id is null and public_idempotency_key is not null
+      and num_nonnulls(document_id,document_version_id,share_link_id)=3
+      and (num_nonnulls(store_name,representative_name,address,phone,business_registration_number)=0
+        or (num_nonnulls(store_name,representative_name,address,phone)=4
+          and business_registration_number is null)
+        or num_nonnulls(store_name,representative_name,address,phone,business_registration_number)=5)));
+select pg_get_constraintdef(oid) as prod_check2 from pg_constraint
+  where conrelid='public.store_owner_activation_requests'::regclass and conname='store_owner_activation_requests_check2' \gset
+
 \ir 2026-11-25-CX-144-u0-admin-store-connection.sql
+
+-- U0 이후에도 공개 링크 요청 분기가 운영과 같게 통과/거절된다(번호 없는 개업 준비 포함)
+do $p$ declare ok boolean; d uuid := '50000000-0000-4000-8000-000000000001'; v uuid := '60000000-0000-4000-8000-000000000001'; l uuid := '70000000-0000-4000-8000-000000000001';
+  c uuid := '10000000-0000-4000-8000-000000000001';
+begin
+  insert into public.store_owner_activation_requests(company_id,invite_token_hash,public_idempotency_key,document_id,document_version_id,share_link_id,store_name,representative_name,address,phone)
+    values (c, repeat('1', 64), gen_random_uuid(), d, v, l, '번호 없는 매장', '대표', '서울', '01000000000');
+  insert into public.store_owner_activation_requests(company_id,invite_token_hash,public_idempotency_key,document_id,document_version_id,share_link_id,store_name,representative_name,address,phone,business_registration_number)
+    values (c, repeat('2', 64), gen_random_uuid(), d, v, l, '번호 있는 매장', '대표', '서울', '01000000000', '1234567890');
+  insert into public.store_owner_activation_requests(company_id,invite_token_hash,public_idempotency_key,document_id,document_version_id,share_link_id)
+    values (c, repeat('3', 64), gen_random_uuid(), d, v, l);
+  ok := false;
+  begin insert into public.store_owner_activation_requests(company_id,invite_token_hash,public_idempotency_key,document_id,document_version_id,share_link_id,store_name,representative_name,address)
+    values (c, repeat('4', 64), gen_random_uuid(), d, v, l, '일부만', '대표', '서울'); exception when check_violation then ok := true; end;
+  if not ok then raise exception 'partial_public_profile_accepted'; end if;
+  ok := false;
+  begin insert into public.store_owner_activation_requests(company_id,customer_id,invite_token_hash) values (c, '20000000-0000-4000-8000-000000000001', repeat('5', 64)); exception when check_violation then ok := true; end;
+  if not ok then raise exception 'customer_request_without_preparer_accepted'; end if;
+  delete from public.store_owner_activation_requests where invite_token_hash in (repeat('1', 64), repeat('2', 64), repeat('3', 64));
+end $p$;
 
 do $t$
 declare c1 uuid := '10000000-0000-4000-8000-000000000001'; c2 uuid := '10000000-0000-4000-8000-000000000002';
@@ -200,3 +233,8 @@ do $d$ declare ok boolean := false; begin
   if (select count(*) from public.store_accounts where customer_id = '20000000-0000-4000-8000-000000000001') <> 1 then raise exception 'down_touched_accounts'; end if;
   if not exists (select 1 from pg_constraint where conname = 'store_owner_activation_requests_company_id_store_account_id_key') or exists (select 1 from pg_indexes where indexname = 'store_owner_activation_one_open_per_account') then raise exception 'down_did_not_restore_unique_rule'; end if;
 end $d$;
+select (select pg_get_constraintdef(oid) from pg_constraint where conrelid='public.store_owner_activation_requests'::regclass and conname='store_owner_activation_requests_check2') = :'prod_check2' as ok \gset
+\if :ok
+\else
+  do $x$ begin raise exception 'down_check2_differs_from_prod'; end $x$;
+\endif

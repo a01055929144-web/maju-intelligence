@@ -89,7 +89,9 @@ alter table public.store_owner_activation_requests add constraint store_owner_ac
   (customer_id is not null and prepared_by_company_member_id is not null and public_idempotency_key is null)
   or (prepared_by_company_member_id is null and public_idempotency_key is not null
     and num_nonnulls(document_id,document_version_id,share_link_id)=3
-    and num_nonnulls(store_name,representative_name,address,phone,business_registration_number) in (0,5)));
+    and (num_nonnulls(store_name,representative_name,address,phone,business_registration_number)=0
+      or (num_nonnulls(store_name,representative_name,address,phone)=4 and business_registration_number is null)
+      or num_nonnulls(store_name,representative_name,address,phone,business_registration_number)=5)));
 revoke all on function public.prepare_store_owner_activation_v1(uuid,uuid,uuid,text) from public,anon,authenticated,service_role;
 revoke all on function public.activate_store_owner_v1(text,uuid,text,timestamptz,text,text,timestamptz,text) from public,anon,authenticated,service_role;
 grant execute on function public.prepare_store_owner_activation_v1(uuid,uuid,uuid,text) to service_role;
