@@ -73,3 +73,12 @@ it("never returns lookup prices when the extension catalog POST fails", async ()
   await expect(readDocumentExtensionCatalog("company", { id: "document", expected: 2, mode: "keep" }, { search: "합성" })).rejects.toThrow("연장 가격 조회 실패");
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+it("maps publish validation failures to actionable messages instead of a storage error", () => {
+  const body = (message: string) => new Error(`Supabase request failed: 400 ${JSON.stringify({ code: "P0001", message })}`);
+  expect(documentRequestError(body("published_unit_unconfirmed"), true)).toMatchObject({ status: 400, code: "published_unit_unconfirmed" });
+  expect(documentRequestError(body("published_product_unconfirmed"), true)).toMatchObject({ status: 400, code: "published_product_unconfirmed" });
+  expect(documentRequestError(body("published_quote_duplicate_product"), true)).toMatchObject({ status: 400, code: "duplicate_product" });
+  expect(documentRequestError(body("published_lines_required"), true)).toMatchObject({ status: 400, code: "no_visible_products" });
+  expect(documentRequestError(body("something_else"), true)).toMatchObject({ status: 503, code: "document_storage_failed" });
+});
