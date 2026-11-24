@@ -31,3 +31,11 @@ it("renders public document QR locally, including loopback previews, without wea
   for (const invalid of ["http://docs.example.test/pricing-document#token", "https://docs.example.test/pricing-document?token=secret#x", "https://user:pass@docs.test/pricing-document#x", "https://docs.example.test/q/not-a-preview#x", "https://docs.example.test/q/10000000-0000-4000-8000-000000000001?token=secret#x"])
     await expect(documentOrderQr(invalid)).rejects.toThrow();
 });
+
+it("renders opaque document short QR locally without accepting ambiguous store codes or fragments", async () => {
+  const url = "https://docs.example.test/s/10000000000040008000000000000001.AAAAAAAAAAAAAAAAAAAAAA";
+  expect(isPublicDocumentPath(new URL(url).pathname)).toBe(true);
+  expect(await documentOrderQr(url)).toMatch(/^data:image\/png;base64,iVBOR/);
+  for (const invalid of [url + "#token", url + "?token=secret", "https://docs.example.test/s/Ab3xK9pQ2z", "https://docs.example.test/s/not-a-code", "http://docs.example.test/s/10000000000040008000000000000001"])
+    await expect(documentOrderQr(invalid)).rejects.toThrow();
+});

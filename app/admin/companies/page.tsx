@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
 import { getHoldModulesEnabledCompanyIds } from "@/lib/feature-modules";
 import { getManagedCompanyAccounts } from "@/lib/store";
+import { getAdminDistributorIndustriesEnabledCompanyIds } from "@/lib/admin-distributor-industries";
 import { AdminPageHeader } from "../admin-page-header";
 import { AdminCompaniesWorkspace } from "./workspace";
 
@@ -44,6 +45,7 @@ export default async function AdminCompaniesPage({
 
         {payload ? (
           <AdminCompaniesWorkspace
+            distributorIndustryCompanyIds={getAdminDistributorIndustriesEnabledCompanyIds()}
             defaultCompanyId={process.env.CUSTOMER_COMPANY_ID || ""}
             holdModuleCompanyIds={Array.from(getHoldModulesEnabledCompanyIds())}
             initialCompanies={payload.companies}

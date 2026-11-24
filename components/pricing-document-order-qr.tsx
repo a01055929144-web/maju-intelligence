@@ -4,9 +4,10 @@ import type { DocumentVersion } from "@/domains/pricing/document";
 import { documentLinkLastDay } from "@/domains/pricing/document-share";
 import type { PreparedDocumentShare } from "@/domains/pricing/document-share";
 import { documentRequest } from "@/lib/pricing/document-client";
-import { documentOrderQr, isPublicDocumentPath } from "@/lib/pricing/document-order-qr";
+import { documentOrderQr, isPublicDocumentUrl } from "@/lib/pricing/document-order-qr";
 import { Button } from "./ui/button";
 import { copyText } from "@/lib/copy-text";
+import Link from "next/link";
 
 export type DocumentOrderQr = { dataUrl: string; customerName: string; customerId?: string; audience?: "public"; expiresAt?: string };
 type Customer = { id: string; customer_name: string; address?: string | null };
@@ -31,7 +32,7 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
       }, true);
       stage = "address";
       const url = new URL(result.publicUrl, window.location.origin);
-      if (url.origin !== window.location.origin || !isPublicDocumentPath(url.pathname) || url.search || !url.hash || !Number.isFinite(Date.parse(result.expiresAt)))
+      if (url.origin !== window.location.origin || !isPublicDocumentUrl(url) || !Number.isFinite(Date.parse(result.expiresAt)))
         throw new Error("공개 링크를 확인하지 못했습니다. 다시 시도해 주세요.");
       setShared({ ...result, publicUrl: url.href });
       stage = "qr";
@@ -114,8 +115,9 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
       </div> : null}
       {publicSharingAvailable && (shared || allowCustomerLink) ? <details className={step}>
         <summary className="min-h-11 cursor-pointer content-center font-bold">관리 · 회수와 기존 거래처 전용 QR</summary>
-        <p className="text-sm">링크는 언제든 회수할 수 있습니다. 특정 거래처에만 보낼 QR이 필요할 때만 거래처 전용 QR을 씁니다.</p>
+        <p className="text-sm">발급한 링크의 열람·상태·회수는 링크 관리에서 확인합니다. 특정 거래처에만 보낼 QR이 필요할 때만 아래 기능을 씁니다.</p>
         <div className="flex flex-wrap gap-2">
+          <Link className="inline-flex min-h-11 items-center rounded border px-3 underline" href={`/revenue/pricing/links?companyId=${encodeURIComponent(companyId)}`}>링크 관리 열기</Link>
           {shared ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void revokePublic()} type="button">공개 링크 회수</Button> : null}
           {allowCustomerLink ? <Button className="min-h-[44px]" disabled={busy} onClick={() => { setCustomerMode(true); void load(); }} type="button">기존 거래처 전용 QR 선택</Button> : null}
         </div>

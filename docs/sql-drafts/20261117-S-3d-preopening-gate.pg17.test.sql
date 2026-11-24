@@ -65,13 +65,27 @@ insert into public.store_owner_activation_requests(company_id,customer_id,store_
   ('10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000001',repeat('a',64),'30000000-0000-4000-8000-000000000001'),
   ('10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000002','60000000-0000-4000-8000-000000000002',repeat('c',64),'30000000-0000-4000-8000-000000000001');
 insert into public.store_owner_activation_requests(company_id,store_account_id,invite_token_hash,public_idempotency_key,store_name,representative_name,address,phone)
-  values('10000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000003',repeat('b',64),
-    '70000000-0000-4000-8000-000000000001','Public Store','Owner','Seoul','01012345678');
+  values
+  ('10000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000003',repeat('b',64),
+    '70000000-0000-4000-8000-000000000001','Existing Public Store','Owner','Seoul','01012345678'),
+  ('10000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000004',repeat('d',64),
+    '70000000-0000-4000-8000-000000000002','Rollback Public Store','Owner','Seoul','01087654321');
+
+-- The deployed 11/10 body is the rollback body. Prove its public path before replacing it.
+\ir 20261117-S-3d-preopening-gate.down.sql
+set role service_role;
+select public.activate_preopening_store_owner_v1(repeat('b',64),'20000000-0000-4000-8000-000000000001','2026-11-17',clock_timestamp(),null);
+reset role;
+do $$ begin
+  if (select count(*) from public.store_accounts where id='60000000-0000-4000-8000-000000000003')<>1
+    or (select count(*) from public.normalized_customers where normalized_key='preopening:60000000-0000-4000-8000-000000000003')<>1
+  then raise exception 'deployed_preopening_path_fixture_failed'; end if;
+end $$;
 
 \ir 20261117-S-3d-preopening-gate.sql
 set role service_role;
 do $$ begin
-  begin perform public.activate_preopening_store_owner_v1(repeat('b',64),'20000000-0000-4000-8000-000000000001','2026-11-17',clock_timestamp(),null);
+  begin perform public.activate_preopening_store_owner_v1(repeat('d',64),'20000000-0000-4000-8000-000000000001','2026-11-17',clock_timestamp(),null);
     raise exception 'public_self_signup_was_allowed';
   exception when others then if sqlerrm<>'preopening_activation_unavailable' then raise; end if; end;
   begin perform public.activate_preopening_store_owner_v1(repeat('c',64),'20000000-0000-4000-8000-000000000001','2026-11-17',clock_timestamp(),
@@ -95,5 +109,23 @@ do $$ begin
     or has_function_privilege('authenticated','public.activate_preopening_store_owner_v1(text,uuid,text,timestamptz,uuid)','execute')
     or not has_function_privilege('service_role','public.activate_preopening_store_owner_v1(text,uuid,text,timestamptz,uuid)','execute')
   then raise exception 's3d_rpc_grants_failed'; end if;
+end $$;
+
+-- Rollback restores the deployed public path and removes the prepared-customer path.
+\ir 20261117-S-3d-preopening-gate.down.sql
+set role service_role;
+select public.activate_preopening_store_owner_v1(repeat('d',64),'20000000-0000-4000-8000-000000000001','2026-11-17',clock_timestamp(),null);
+do $$ begin
+  begin perform public.activate_preopening_store_owner_v1(repeat('c',64),'20000000-0000-4000-8000-000000000001','2026-11-17',clock_timestamp(),null);
+    raise exception 'prepared_customer_path_survived_rollback';
+  exception when others then if sqlerrm<>'preopening_activation_unavailable' then raise; end if; end;
+end $$;
+reset role;
+do $$ begin
+  if (select count(*) from public.store_accounts where id='60000000-0000-4000-8000-000000000004')<>1
+    or has_function_privilege('anon','public.activate_preopening_store_owner_v1(text,uuid,text,timestamptz,uuid)','execute')
+    or has_function_privilege('authenticated','public.activate_preopening_store_owner_v1(text,uuid,text,timestamptz,uuid)','execute')
+    or not has_function_privilege('service_role','public.activate_preopening_store_owner_v1(text,uuid,text,timestamptz,uuid)','execute')
+  then raise exception 's3d_rollback_or_grants_failed'; end if;
 end $$;
 select 'S-3d preopening gate PG17 checks passed' as result;

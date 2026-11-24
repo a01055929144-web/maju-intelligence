@@ -40,7 +40,7 @@ describe("store customer review (CC-08)", () => {
     const approve = vi.fn(async () => true);
     await expect(confirmExistingCustomerLink({ confirm: approve, customerName: "합성", link })).resolves.toBe(true);
     expect(link).toHaveBeenCalledOnce();
-  });
+  }, 30000); // 무거운 컴포넌트를 처음 import할 때 전체 시험 부하로 5초를 넘기는 경우가 있어 늘림
 });
 
 describe("customer list hides duplicates (CC-08)", () => {

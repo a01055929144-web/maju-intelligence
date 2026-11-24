@@ -146,3 +146,40 @@ for (const width of [1440, 390]) for (const failure of ["category-and-recalculat
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   await page.screenshot({ path: info.outputPath(`margin-group-${failure}-${width}.png`), fullPage: true });
 });
+
+for (const width of [1440, 390]) test('CX133 saves rounding before applying prices at '+width+'px', async ({ page }, info) => {
+ let rounding=10, appliedRounding=10, price=2020, pendingCount=0, lastBatch:string|null=null;
+ const commands:string[]=[];
+ const item=()=>({id:productId,name:'합성 상품',category:'합성 분류',cost:1833,price,appliedCost:1833,appliedMargin:10,appliedRounding,groupId:null,itemMargin:null,directPrice:null,active:true});
+ const state=()=>({groups:[],categories:[],items:[item()],defaultMargin:10,defaultRounding:rounding,pendingCount,total:1,page:1,pageSize:50,lastBatch,restored:false});
+ expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:'ci-owner-layout-password-2026'}})).ok()).toBeTruthy();
+ await page.setViewportSize({width,height:1000});
+ await page.route(/\/api\/price-sheets(?:\?|$)/,async route=>{
+  if(route.request().method()==='POST'){
+   const command=route.request().postDataJSON();commands.push(command.action);
+   if(command.action==='defaults'){rounding=command.rounding;pendingCount=rounding===appliedRounding?0:1;}
+   if(command.action==='recalculate'){price=rounding===50?2050:2020;appliedRounding=rounding;pendingCount=0;lastBatch='batch-1';}
+  }
+  return route.fulfill({json:state()});
+ });
+ await page.goto('/revenue/pricing/margins');
+ const defaults=page.getByRole('region',{name:'회사 기본 마진',exact:true});
+ await defaults.getByRole('button',{name:'바꾸기',exact:true}).click();
+ const select=defaults.getByLabel('끝자리 올림',{exact:true});
+ await expect(select.locator('option')).toHaveText(['1원 단위 올림','10원 단위 올림','50원 단위 올림','100원 단위 올림']);
+ await select.selectOption('50');
+ await expect(defaults).toContainText('2,050');
+ await defaults.getByRole('button',{name:'설정 저장 · 판매가 반영 대기',exact:true}).click();
+ await expect(page.getByText('설정을 저장했습니다. 변경 대기 건을 확인한 뒤 지금 반영을 눌러 주세요.',{exact:true})).toBeVisible();
+ expect(commands).toEqual(['defaults']);expect(price).toBe(2020);expect(appliedRounding).toBe(10);
+ await expect(page.getByRole('button',{name:'지금 반영',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+3)).toBe(false);
+ await page.screenshot({path:info.outputPath('cx133-rounding-'+width+'.png'),fullPage:true});
+ await page.getByRole('button',{name:'지금 반영',exact:true}).click();
+ await expect(page.getByRole('button',{name:'지금 반영',exact:true})).toBeDisabled();
+ expect(commands).toEqual(['defaults','recalculate']);expect(price).toBe(2050);expect(appliedRounding).toBe(50);
+ await select.selectOption('10');
+ await defaults.getByRole('button',{name:'설정 저장 · 판매가 반영 대기',exact:true}).click();
+ await expect(page.getByRole('button',{name:'지금 반영',exact:true})).toBeEnabled();
+ expect(commands).toEqual(['defaults','recalculate','defaults']);expect(price).toBe(2050);expect(appliedRounding).toBe(50);
+});

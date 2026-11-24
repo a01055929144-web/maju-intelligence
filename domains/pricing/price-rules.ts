@@ -1,4 +1,5 @@
 /** Pure KRW rules. Markup = added amount / purchase cost. Null means inherit; zero is explicit. */
+export const PRICE_ROUNDING_UNITS: readonly number[] = [1, 10, 50, 100];
 export type MarginGroup = { id: string; name: string; margin: number; rounding: number };
 export type MarginCategory = { category: string; groupId: string };
 export type PriceItem = {
@@ -36,7 +37,7 @@ export function calculatePriceForBasis(cost: number, margin: number, basis: Pric
   }
   if (!Number.isFinite(cost) || cost < 0 || cost > 1e12) throw new Error("매입가 범위를 확인해 주세요.");
   if (!Number.isFinite(margin) || margin < 0 || margin > 1000) throw new Error("마진율은 0 이상 1000 이하이어야 합니다.");
-  if (![1, 10, 100].includes(rounding)) throw new Error("올림 단위를 확인해 주세요.");
+  if (!PRICE_ROUNDING_UNITS.includes(rounding)) throw new Error("올림 단위를 확인해 주세요.");
   const basisPoints = Math.round(margin * 100);
   if (Math.abs(margin * 100 - basisPoints) > 1e-8) throw new Error("마진율은 소수 둘째 자리까지 입력해 주세요.");
   if (Number(cost.toFixed(2)) !== cost) throw new Error("매입가는 소수 둘째 자리까지 입력해 주세요.");

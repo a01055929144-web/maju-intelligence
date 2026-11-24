@@ -1,8 +1,10 @@
+import { createHash } from "crypto";
 import { isIP } from "net";
 import { NextRequest, NextResponse } from "next/server";
 import { DocumentSendError } from "../../../../domains/pricing/document-send";
 import { documentSharingEnabled } from "../../../../lib/pricing/document-share-feature";
 import { readPublicDocument } from "../../../../lib/pricing/document-share";
+import { isSharePreviewBot, shortShareDevice } from "../../../../lib/pricing/short-share-feature";
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow" };
 function reply(status: number, message: string) { return NextResponse.json({ message }, { status, headers }); }
@@ -41,7 +43,13 @@ export async function POST(request: NextRequest) {
   const platformIp = process.env.VERCEL === "1" ? request.headers.get("x-vercel-forwarded-for")?.trim() : undefined;
   const requester = platformIp && isIP(platformIp) ? `ip:${platformIp}` : "unidentified-requester";
   try {
-    const result = await readPublicDocument(token, requester);
+    const userAgent = request.headers.get("user-agent") || "";
+    // 방문자 식별(IP)이 없으면 해시를 만들지 않아 중복 제거 없이 센다. 있으면 비밀값 섞은 해시만 저장한다.
+    const secret = process.env.STORE_LINK_SECRET;
+    const requesterHash = platformIp && isIP(platformIp) && secret
+      ? createHash("sha256").update(`${secret}:view:${platformIp}:${userAgent}`).digest("hex") : null;
+    const result = await readPublicDocument(token, requester, {
+      deviceClass: shortShareDevice(userAgent), isPreviewBot: isSharePreviewBot(userAgent), requesterHash });
     return NextResponse.json(result, { headers });
   } catch (error) {
     if (error instanceof DocumentSendError) return reply(error.status, error.message);

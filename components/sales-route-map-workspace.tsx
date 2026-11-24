@@ -4,12 +4,17 @@ export { DirectoryStat, OperationalEmptyState } from "@/components/map/customer-
 import { QuickRegisterDrawer } from "@/components/map/quick-register-drawer";
 import { copyText } from "@/lib/copy-text";
 import { leadLayerColor } from "@/domains/route/map-layer-colors";
+import { DEFAULT_LEAD_SEARCH_RADIUS_KM, useLeadRadiusState } from "@/components/map/use-lead-radius-state";
+import { useMapMobilePanelsState } from "@/components/map/use-map-mobile-panels-state";
+import { useAllLeadsState } from "@/components/map/use-all-leads-state";
+import { useMapSalesAreaState } from "@/components/map/use-map-sales-area-state";
+import { useMapFullscreen } from "@/components/map/use-map-fullscreen";
 import { MapExplorerTabs, MapLayerControl, MapLayerLegend, type MapPanelMode } from "@/components/map/map-layer-controls";
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MouseEvent, } from "react";
 import { areaLabelMatchesSigungu, phoneDigitsMatch, summarizeMultiFilter } from "@/lib/map-filter-multi";
 import { AlertTriangle, CalendarDays, Check, CheckCircle2, Columns2, Columns3, Copy, ExternalLink, Eye, EyeOff, Gauge, GripVertical, Layers, Loader2, ListFilter, Maximize2, Minimize2, MapPin, MapPinned, MessageSquareText, Navigation, Phone, Radar, RefreshCw, Ruler, Search, Square, Star, Store, Target, Truck, UserRound, Utensils, X, type LucideIcon } from "lucide-react";
@@ -17,7 +22,6 @@ import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SearchInput } from "@/components/ui/search-input";
-import { NOTICE_TOAST_MS } from "@/components/ui/notice";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { customerLocationChip, customerLocationNote, customerLocationState } from "@/domains/route/map-customer-notice";
 import { MapFilterChipsRow, MapLeadFilterStrip } from "@/components/map/map-filters-bar";
@@ -44,7 +48,7 @@ import {
   type PermitLeadType
 } from "@/domains/lead/map-filters";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
-import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
+import { STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
 import { nextLeadLayerSelection } from "@/lib/map-layer-selection";
 import { getMapLeadReminderLabel } from "@/lib/map-lead-workflow";
@@ -63,6 +67,8 @@ export { RouteMetric, vehicleColorForId };
 import { FullRouteNavigateAction, getRouteStopAddress, NavigateMenu, RouteWorkspaceGuide, type CourseSummary, type MarkerViewMode, type WorkspaceView } from "@/components/map/route-planner";
 export { FullRouteNavigateAction, getRouteStopAddress, NavigateMenu };
 export type { CourseSummary };
+import { useLiveVehicleFeed } from "@/components/map/use-live-vehicle-feed";
+import { useMapHistorySync } from "@/components/map/use-map-history-sync";
 import { useMapHeaderOffset } from "@/components/map/use-map-header-offset";
 import { useMapLocalPersistence } from "@/components/map/use-map-local-persistence";
 import { localStoreKeys, QUOTE_DRAFT_UPDATED_EVENT } from "@/components/map/local-store-keys";
@@ -236,7 +242,6 @@ export const tmapWaypointLimit = 15;
 // v2(10-27 시안 ⑫): 기본 = 3분할(왼쪽 담당자·차량 / 지도 / 오른쪽 신규·영업·거래처 목록). v1 저장값은 무시합니다.
 const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v2";
 // "반경 리드"에서 지도를 클릭하면 항상 이 값으로 시작합니다(네이버 지도 반경 도구 참고, 2026-08-20).
-const DEFAULT_LEAD_SEARCH_RADIUS_KM = 0.5;
 export const QUOTE_FOLLOW_UP_STATUS_FILTER = "__quote_follow_up";
 export const vehicleMarkerColors = ["#2563eb", "#059669", "#dc2626", "#7c3aed", "#ea580c", "#0891b2", "#be123c", "#4f46e5", "#16a34a", "#9333ea"];
 
@@ -312,9 +317,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       // 브라우저 저장소가 차단돼도 기본값(거래처만 표시)으로 지도를 사용할 수 있어야 합니다.
     }
   }, []);
-  const [liveVehicleLocations, setLiveVehicleLocations] = useState<StaffVehicleLocation[]>(staffVehicleLocations);
+  const { justConnectedVehicle, liveVehicleConnectionError, liveVehicleLocations, todayCompletions } = useLiveVehicleFeed({ churnRiskCompanyId, staffVehicleLocations });
   const [vehicleMasterRecords, setVehicleMasterRecords] = useState<VehicleMaster[]>(vehicleMasterVehicles);
-  const [liveVehicleConnectionError, setLiveVehicleConnectionError] = useState("");
   const [vehicleAnalysis, setVehicleAnalysis] = useState<{
     completions: DeliveryCompletionEvent[];
     events: StaffLocationEvent[];
@@ -331,12 +335,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [mainMapRouteEvents, setMainMapRouteEvents] = useState<StaffLocationEvent[]>([]);
   const [mainMapRouteLoading, setMainMapRouteLoading] = useState(false);
   const [mainMapRouteError, setMainMapRouteError] = useState("");
-  const [statsExpanded, setStatsExpanded] = useState(false);
-  const [mobileMapControlsOpen, setMobileMapControlsOpen] = useState(false);
-  const [mobileSalesAreaOpen, setMobileSalesAreaOpen] = useState(false);
+  const {
+    statsExpanded,
+    setStatsExpanded,
+    mobileMapControlsOpen,
+    setMobileMapControlsOpen,
+    mobileSalesAreaOpen,
+    setMobileSalesAreaOpen
+  } = useMapMobilePanelsState();
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const workspaceRef = useRef<HTMLDivElement>(null);
+  const { isFullscreen, toggleFullscreen, workspaceRef } = useMapFullscreen(() => setStatsExpanded(false));
   const { mapAreaRef, mapHeaderHeightPx, mapHeaderRef, recomputeMapHeaderOffset } = useMapHeaderOffset();
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
@@ -382,36 +390,45 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 지도 위에 마커로 바로 보여주기 위한 별도 상태입니다(리드 탭 상태와는 독립적).
   // 기본 모드는 "point"(지도 클릭) — 네이버 지도 반경 도구처럼 지도를 클릭하면 그 지점에
   // 고정 기본값(0.5km) 반경이 즉시 생기고, 손잡이로 조절, 오른쪽 클릭이나 지우기 버튼으로 지웁니다.
-  const [leadRadiusOpen, setLeadRadiusOpen] = useState(false);
-  const [leadRadiusAnchorMode, setLeadRadiusAnchorMode] = useState<"all" | "customer" | "point">("point");
-  const [leadRadiusCustomerId, setLeadRadiusCustomerId] = useState("");
-  // point 모드에서 클릭으로 고정한 중심좌표입니다. 아직 고정 전이면 null이고, 이 값이 null인
-  // 동안에만 지도 클릭이 "이 지점에 반경 만들기" 인터랙션을 받습니다.
-  const [leadRadiusPoint, setLeadRadiusPoint] = useState<{ lat: number; lng: number } | null>(null);
-  // 지도가 마지막으로 멈춘 중심좌표 — "빠른 반경 선택" 칩을 누르면 클릭 없이도 지금 보고 있는
-  // 지도 중심을 기준으로 바로 탐색할 수 있게 합니다(네이버 지도의 "이 지역 검색"과 비슷한 흐름).
-  const [mapCenterPoint, setMapCenterPoint] = useState<{ lat: number; lng: number } | null>(null);
-  // 반경 기본값은 0.5km로 고정합니다(2026-08-20 피드백) — 지도를 클릭하면 항상 이 값으로
-  // 시작하고, 이후 손잡이 드래그나 숫자 입력으로 조절합니다.
-  const [leadRadiusKm, setLeadRadiusKm] = useState(DEFAULT_LEAD_SEARCH_RADIUS_KM);
-  const [leadRadiusSearching, setLeadRadiusSearching] = useState(false);
-  const [leadRadiusResult, setLeadRadiusResult] = useState<NearbyPermitLeadResult | null>(null);
-  const [leadRadiusError, setLeadRadiusError] = useState("");
+  const {
+    leadRadiusOpen,
+    setLeadRadiusOpen,
+    leadRadiusAnchorMode,
+    setLeadRadiusAnchorMode,
+    leadRadiusCustomerId,
+    setLeadRadiusCustomerId,
+    leadRadiusPoint,
+    setLeadRadiusPoint,
+    mapCenterPoint,
+    setMapCenterPoint,
+    leadRadiusKm,
+    setLeadRadiusKm,
+    leadRadiusSearching,
+    setLeadRadiusSearching,
+    leadRadiusResult,
+    setLeadRadiusResult,
+    leadRadiusError,
+    setLeadRadiusError
+  } = useLeadRadiusState();
   const [previewLeadId, setPreviewLeadId] = useState("");
-  // "전체 리드 보기" — 반경 검색과 무관하게 활성 신규 리드 전체를 메인 지도에 바로 표시합니다.
-  // 예전에는 신규 리드 탭 안에 별도 지도가 있었는데(같은 데이터를 두 지도에서 따로 관리),
-  // 이제 메인 지도 한 곳에서만 보여주도록 합칩니다(2026-08-20 피드백).
-  // 시안 ⑫: 3분할 기본 화면은 오른쪽 "신규" 목록과 지도 리드 핀을 함께 보여줍니다.
-  const [showAllLeadsOnMap, setShowAllLeadsOnMap] = useState(true);
-  const [allLeadsForMap, setAllLeadsForMap] = useState<PermitLeadItem[]>([]);
-  const [allLeadsLoadState, setAllLeadsLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  // M9: 같은 종류 요청은 마지막 것만 살린다(옛 응답이 새 목록을 덮지 않게).
-  const beginAllLeadsRequest = useLatestRequest();
+  const {
+    showAllLeadsOnMap,
+    setShowAllLeadsOnMap,
+    allLeadsForMap,
+    setAllLeadsForMap,
+    allLeadsLoadState,
+    setAllLeadsLoadState,
+    beginAllLeadsRequest
+  } = useAllLeadsState();
   const beginRadiusRequest = useLatestRequest();
-  const [mapSalesRegionsConfigured, setMapSalesRegionsConfigured] = useState<boolean | null>(null);
-  // 시안 ⑫: 영업 지역 칩 팝오버를 "내 영업 지역 / 영업 필요 지역"으로 묶기 위한 지역 라벨.
-  const [mapAssignedAreaLabels, setMapAssignedAreaLabels] = useState<string[]>([]);
-  const [mapExpansionAreaLabels, setMapExpansionAreaLabels] = useState<string[]>([]);
+  const {
+    mapSalesRegionsConfigured,
+    setMapSalesRegionsConfigured,
+    mapAssignedAreaLabels,
+    setMapAssignedAreaLabels,
+    mapExpansionAreaLabels,
+    setMapExpansionAreaLabels
+  } = useMapSalesAreaState();
   // 시안 ⑫ 필터 칩 팝오버(한 번에 하나만 열림). left는 필터 줄 기준 px입니다.
   // M3b: 리드 필터 상태·저장 필터(프리셋)는 훅 한 곳(묶음은 useMemo로 고정). 이름은 그대로 꺼내 쓴다.
   const {
@@ -891,77 +908,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const gradeCounts = useMemo(() => countGrades(gradeBaseStores), [gradeBaseStores]);
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
   const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
-  // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘(최근 20시간) 안에 배송완료로
-  // 기록된 거래처 id 목록입니다. 라이브 차량 위치와 같은 폴링 주기를 타도록 같은 요청에
-  // completions=true를 얹어, 새 폴링을 따로 만들지 않고 한 번에 최신 상태를 받아옵니다.
-  // (이 블록이 예전에 병합 과정에서 두 벌로 중복 선언돼 빌드가 깨졌던 것을 여기서 하나로 정리했습니다.)
-  const [todayCompletions, setTodayCompletions] = useState<DeliveryCompletionEvent[]>([]);
-  // 2026-09-07 피드백("모바일로 접속했는데 PC는 새로고침해야 불이 들어와 — 실시간 연동이 필요해,
-  // 접속하면 아래에서 팝업이 뜨거나 화면이 조금 강하게 보여졌으면 좋겠어" + 후속 피드백 "속도는
-  // 빠를수록 좋은 거야"): 폴링 주기를 15초→8초→4초로 줄여 체감 지연을 최소화했고(기사 앱의 위치
-  // 전송 최소 간격도 함께 8초로 단축, mobile-location-reporter.tsx 참고), 이전 폴링에는 없던
-  // 차량(기사)이 새로 나타나면 화면 하단에 "OOO 기사님이 접속했습니다" 배너를 몇 초간 띄워
-  // 새로고침 없이도 바로 눈에 띄게 합니다.
-  const knownVehicleIdsRef = useRef<Set<string> | null>(null);
-  const hasRealtimeVehicleRef = useRef(staffVehicleLocations.some((location) => location.displayState === "realtime"));
-  const [justConnectedVehicle, setJustConnectedVehicle] = useState<{ at: number; label: string } | null>(null);
-  useEffect(() => {
-    setLiveVehicleLocations(staffVehicleLocations);
-  }, [staffVehicleLocations]);
-  useEffect(() => {
-    let cancelled = false;
-    let toastTimer: number | undefined;
-    const load = async () => {
-      try {
-        const params = new URLSearchParams({ completions: "true", date: getTmsServiceDateKey() });
-        if (churnRiskCompanyId) params.set("companyId", churnRiskCompanyId);
-        const response = await fetchWithTimeout(`/api/staff/location?${params.toString()}`, { cache: "no-store" }, 8000);
-        const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; error?: string; locations?: StaffVehicleLocation[] } | null;
-        if (!response.ok) throw new Error(payload?.error || "라이브 차량 위치를 불러오지 못했습니다.");
-        if (!cancelled && response.ok && Array.isArray(payload?.locations)) {
-          setLiveVehicleConnectionError("");
-          setLiveVehicleLocations(payload.locations);
-          hasRealtimeVehicleRef.current = payload.locations.some((location) => location.displayState === "realtime");
-          const activeIds = new Set(payload.locations.filter((location) => !location.isStale).map((location) => location.id));
-          const previousIds = knownVehicleIdsRef.current;
-          // 첫 폴링(previousIds === null)에서는 이미 접속해 있던 차량까지 전부 "새로 접속"으로
-          // 오탐하지 않도록 알림 없이 기준선만 세웁니다. 그다음 폴링부터 새로 나타난 차량만 알립니다.
-          if (previousIds) {
-            const newlyConnected = payload.locations.find((location) => !location.isStale && !previousIds.has(location.id));
-            if (newlyConnected) {
-              const label = newlyConnected.driverName || newlyConnected.deliveryVehicle || "기사";
-              setJustConnectedVehicle({ at: Date.now(), label });
-              if (toastTimer) window.clearTimeout(toastTimer);
-              toastTimer = window.setTimeout(() => setJustConnectedVehicle(null), NOTICE_TOAST_MS);
-            }
-          }
-          knownVehicleIdsRef.current = activeIds;
-        }
-        if (!cancelled && response.ok && Array.isArray(payload?.completions)) setTodayCompletions(payload.completions);
-      } catch (error) {
-        // 마지막 정상 좌표는 유지하되 통신 실패를 명확히 표시합니다. 다음 4초 폴링이 성공하면 자동 복구됩니다.
-        if (!cancelled) setLiveVehicleConnectionError(error instanceof Error ? error.message : "라이브 차량 연결이 지연되고 있습니다.");
-      }
-    };
-    void load();
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") void load();
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    let timer = window.setTimeout(function poll() {
-      if (document.visibilityState === "visible") void load();
-      timer = window.setTimeout(
-        poll,
-        getStaffMapPollIntervalMs(hasRealtimeVehicleRef.current)
-      );
-    }, getStaffMapPollIntervalMs(hasRealtimeVehicleRef.current));
-    return () => {
-      cancelled = true;
-      if (toastTimer) window.clearTimeout(toastTimer);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearTimeout(timer);
-    };
-  }, [churnRiskCompanyId]);
   const completedStoreIdsToday = useMemo(() => new Set(todayCompletions.map((completion) => completion.customerId)), [todayCompletions]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(
@@ -1429,86 +1375,23 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setPreviewStoreId("");
     setSelectedId("");
   };
-  // 2026-10-25: 담당자 선택·거래처 상세를 주소(URL)에 남겨 브라우저/휴대폰 뒤로가기로 이전 화면에 돌아오게 합니다.
-  // 상태 → 주소 동기화는 값이 실제로 달라졌을 때만 pushState하므로, 뒤로가기로 돌아온 직후에는 다시 쌓이지 않습니다.
-  const historySyncMountedRef = useRef(false);
-  const detailHistoryPushedRef = useRef(false);
-  // 패널(3분할·담당자·거래처·신규·영업·지도만)과 지도 위 미리보기 카드도 뒤로가기로 되돌립니다.
-  const panelBaselineRef = useRef<MapPanelMode | null>(null);
-  const lastSyncedPanelRef = useRef<MapPanelMode>(mapPanelMode);
-  useEffect(() => {
-    if (typeof window === "undefined" || initialView === "leads") return;
-    if (!historySyncMountedRef.current) return;
-    const params = new URLSearchParams(window.location.search);
-    // 상세를 닫을 때, 방금 상세를 열면서 쌓은 기록이면 새 기록을 쌓지 않고 한 칸 뒤로 갑니다.
-    // (닫은 뒤 뒤로가기를 누르면 상세가 다시 열리는 혼란 방지)
-    if (!selectedId && params.has("detail") && detailHistoryPushedRef.current) {
-      detailHistoryPushedRef.current = false;
-      window.history.back();
-      return;
-    }
-    if (vehicleFilterId !== "all") params.set("staff", vehicleFilterId);
-    else params.delete("staff");
-    if (selectedId) params.set("detail", selectedId);
-    else params.delete("detail");
-    if (panelBaselineRef.current === null && mapPanelMode !== lastSyncedPanelRef.current && !params.has("panel")) {
-      panelBaselineRef.current = lastSyncedPanelRef.current;
-    }
-    if (panelBaselineRef.current !== null && mapPanelMode !== panelBaselineRef.current) params.set("panel", mapPanelMode);
-    else params.delete("panel");
-    lastSyncedPanelRef.current = mapPanelMode;
-    const hadPin = params.has("pin");
-    const pin = previewStoreId ? `s:${previewStoreId}` : previewLeadId ? `l:${previewLeadId}` : "";
-    if (pin) params.set("pin", pin);
-    else params.delete("pin");
-    const next = `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}${window.location.hash}`;
-    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (next !== current) {
-      // 미리보기 카드끼리 바꿀 때는 기록을 늘리지 않습니다(뒤로가기 한 번이면 카드가 닫힘).
-      const onlyPinChanged = hadPin && Boolean(pin) && next.replace(/[?&]pin=[^&#]*/, "") === current.replace(/[?&]pin=[^&#]*/, "");
-      if (onlyPinChanged) window.history.replaceState(null, "", next);
-      else window.history.pushState(null, "", next);
-      detailHistoryPushedRef.current = Boolean(selectedId);
-    }
-  }, [initialView, mapPanelMode, previewLeadId, previewStoreId, selectedId, vehicleFilterId]);
-  useEffect(() => {
-    if (typeof window === "undefined" || initialView === "leads") return;
-    const applyFromLocation = () => {
-      const params = new URLSearchParams(window.location.search);
-      detailHistoryPushedRef.current = false;
-      const view = params.get("view");
-      setActiveView(view === "customers" || view === "course" || view === "history" ? view : "map");
-      setVehicleFilterId(params.get("staff") || "all");
-      setSelectedId(params.get("detail") || "");
-      setSelectedLiveVehicleId("");
-      const pin = params.get("pin") || "";
-      setPreviewStoreId(pin.startsWith("s:") ? pin.slice(2) : "");
-      setPreviewLeadId(pin.startsWith("l:") ? pin.slice(2) : "");
-      setMapFocusId("");
-      const panel = params.get("panel");
-      const panelModes: MapPanelMode[] = ["split", "driver", "customer", "newLead", "salesLead", "map"];
-      if (panel && panelModes.includes(panel as MapPanelMode)) {
-        lastSyncedPanelRef.current = panel as MapPanelMode;
-        setMapPanelMode(panel as MapPanelMode);
-      } else if (panelBaselineRef.current) {
-        lastSyncedPanelRef.current = panelBaselineRef.current;
-        setMapPanelMode(panelBaselineRef.current);
-      }
-    };
-    // 저장된 패널 모드 복원(위쪽 effect)이 첫 기록으로 쌓이지 않도록 기준값을 맞춥니다.
-    try {
-      const savedMode = normalizeStoredMapPanelMode(window.localStorage.getItem(MAP_PANEL_MODE_STORAGE_KEY));
-      if (savedMode) lastSyncedPanelRef.current = savedMode;
-    } catch {
-      // 저장소 차단 시 기본값 유지
-    }
-    applyFromLocation();
-    historySyncMountedRef.current = true;
-    window.addEventListener("popstate", applyFromLocation);
-    return () => window.removeEventListener("popstate", applyFromLocation);
-    // 최초 1회만 등록합니다. setState 함수는 안정적이라 의존성에서 뺍니다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialView]);
+  useMapHistorySync({
+    initialView,
+    mapPanelMode,
+    panelModeStorageKey: MAP_PANEL_MODE_STORAGE_KEY,
+    previewLeadId,
+    previewStoreId,
+    selectedId,
+    setActiveView,
+    setMapFocusId,
+    setMapPanelMode,
+    setPreviewLeadId,
+    setPreviewStoreId,
+    setSelectedId,
+    setSelectedLiveVehicleId,
+    setVehicleFilterId,
+    vehicleFilterId
+  });
 
   const selectLiveVehicle = (location: StaffVehicleLocation) => {
     const matchingGroup = deliveryVehicles.find((vehicle) => liveVehicleMatchesDeliveryGroup(location, vehicle));
@@ -1588,21 +1471,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     }
   };
 
-
-  useEffect(() => {
-    const handleFullscreenChange = () => setIsFullscreen(document.fullscreenElement === workspaceRef.current);
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
-
-  async function toggleFullscreen() {
-    if (document.fullscreenElement) {
-      await document.exitFullscreen().catch(() => null);
-      return;
-    }
-    setStatsExpanded(false);
-    await workspaceRef.current?.requestFullscreen().catch(() => null);
-  }
 
   useEffect(() => {
     if (!sourceReady) {

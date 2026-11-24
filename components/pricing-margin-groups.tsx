@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { calculatePrice, PRICE_ROUNDING_UNITS } from "../domains/pricing/price-rules";
 import type { MarginGroup, PriceItem, PriceState } from "../domains/pricing/price-rules";
 import type { PricingCommand, PricingBulkCommand } from "../application/pricing/manage-price-sheets";
 import { filterMarginCategories, marginCategoryOptions, marginGroupSummary } from "./pricing-margin-group-options";
@@ -15,6 +16,8 @@ const input = "min-h-11 w-full min-w-0 rounded border border-slate-300 bg-white 
 export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMessage, onError }: Props) {
   const [items, setItems] = useState<PriceItem[] | null>(null), [loading, setLoading] = useState(false), [loadError, setLoadError] = useState("");
   const [reload, setReload] = useState(0), [id, setId] = useState(""), [name, setName] = useState(""), [margin, setMargin] = useState("12"), [rounding, setRounding] = useState("10");
+  const deferFifty = Number(rounding) === 50 || state.groups.find(group => group.id === id)?.rounding === 50;
+  const sample = useMemo(() => { try { return calculatePrice(1833, Number(margin), Number(rounding)); } catch { return null; } }, [margin, rounding]);
   const [selected, setSelected] = useState<string[]>([]), [query, setQuery] = useState(""), [levels, setLevels] = useState(["", "", ""]);
   const [uncertain, setUncertain] = useState<Checkpoint | null>(null), [steps, setSteps] = useState(["미시작", "미시작", "미시작"]);
   const checkpointKey = `maju:margin-group-save:${companyId}`;
@@ -119,8 +122,8 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
       ];
       for (const command of commands) { latest = await send(command); if (command.action === "category" && (command.groupId ? !latest.categories.some(link => link.category === command.category && link.groupId === command.groupId) : latest.categories.some(link => link.category === command.category))) throw new Error("분류 연결 결과가 변경됐습니다. 최신 목록을 확인해 주세요."); completed++; setSteps(["완료", `${completed}/${commands.length}개 완료`, "대기"]); }
       setSteps(["완료", "완료", "반영 중"]); stage = 2;
-      if (latest.pendingCount > 0) await send({ action: "recalculate" });
-      checkpoint(null); setSteps(["완료", "완료", "완료"]); onMessage("그룹·분류 연결을 저장하고 판매가 반영을 마쳤습니다.");
+      if (!deferFifty && latest.pendingCount > 0) await send({ action: "recalculate" });
+      checkpoint(null); setSteps(["완료", "완료", deferFifty ? "반영 대기" : "완료"]); onMessage(deferFifty ? "그룹·분류 연결을 저장했습니다. 판매가는 변경 대기 상태입니다. 지금 반영을 눌러 적용해 주세요." : "그룹·분류 연결을 저장하고 판매가 반영을 마쳤습니다.");
     } catch (error) {
       if (!target) { const pending = { name: trimmed, categories: selected }; setUncertain(pending); checkpoint(pending); }
       setSteps(stage === 0 ? ["실패 또는 응답 미확정", "미시작", "미시작"] : stage === 1 ? ["완료", `${completed}개 완료 후 실패`, "미시작"] : ["완료", "완료", "실패 또는 응답 미확정"]);
@@ -149,7 +152,8 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
         <legend className="font-bold">{id ? "선택한 그룹 수정" : "새 그룹 만들기"}</legend>
         <div className="grid gap-3 sm:grid-cols-3"><label>그룹 이름<input aria-label="마진 그룹 이름" className={input} value={name} maxLength={80} required onChange={event => setName(event.target.value)} /></label>
           <label>마진율 (%)<input aria-label="그룹 마진율" className={input} type="number" min="0" max="1000" step="0.01" required value={margin} onChange={event => setMargin(event.target.value)} /></label>
-          <label>끝자리 올림<select aria-label="그룹 끝자리 올림" className={input} value={rounding} onChange={event => setRounding(event.target.value)}>{[1, 10, 100].map(value => <option key={value} value={value}>{value}원</option>)}</select></label></div>
+          <label>끝자리 올림<select aria-label="그룹 끝자리 올림" className={input} value={rounding} onChange={event => setRounding(event.target.value)}>{PRICE_ROUNDING_UNITS.map(value => <option key={value} value={value}>{value}원 단위 올림</option>)}</select></label></div>
+        {sample !== null && <p className="text-sm">예시: 매입가 1,833원 → {sample.toLocaleString("ko-KR")}원</p>}
         <p className="text-slate-600">분류 연결은 전체 경로가 같은 상품에만 적용합니다. 상품 분류를 바꾸거나 상품을 이동하지 않습니다.</p>
         <label className="block">분류 검색<SearchInput aria-label="마진 적용 분류 검색" className="mt-1" inputProps={{ role: "textbox" }} placeholder="대·중·소 분류 이름 검색" value={query} onChange={setQuery} /></label>
         <div className="grid gap-2 sm:grid-cols-3">{["대분류", "중분류", "소분류"].map((label, index) => {
@@ -168,7 +172,7 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
           <p className="text-xs">직접 단가·개별 마진·상품 지정 그룹이 우선하고, 매입가 0원 상품은 반영 대상에서 빠집니다. 선택 분류의 상품 수와 실제 적용 수가 다를 수 있습니다.</p>
           <div className="mt-2 flex flex-wrap gap-2">{selected.map(category => <button key={category} type="button" disabled={!options.find(option => option.path === category)?.selectable} className="min-h-11 max-w-full rounded border bg-white px-2 py-1 text-left text-xs [overflow-wrap:anywhere]" onClick={() => setSelected(previous => previous.filter(value => value !== category))}>{category} ×<span className="sr-only"> 연결 선택 해제</span></button>)}</div>
         </div>
-        <Button disabled={loading || Boolean(loadError) || !items} type="submit">그룹·분류 저장하고 판매가 반영</Button>
+        <Button disabled={loading || Boolean(loadError) || !items} type="submit">{deferFifty ? "그룹·분류 저장 · 판매가 반영 대기" : "그룹·분류 저장하고 판매가 반영"}</Button>
       </fieldset>
     </form>
     <ol className="space-y-1" aria-label="마진 그룹 저장 단계">{["그룹 저장", "분류 연결", "판매가 반영"].map((label, index) => <li key={label}>{index + 1}. {label}: {steps[index]}</li>)}</ol>

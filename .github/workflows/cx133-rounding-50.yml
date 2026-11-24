@@ -1,0 +1,44 @@
+name: CX-133 rounding 50 PG17
+on:
+  pull_request:
+    paths:
+      - 'domains/pricing/price-rules.ts'
+      - 'docs/sql-drafts/2026-11-24-CX-133-rounding-50*'
+      - 'tests/sql/pricing-rounding-50.pg17.test.sql'
+      - '.github/workflows/cx133-rounding-50.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pg17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pending prices and immutable publications
+        run: |
+          createdb cx133_rounding_test
+          psql -X --dbname=cx133_rounding_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-rounding-50.pg17.test.sql
+      - name: Refuse rollback with active fifty-won rows
+        run: |
+          if psql -X --dbname=cx133_rounding_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/2026-11-24-CX-133-rounding-50.down.sql > /tmp/cx133-down.log 2>&1; then
+            echo 'rollback unexpectedly accepted fifty-won rows'
+            exit 1
+          fi
+          grep -q cx133_down_rounding_50_in_use /tmp/cx133-down.log
+      - name: Restore legacy checks in a separate database without fifty-won rows
+        run: |
+          createdb cx133_rounding_down_test
+          psql -X --dbname=cx133_rounding_down_test --set=ON_ERROR_STOP=1 --set=CX133_DOWN_ONLY=1 --file=tests/sql/pricing-rounding-50.pg17.test.sql

@@ -1,5 +1,6 @@
 "use client";
 
+import { LOCATION_ROLE_COLORS, LOCATION_ROLE_LABELS } from "@/domains/delivery/location-role";
 import { KakaoMapMarker } from "@/components/kakao-address-map";
 import { operationalMarkerPersonIcon } from "@/lib/route-map-markers";
 import type {
@@ -56,7 +57,9 @@ export function createLiveVehicleMarkers(locations: StaffVehicleLocation[], stor
   return locations
     .filter((location) => Number.isFinite(location.lat) && Number.isFinite(location.lng))
     .map((location) => {
-      const label = (location.deliveryVehicle || location.driverName || "차량").replace(/\s+/g, " ").slice(0, 8);
+      const role = location.locationRole ?? "delivery";
+      const roleLabel = LOCATION_ROLE_LABELS[role];
+      const label = (role === "delivery" ? (location.deliveryVehicle || location.driverName || "차량") : `${roleLabel} ${location.driverName || ""}`).replace(/\s+/g, " ").trim().slice(0, 8);
       const checkedAt = location.lastLocationAt ? new Date(location.lastLocationAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "시간 미확인";
       const accuracyText = Number.isFinite(location.accuracyMeters) ? ` · 오차 ${Math.round(location.accuracyMeters || 0)}m` : "";
       const statusText = getVehicleMarkerStatusText(location);
@@ -70,8 +73,8 @@ export function createLiveVehicleMarkers(locations: StaffVehicleLocation[], stor
         label,
         lat: location.lat,
         lng: location.lng,
-        markerColor: location.displayState === "last_operation" ? "#cbd5e1" : location.isStale ? "#64748b" : vehicleColorForId(location.id),
-        name: `${driverName} · ${vehicleAssigned ? "차량 배정" : "차량 미배정 직원"} · ${statusText}${location.displayState === "last_operation" ? "" : ` · ${checkedAt}`}${currentStoreText}${accuracyText}`,
+        markerColor: location.displayState === "last_operation" ? "#cbd5e1" : location.isStale ? "#64748b" : (LOCATION_ROLE_COLORS[role] ?? vehicleColorForId(location.id)),
+        name: `${driverName} · ${role === "delivery" ? (vehicleAssigned ? "차량 배정" : "차량 미배정 직원") : roleLabel} · ${statusText}${location.displayState === "last_operation" ? "" : ` · ${checkedAt}`}${currentStoreText}${accuracyText}`,
         tone: "vehicle" as const,
         vehicleIcon: operationalMarkerPersonIcon(location.deliveryVehicle),
         x: 50,

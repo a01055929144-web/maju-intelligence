@@ -9,7 +9,7 @@ create table pricing_documents(id uuid primary key,company_id uuid not null refe
 create table pricing_document_versions(id uuid primary key default gen_random_uuid(),company_id uuid not null,document_id uuid not null,version int not null,revision int not null,content jsonb not null,published_at timestamptz default now(),unique(company_id,document_id,id),unique(company_id,document_id,version),foreign key(company_id,document_id) references pricing_documents(company_id,id));
 create table product_catalog(id uuid primary key,company_id uuid not null,purchase_product_name text,sales_product_name text,canonical_name text,brand_name text,sales_spec text,sales_unit text,tax_type text,order_pricing_mode text default 'fixed',purchase_price numeric(14,2),is_active boolean default true,unique(company_id,id));
 create table pricing_settings(company_id uuid primary key,default_margin_bp int);
-create table pricing_promotions(id uuid primary key,company_id uuid not null,product_id uuid not null,display_name text,starts_on date,ends_on date,price bigint,stock bigint,revision int,unique(company_id,id));
+create table pricing_promotions(id uuid primary key,company_id uuid not null,product_id uuid not null,display_name text,starts_on date,ends_on date,price bigint,tax_type text,badge text,stock bigint,per_store_limit bigint,revision int,unique(company_id,id));
 create table pricing_document_share_links(id uuid primary key,company_id uuid not null,document_id uuid not null,document_version_id uuid not null,unique(company_id,id));
 create table customer_pricing_document_links(id uuid primary key,company_id uuid not null,customer_id uuid not null,document_id uuid not null,document_version_id uuid not null,active boolean not null,linked_at timestamptz not null);
 create table store_orders(id uuid primary key,company_id uuid not null,document_version_id uuid not null);
@@ -29,6 +29,7 @@ from product_catalog c left join price_fixture f on f.company_id=c.company_id an
 where c.company_id=p_company and c.id=p_product and c.is_active $$;
 
 \ir 2026-11-20-CX-121-document-extension.sql
+\ir 2026-11-23-CX-121-company-common-extension.sql
 
 insert into companies values ('10000000-0000-4000-8000-000000000001'),('10000000-0000-4000-8000-000000000002');
 insert into product_catalog values
@@ -83,14 +84,60 @@ begin
     or has_function_privilege('authenticated','public.pricing_document_extension_publish_v1(uuid,text,boolean,uuid,integer,text,text,uuid)','execute')
     or not has_function_privilege('service_role','public.pricing_document_extension_publish_v1(uuid,text,boolean,uuid,integer,text,text,uuid)','execute') then raise exception 'acl failed'; end if;
 end $$;
+insert into pricing_promotions(id,company_id,product_id,display_name,starts_on,ends_on,price,tax_type,badge,stock,per_store_limit,revision)
+values ('31000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',
+  '공용 행사','2026-01-01','2099-12-31',700,'exempt','행사',100,10,2);
+insert into pricing_documents values ('40000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001',repeat('a',64),'sheet',1,
+ '{"kind":"sheet","title":"이번 달 단가표","companyName":"합성 유통","contact":"","recipient":"공용","footer":"","validUntil":"2026-11-30","theme":"blue","layout":"table","showPrice":true,"showBrand":true,"showSpec":true,"lines":[{"productId":"30000000-0000-4000-8000-000000000001","displayName":"대파 행사","brand":"","spec":"1kg","unit":"봉","price":900,"taxType":"exempt","visible":true,"promotionId":"31000000-0000-4000-8000-000000000001","startsOn":"2026-01-01","endsOn":"2099-12-31","remaining":100,"badge":"행사"}]}'::jsonb,now());
+insert into pricing_document_versions(id,company_id,document_id,version,revision,content)
+  select '50000000-0000-4000-8000-000000000002',company_id,id,1,1,content from pricing_documents where id='40000000-0000-4000-8000-000000000002';
+insert into pricing_document_share_links values ('60000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000002','50000000-0000-4000-8000-000000000002');
+insert into store_orders values ('70000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000002');
+do $$ declare r jsonb; saved jsonb; published jsonb;
+begin
+  begin
+    perform pricing_document_extension_review_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,
+      '40000000-0000-4000-8000-000000000002',1,'latest','2027-12-31','start',null,repeat('e',64));
+    raise exception 'common latest accepted';
+  exception when others then if sqlerrm not like '%extension_customer_required%' then raise; end if; end;
+  r:=pricing_document_extension_review_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,
+    '40000000-0000-4000-8000-000000000002',1,'keep','2027-12-31','start',null,repeat('f',64));
+  if r#>>'{content,lines,0,price}'<>'900' or r#>>'{lines,0,calculated}'<>'900'
+    or r#>>'{lines,0,source}'<>'promotion' then raise exception 'common keep changed published promotion: %',r; end if;
+  if pricing_document_extension_policy_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,
+      '40000000-0000-4000-8000-000000000002')#>>'{allowedModes,0}'<>'keep'
+    or (pricing_document_extension_policy_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,
+      '40000000-0000-4000-8000-000000000002')->>'canAddProducts')::boolean
+  then raise exception 'common extension policy failed'; end if;
+  begin
+    perform pricing_document_extension_catalog_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,
+      '40000000-0000-4000-8000-000000000002',1,'keep',array['30000000-0000-4000-8000-000000000002'::uuid]);
+    raise exception 'common catalog price accepted';
+  exception when others then if sqlerrm not like '%extension_common_new_price_required%' then raise; end if; end;
+  saved:=pricing_document_extension_save_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,
+    '40000000-0000-4000-8000-000000000002',1,'keep',r->'content');
+  r:=pricing_document_extension_review_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,
+    '40000000-0000-4000-8000-000000000002',2,'keep','2027-12-31','review',saved->'content',repeat('1',64));
+  published:=pricing_document_extension_publish_v1('10000000-0000-4000-8000-000000000001',repeat('a',64),true,
+    '40000000-0000-4000-8000-000000000002',2,'keep',repeat('1',64),'80000000-0000-4000-8000-000000000002');
+  if published#>>'{content,lines,0,price}'<>'900'
+    or (select content#>>'{lines,0,price}' from pricing_document_versions where id='50000000-0000-4000-8000-000000000002')<>'900'
+    or (select document_version_id from pricing_document_share_links where id='60000000-0000-4000-8000-000000000002')<>'50000000-0000-4000-8000-000000000002'
+    or (select document_version_id from store_orders where id='70000000-0000-4000-8000-000000000002')<>'50000000-0000-4000-8000-000000000002'
+  then raise exception 'common keep history changed'; end if;
+  if has_function_privilege('service_role','public.pricing_document_extension_review_customer_v1(uuid,text,boolean,uuid,integer,text,date,text,jsonb,text)','execute')
+    or has_function_privilege('anon','public.pricing_document_extension_review_v1(uuid,text,boolean,uuid,integer,text,date,text,jsonb,text)','execute')
+  then raise exception 'common extension ACL failed'; end if;
+end $$;
 delete from pricing_document_share_link_heads;
 delete from pricing_document_link_heads;
 delete from pricing_document_extension_publishes;
 delete from pricing_document_extension_reviews;
 delete from pricing_document_extension_states;
+\ir 2026-11-23-CX-121-company-common-extension.down.sql
 \ir 2026-11-20-CX-121-document-extension.down.sql
 do $$ begin
   if to_regprocedure('public.pricing_document_extension_publish_v1(uuid,text,boolean,uuid,integer,text,text,uuid)') is not null
-    or (select count(*) from pricing_document_versions)<>2
-    or (select count(*) from store_orders)<>1 then raise exception 'down or history preservation failed'; end if;
+    or (select count(*) from pricing_document_versions)<>4
+    or (select count(*) from store_orders)<>2 then raise exception 'down or history preservation failed'; end if;
 end $$;

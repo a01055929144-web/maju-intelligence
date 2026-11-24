@@ -92,7 +92,8 @@ export async function GET(request: NextRequest) {
           return NextResponse.redirect(new URL(proof.returnTo.replace("/pricing-document#", "/pricing-document?continueOrder=1#"), request.url));
         }
         if (!(await setPublicStoreOwnerProfileProof({ authUserId, returnTo: proof.returnTo, token: proof.token,
-          storePhone: kakaoUser.kakao_account?.phone_number })))
+          storePhone: kakaoUser.kakao_account?.phone_number, representativeName: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname,
+          termsAcceptedAt: proof.termsAcceptedAt })))
           return redirectStore(request.url, "store_activation_required");
         return NextResponse.redirect(new URL("/store/activate?profile=1", request.url));
       }

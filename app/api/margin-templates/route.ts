@@ -1,3 +1,4 @@
+import { PRICE_ROUNDING_UNITS } from "../../../domains/pricing/price-rules";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseRequest } from "../../../lib/store";
 import { marginTemplateGate } from "../../../lib/pricing/margin-template-gate";
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     const name = String(body.name ?? "").trim(), margin = Number(body.margin), rounding = Number(body.rounding);
     const cats = Array.isArray(body.categories) ? body.categories : [];
     const validMargin = (value: number) => Number.isFinite(value) && value >= 0 && value <= 1000 && Math.abs(value * 100 - Math.round(value * 100)) < 1e-8;
-    if (!name || name.length > 60 || !validMargin(margin) || ![1, 10, 100].includes(rounding) || cats.length > 500
+    if (!name || name.length > 60 || !validMargin(margin) || !PRICE_ROUNDING_UNITS.includes(rounding) || cats.length > 500
       || cats.some((c) => !c.category?.trim() || c.category.length > 100 || !validMargin(Number(c.margin))) || new Set(cats.map((c) => c.category!.trim())).size !== cats.length || (body.id && !UUID.test(body.id)))
       return NextResponse.json({ message: "이름(60자 이하)·마진(0~1000%, 소수 둘째 자리)·끝자리 올림·분류 값을 확인해 주세요." }, { status: 400 });
     let id = body.id || "";

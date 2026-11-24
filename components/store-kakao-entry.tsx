@@ -35,7 +35,10 @@ export function StoreKakaoLoginPanel({ access, newWindow = false }: { access: St
   </Card>;
 }
 
-export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, profileStep = false, initialStorePhone = "", testMode = false }: { enabled: boolean; preopeningEnabled?: boolean; profileStep?: boolean; initialStorePhone?: string; testMode?: boolean }) {
+type InitialStoreProfile = { address?: string; phone?: string; representativeName?: string; storeName?: string };
+const PROFILE_DRAFT_KEY = "maju_store_owner_profile_draft";
+
+export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, profileStep = false, initialProfile = {}, testMode = false }: { enabled: boolean; preopeningEnabled?: boolean; profileStep?: boolean; initialProfile?: InitialStoreProfile; testMode?: boolean }) {
   const token = useRef("");
   const publicFlow = useRef(false);
   const [ready, setReady] = useState(profileStep);
@@ -45,10 +48,10 @@ export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, 
   const [addressResults, setAddressResults] = useState<Array<{ address: string; postalCode?: string }>>([]);
   const [addressSearchMessage, setAddressSearchMessage] = useState("");
   const [addressSearching, setAddressSearching] = useState(false);
-  const [addressSelected, setAddressSelected] = useState(testMode);
+  const [addressSelected, setAddressSelected] = useState(testMode || Boolean(initialProfile.address));
   const [profile, setProfile] = useState(testMode
     ? { address: "시험 배송지", addressDetail: "시험 상세주소", businessRegistrationNumber: "", phone: "0".repeat(11), representativeName: "시험 담당자", storeName: "시험 전용 매장" }
-    : { address: "", addressDetail: "", businessRegistrationNumber: "", phone: initialStorePhone, representativeName: "", storeName: "" });
+    : { address: initialProfile.address || "", addressDetail: "", businessRegistrationNumber: "", phone: initialProfile.phone || "", representativeName: initialProfile.representativeName || "", storeName: initialProfile.storeName || "" });
   useEffect(() => {
     if (token.current) return;
     if (profileStep) { publicFlow.current = true; setReady(true); return; }
@@ -59,6 +62,17 @@ export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, 
     }
     else setError("개통 링크를 확인할 수 없습니다. 담당자에게 받은 전체 링크를 다시 열어 주세요.");
   }, [profileStep]);
+  useEffect(() => {
+    if (!profileStep || testMode) return;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(PROFILE_DRAFT_KEY) || "null") as Partial<typeof profile> | null;
+      if (saved) { setProfile(current => ({ ...current, ...saved })); setAddressSelected(Boolean(saved.address)); }
+    } catch { sessionStorage.removeItem(PROFILE_DRAFT_KEY); }
+  }, [profileStep, testMode]);
+  useEffect(() => {
+    if (!profileStep || testMode) return;
+    sessionStorage.setItem(PROFILE_DRAFT_KEY, JSON.stringify(profile));
+  }, [profile, profileStep, testMode]);
   useEffect(() => {
     const reopen = () => { if (window.location.hash) window.location.reload(); };
     window.addEventListener("hashchange", reopen);
@@ -76,19 +90,19 @@ export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, 
     finally { setAddressSearching(false); }
   }
   async function start() {
-    if (!enabled || !ready || busy || (!profileStep && !publicFlow.current && (!accepted || !token.current))) return;
+    if (!enabled || !ready || busy || (!profileStep && (!accepted || !token.current))) return;
     const businessNumberLength = profile.businessRegistrationNumber.replace(/\D/g, "").length;
-    if (profileStep && (!accepted || !profile.storeName.trim() || !profile.representativeName.trim() ||
+    if (profileStep && (!profile.storeName.trim() ||
       (!testMode && businessNumberLength !== 10 && !(preopeningEnabled && businessNumberLength === 0)) ||
-      !addressSelected || !profile.addressDetail.trim() || profile.phone.replace(/\D/g, "").length < 9)) {
-      setError(preopeningEnabled ? "매장명, 대표자명, 연락처와 검색한 주소·상세주소를 확인해 주세요. 사업자번호가 있다면 10자리를 입력하세요." :
-        "매장명, 대표자명, 사업자등록번호 10자리, 연락처와 검색한 주소·상세주소를 모두 확인해 주세요."); return;
+      !addressSelected || profile.phone.replace(/\D/g, "").length < 9)) {
+      setError(preopeningEnabled ? "매장명, 연락처와 검색한 주소를 확인해 주세요. 사업자번호가 있다면 10자리를 입력하세요." :
+        "매장명, 사업자등록번호 10자리, 연락처와 검색한 주소를 모두 확인해 주세요."); return;
     }
     setBusy(true); setError("");
     try {
       const body = profileStep
-        ? { store: profile, termsAccepted: true }
-        : publicFlow.current ? { onboardingIntent: token.current }
+        ? { store: profile }
+        : publicFlow.current ? { onboardingIntent: token.current, termsAccepted: true }
         : { token: token.current, termsAccepted: true };
       const response = await fetch("/api/store/accounts/activate", { method: "POST", cache: "no-store",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -109,6 +123,7 @@ export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, 
       if (profileStep) {
         if (!result.redirectTo?.startsWith("/pricing-document#") || result.redirectTo.startsWith("//"))
           throw new Error("복귀 주소를 확인하지 못했습니다. 주문 문서를 다시 열어 주세요.");
+        sessionStorage.removeItem(PROFILE_DRAFT_KEY);
         window.location.assign(result.redirectTo.replace("/pricing-document#", "/pricing-document?continueOrder=1#")); return;
       }
       if (!result.loginUrl) throw new Error("로그인 주소를 확인하지 못했습니다. 다시 시도해 주세요.");
@@ -128,14 +143,14 @@ export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, 
     }
   }
   return <Card>
-    <CardHeader><CardTitle>점주 계정 시작</CardTitle><p className="text-sm">담당자에게 받은 개통 링크에서 점주 본인이 동의하고 카카오 인증을 진행합니다.</p></CardHeader>
+    <CardHeader><CardTitle>점주 계정 시작</CardTitle><p className="text-sm font-medium">{profileStep ? "2/2 매장 정보" : "1/2 카카오 인증"}</p><p className="text-sm">담당자에게 받은 개통 링크에서 점주 본인이 동의하고 카카오 인증을 진행합니다.</p></CardHeader>
     <CardContent className="min-w-0 space-y-4">
       {!enabled && <p role="status">점주 개통은 아직 준비 중입니다. 담당자의 안내 후 원래 개통 링크를 다시 열어 주세요.</p>}
       {error && <p role="alert">{error}</p>}
       {profileStep && ready && <fieldset className="min-w-0 space-y-3" disabled={!enabled || busy}>
         <legend className="font-medium">매장 정보</legend>
         {testMode ? <p className="text-sm">시험 매장 정보가 채워져 있습니다. 사업자번호는 서버에 지정된 시험번호를 사용합니다. 실제 개인정보를 입력하지 마세요.</p> : null}
-        <p className="text-sm">카카오 계정 인증을 마쳤습니다. 이메일·닉네임은 다시 입력하지 않습니다. 사업자·배송에 필요한 매장 정보만 확인해 주세요. 카카오에서 받은 연락처는 미리 채우며 매장 연락처로 바꿀 수 있습니다.</p>
+        <p className="text-sm">카카오 계정 인증을 마쳤습니다. 동의한 이름·연락처와 문서를 받은 매장 상호·주소는 미리 채웁니다. 필수 네 항목만 확인하면 됩니다.</p>
         {([["storeName", "매장명"], ["representativeName", "사업자 대표자명"], ["businessRegistrationNumber", preopeningEnabled ? "사업자등록번호 (없으면 비워두세요)" : "사업자등록번호"],
           ["phone", "매장 연락처"]] as const).map(([key, label]) => testMode && key === "businessRegistrationNumber" ? null : <label className="block text-sm" key={key}>{label}
             <input className="mt-1 min-h-[44px] w-full rounded-md border px-3" value={profile[key]} autoComplete={key === "phone" ? "tel" : "organization"}
@@ -147,13 +162,14 @@ export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, 
           {addressSearchMessage ? <p role="status">{addressSearchMessage}</p> : null}
           {addressResults.length ? <div className="max-h-48 overflow-y-auto rounded-md border">{addressResults.map((result, index) => <button className="block min-h-[44px] w-full border-b px-3 text-left" key={`${result.address}-${index}`} onClick={() => { setProfile(current => ({ ...current, address: result.address })); setAddressSelected(true); setAddressResults([]); setAddressSearchMessage("카카오 주소를 선택했습니다."); }} type="button">{result.address}{result.postalCode ? ` (${result.postalCode})` : ""}</button>)}</div> : null}
         </div>
-        <label className="block text-sm">상세주소<input className="mt-1 min-h-[44px] w-full rounded-md border px-3" maxLength={100} value={profile.addressDetail} onChange={event => setProfile(current => ({ ...current, addressDetail: event.target.value }))} placeholder="건물명·층·호수를 입력해 주세요" /></label>
+        <label className="block text-sm">상세주소 (선택)<input className="mt-1 min-h-[44px] w-full rounded-md border px-3" maxLength={100} value={profile.addressDetail} onChange={event => setProfile(current => ({ ...current, addressDetail: event.target.value }))} placeholder="건물명·층·호수" /></label>
         {!addressSelected ? <p className="text-sm">검색 결과에서 매장 주소를 선택해 주세요.</p> : null}</fieldset>}
-      {(!publicFlow.current || profileStep) && <><p className="text-sm"><a className="underline" href="/legal/terms" target="_blank" rel="noreferrer noopener">이용약관</a>과 <a className="underline" href="/legal/privacy" target="_blank" rel="noreferrer noopener">개인정보처리방침</a>을 확인해 주세요.</p>
+      {!profileStep && <><p className="text-sm"><a className="underline" href="/legal/terms" target="_blank" rel="noreferrer noopener">이용약관</a>과 <a className="underline" href="/legal/privacy" target="_blank" rel="noreferrer noopener">개인정보처리방침</a>을 확인해 주세요.</p>
         <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={accepted} disabled={!enabled || !ready || busy}
           onChange={event => setAccepted(event.target.checked)} />이용약관과 개인정보처리방침을 확인하고 동의합니다.</label></>}
-      <Button className="min-h-[44px]" disabled={!enabled || !ready || (profileStep && !accepted) || (!publicFlow.current && !accepted) || busy} onClick={() => void start()}>
-        {busy ? "개통 요청 확인 중" : profileStep ? "동의하고 매장 개통" : publicFlow.current ? "카카오로 점주 가입" : "동의하고 카카오로 시작"}</Button>
+      <Button className="min-h-[44px]" disabled={!enabled || !ready || (!profileStep && !accepted) || busy} onClick={() => void start()}>
+        {busy ? "개통 요청 확인 중" : profileStep ? "매장 등록 완료" : publicFlow.current ? "카카오로 시작 (1분)" : "동의하고 카카오로 시작"}</Button>
+      {profileStep ? <p className="text-sm">완료하면 원래 단가표로 돌아갑니다. 고객사가 확인하면 전체 상품 가격과 단가 추이가 열립니다. 보통 하루 안에 확인됩니다.</p> : null}
       <p className="text-sm">개통·접근 권한과 사업자 상태는 인증 후 다시 확인합니다. 원가 기능은 별도 이용 안내 후 열립니다.</p>
     </CardContent>
   </Card>;

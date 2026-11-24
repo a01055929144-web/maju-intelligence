@@ -3,7 +3,8 @@ import type { DocumentContent } from "../../domains/pricing/document";
 
 test.use({ actionTimeout: 10000 });
 
-for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const) test(`CX-121 extension journey ${mode} at ${width}px`, async ({ page }) => {
+for (const width of [1440, 390]) for (const scenario of ["keep", "latest", "common"] as const) test(`CX-121 extension journey ${scenario} at ${width}px`, async ({ page }) => {
+  const common = scenario === "common", mode = common ? "keep" : scenario;
   test.setTimeout(60000);
   await page.setViewportSize({ width, height: 900 });
   const id = "10000000-0000-4000-8000-000000000001";
@@ -25,9 +26,14 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
     let result: unknown = [];
     if (action === "list") result = { items: [draft()], total: 1 };
     if (action === "versions") result = [version()];
+    if (action === "extension-policy") {
+      expect(request.method()).toBe("GET"); expect(url.searchParams.get("id")).toBe(id);
+      result = { customerLinked: !common, allowedModes: common ? ["keep"] : ["keep", "latest"], canAddProducts: !common, reason: common ? "company_common_keep_only" : "customer_prices_available" };
+    }
     if (action === "profile") result = { revision: 0, content: { companyName: "합성 유통", contact: "", footer: "" } };
     if (action === "catalog") result = { items: [1, 2, 3].map(n => ({ ...line(n), id: product(n), name: `합성 품목 ${n}`, cost: 110, price: 9999 })), total: 3 };
     if (action === "extension-catalog") {
+      expect(common, "common extension must not request customer-dependent prices").toBe(false);
       expect(request.method()).toBe("POST");
       expect(body).toMatchObject({ id, expected: revision, mode });
       expect(Array.isArray(body.productIds) && body.productIds.length > 0).toBe(true);
@@ -47,8 +53,8 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
           added: next.lines.filter(l => l.visible).filter(l => !old.has(l.productId)).length, removed: original.lines.filter(l => !next.lines.some(n => n.visible && n.productId === l.productId)).length },
         loweredProfitCount: 1, minimumProfitRate: -10,
         lines: next.lines.filter(l => l.visible).map(l => ({ key: `${l.productId}:${l.promotionId}`, name: l.displayName, source: "base", promiseUntil: original.validUntil,
-          before: old.get(l.productId)?.price ?? null, calculated: 130, price: l.price, difference: l.price - 130,
-          profitRate: l.price === 90 ? -10 : 15, belowThreshold: l.price < 130, manual: l.price !== 130 })) };
+          before: old.get(l.productId)?.price ?? null, calculated: common ? 100 : 130, price: l.price, difference: common ? 0 : l.price - 130,
+          profitRate: l.price === 90 ? -10 : 15, belowThreshold: l.price < 130, manual: !common && l.price !== 130 })) };
     }
     if (action === "extension-save") { revision++; content = body.content; result = draft(); }
     if (action === "save" || action === "publish") throw new Error("ordinary write bypassed extension server");
@@ -66,14 +72,39 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
   await page.getByRole("button", { name: "기간 연장", exact: true }).click();
   const choice = page.getByRole("dialog", { name: "약속가 연장", exact: true });
   await expect(choice.getByRole("radio", { checked: true })).toHaveCount(0);
+  if (common) {
+    await expect(choice.getByRole("radio", { name: "최신 가격으로 다시 계산", exact: true })).toBeDisabled();
+    await expect(choice.getByRole("status")).toContainText("새 품목 추가·가격 수정은 사용할 수 없습니다");
+  }
   await choice.getByLabel("새 유효기간").fill("2099-02-01");
   await expect(choice.getByRole("button", { name: "기존 편집기에서 확인" })).toBeDisabled();
-  await choice.getByRole("radio", { name: mode === "keep" ? "약속가 그대로 연장" : "최신 가격으로 다시 계산", exact: true }).check();
+  await choice.getByRole("radio", { name: common ? "기존 게시 가격 그대로 연장" : mode === "keep" ? "약속가 그대로 연장" : "최신 가격으로 다시 계산", exact: true }).check();
   await choice.getByRole("button", { name: "기존 편집기에서 확인" }).click();
   await expect(choice.getByRole("alert").filter({ hasText: "최신 가격 확인 실패" })).toBeVisible();
   expect(writes).toBe(0);
   await choice.getByRole("button", { name: "기존 편집기에서 확인" }).click();
   await expect(page.getByLabel("약속가 연장 편집")).toBeVisible();
+  if (common) {
+    await expect(page.getByRole("textbox", { name: "문서에 품목 바로 추가", exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("품목 1 단가", { exact: true })).toBeDisabled();
+    await expect(page.getByLabel("유효기간", { exact: true })).toBeDisabled();
+    await expect(page.getByLabel("약속가 연장 편집")).toContainText("기존 일반·행사 가격 그대로 기간만 연장");
+    if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }
+    else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+    await expect(page.getByText("초안을 저장했습니다.", { exact: true })).toBeVisible();
+    expect(content.lines).toEqual(original.lines); expect(content.validUntil).toBe("2099-02-01");
+    await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
+    const review = page.getByRole("dialog", { name: "연장 게시 확인", exact: true });
+    await expect(review.getByText("가격 출처 기존 게시 가격 · 기존 약속 종료일 2099-01-01", { exact: true }).first()).toBeVisible();
+    const publish = review.getByRole("button", { name: "새 약속가로 게시", exact: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+    await page.screenshot({ path: `test-results/readonly-pg17/cx121-ui/extension-common-${width}.png`, fullPage: true });
+    await publish.click(); await expect(publish).toBeEnabled(); await publish.click();
+    await expect(page.getByText(/버전 2 연장 게시 완료/)).toBeVisible();
+    expect(writes).toBe(1); expect(actions).not.toContain("extension-catalog");
+    expect(content.lines).toEqual(original.lines); expect(original.validUntil).toBe("2099-01-01");
+    return;
+  }
   await page.getByLabel("품목 1 단가", { exact: true }).fill("90");
   await page.getByLabel("품목 1 단가", { exact: true }).press("Enter");
   await page.getByRole("button", { name: "합성 품목 2 빼기", exact: true }).click();
