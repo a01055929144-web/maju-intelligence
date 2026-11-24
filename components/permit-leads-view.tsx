@@ -1,4 +1,5 @@
 "use client";
+import { StoreSignupBadge, useStoreSignupStatus } from "@/components/store-signup-badge";
 import { copyText } from "@/lib/copy-text";
 import { kstToday } from "@/domains/shared/kst-date";
 import { isClosedLead } from "@/lib/leads";
@@ -197,6 +198,8 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   const [hasEmailOnly, setHasEmailOnly] = useState(false);
   const [hasFaxOnly, setHasFaxOnly] = useState(false);
   const [uncontactedOnly, setUncontactedOnly] = useState(false);
+  const storeSignupStatus = useStoreSignupStatus();
+  const [storeSignupOnly, setStoreSignupOnly] = useState(false);
   const [kakaoMatchFilter, setKakaoMatchFilter] = useState<"" | "matched_no_phone" | "unregistered" | "needs_confirmation">("");
   const [businessHoursFilter, setBusinessHoursFilter] = useState<"" | "available" | "break">("");
   const [excludeExcluded, setExcludeExcluded] = useState(true);
@@ -708,6 +711,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
       .filter((lead) => !hasEmailOnly || Boolean(lead.email))
       .filter((lead) => !hasFaxOnly || Boolean(lead.fax))
       .filter((lead) => !uncontactedOnly || isLeadUncontacted(lead))
+      .filter((lead) => !storeSignupOnly || storeSignupStatus?.leads[lead.id] === "signed_up")
       .filter((lead) => {
         if (!kakaoMatchFilter) return true;
         if (kakaoMatchFilter === "matched_no_phone") return Boolean(lead.kakaoMatchMethod && !lead.phone);
@@ -731,7 +735,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
               return text.includes(keyword) || (normalizedKeyword && normalizeLeadSearchToken(text).includes(normalizedKeyword));
             })
       );
-  }, [actionFilter, leads, tableSearch, showNearbyOnly, nearbyLeadIds, favoriteOnly, favorites.favoriteIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter, regionFilter, sizeFilter, reminderOnly]);
+  }, [actionFilter, leads, tableSearch, showNearbyOnly, nearbyLeadIds, favoriteOnly, favorites.favoriteIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, storeSignupOnly, storeSignupStatus, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter, regionFilter, sizeFilter, reminderOnly]);
   const regionOptions = useMemo(() => {
     const counts = new Map<string, number>();
     leads.forEach((lead) => { const label = getLeadSigunguLabel(lead.address); if (label) counts.set(label, (counts.get(label) || 0) + 1); });
@@ -2243,6 +2247,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             <LeadQuickFilterChip active={hasPhoneOnly} count={summary?.hasPhone} label="휴대폰 있음" onClick={() => setHasPhoneOnly((value) => !value)} />
             <LeadQuickFilterChip active={hasInstagramOnly} label="인스타 있음" onClick={() => setHasInstagramOnly((value) => !value)} />
             <LeadQuickFilterChip active={uncontactedOnly} label="연락 안 한 곳" onClick={() => setUncontactedOnly((value) => !value)} />
+            {storeSignupStatus ? <LeadQuickFilterChip active={storeSignupOnly} label="가입 · 첫 주문 전" onClick={() => setStoreSignupOnly((value) => !value)} /> : null}
             <LeadQuickFilterChip active={reminderOnly} label="리마인드" onClick={() => setReminderOnly((value) => !value)} />
             <LeadQuickFilterChip active={businessHoursFilter === "available"} label="지금 방문 가능" onClick={() => setBusinessHoursFilter((value) => value === "available" ? "" : "available")} />
             <LeadQuickFilterChip active={businessHoursFilter === "break"} label="오늘 브레이크" onClick={() => setBusinessHoursFilter((value) => value === "break" ? "" : "break")} />
@@ -2560,6 +2565,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                               title={`${PERMIT_LEAD_TYPE_LABEL[getPermitLeadType(lead)]} · ${PERMIT_LEAD_TYPE_DESCRIPTION[getPermitLeadType(lead)]}`}
                             />
                             <p className="truncate font-bold text-slate-950">{lead.businessName}</p>
+                            <StoreSignupBadge state={storeSignupStatus?.leads[lead.id]} />
                             {lead.kakaoMatchMethod ? (
                               <span
                                 className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-black ${
