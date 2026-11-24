@@ -38,6 +38,38 @@ begin
   return true;
 end $$;
 
+-- 조회수는 "공개 문서 읽기" 한 곳에서만 센다. 짧은 주소 해석 함수는 조회수를 올리지 않는다
+-- (둘 다 세면 짧은 주소 한 번에 2회로 센다). 반환값·검사·속도 제한은 그대로, 집계 블록만 제거.
+create or replace function public.resolve_pricing_document_short_link_v1(
+  p_short_code text, p_requester_hash text, p_device_class text default 'unknown',
+  p_is_preview_bot boolean default false, p_expected_company_id uuid default null
+) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_link public.pricing_document_share_links%rowtype;
+  v_guard text;
+begin
+  if coalesce(p_short_code, '') !~ '^[23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz]{10}$'
+    or coalesce(p_requester_hash, '') !~ '^[0-9a-f]{64}$'
+    or p_device_class not in ('mobile', 'desktop', 'tablet', 'unknown') then
+    return jsonb_build_object('status', 'unavailable');
+  end if;
+  select * into v_link from public.pricing_document_share_links
+  where short_code = p_short_code;
+  if not found or (p_expected_company_id is not null and v_link.company_id <> p_expected_company_id)
+    or v_link.revoked_at is not null or v_link.expires_at <= clock_timestamp() then
+    return jsonb_build_object('status', 'unavailable');
+  end if;
+  v_guard := public.pricing_s2_public_request_guard(
+    v_link.company_id, 'short-document', p_requester_hash,
+    jsonb_build_object('prefix', left(p_short_code, 3)), 30);
+  if v_guard <> 'allowed' then return jsonb_build_object('status', 'unavailable'); end if;
+  return jsonb_build_object('status', 'available', 'companyId', v_link.company_id,
+    'shareLinkId', v_link.id, 'documentId', v_link.document_id,
+    'documentVersionId', v_link.document_version_id);
+end;
+$$;
+
 revoke all on function public.record_pricing_document_view_v1(uuid, uuid, text, text, boolean) from public, anon, authenticated;
 grant execute on function public.record_pricing_document_view_v1(uuid, uuid, text, text, boolean) to service_role;
 commit;

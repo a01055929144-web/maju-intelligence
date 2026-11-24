@@ -782,3 +782,24 @@ it("CX-137: 긴 주소로 열면 조회수 함수를 한 번 부르고, 미리�
   });
   expect((await publicPost(request({ token: token(p.publicUrl) }))).status).toBe(200);
 });
+
+const viewCalls = () => mocks.db.mock.calls.filter(([path]) => path === "rpc/record_pricing_document_view_v1").map(([, init]) => JSON.parse(init.body));
+const shortResolveCalls = () => mocks.db.mock.calls.filter(([path]) => path === "rpc/resolve_pricing_document_short_link_v1");
+
+it("CX-137: 짧은 주소로 한 번 열면 조회수 1 — 짧은 주소 해석은 세지 않고 공개 문서 읽기에서만 센다", async () => {
+  const result = await brandedShare();
+  const response = await openShort(result.publicUrl.slice(3), "Mozilla/5.0 (iPhone)");
+  expect(response.status).toBe(302);
+  expect(viewCalls()).toHaveLength(0); expect(shortResolveCalls()).toHaveLength(0);
+  const opened = await publicPost(request({ token: new URL(response.headers.get("location")!).hash.slice(1) }, "https://fixture.test", { "user-agent": "Mozilla/5.0 (iPhone)" }));
+  expect(opened.status).toBe(200);
+  expect(viewCalls()).toEqual([expect.objectContaining({ p_share_link_id: links[0].id, p_device_class: "mobile", p_is_preview_bot: false })]);
+  expect(shortResolveCalls()).toHaveLength(0);
+});
+
+it("CX-137: 긴 주소로 한 번 열면 조회수 1", async () => {
+  const p = await prepared();
+  expect((await publicPost(request({ token: token(p.publicUrl) }))).status).toBe(200);
+  expect(viewCalls()).toEqual([expect.objectContaining({ p_share_link_id: p.shareLinkId })]);
+  expect(shortResolveCalls()).toHaveLength(0);
+});
