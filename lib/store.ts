@@ -717,6 +717,8 @@ export type StaffVehicleLocation = {
   lastSeenAt?: string;
   lat: number;
   lng: number;
+  /** 담당 업무로 정한 위치 역할(배송·영업·현장). 지도에서 색으로 구분한다. */
+  locationRole?: "delivery" | "sales" | "field";
   status: "active" | "paused" | "offline" | "stale";
   userId: string;
 };
