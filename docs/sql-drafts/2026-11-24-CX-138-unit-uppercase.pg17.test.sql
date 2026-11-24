@@ -56,20 +56,16 @@ begin
 end $t$;
 rollback;
 
--- down: 트리거·함수는 사라지고 데이터는 그대로, 이후에는 소문자가 다시 그대로 저장됨
+-- down: 트리거·함수만 사라지고 이미 저장된 값은 그대로, 이후에는 소문자가 다시 그대로 저장됨
 begin;
 insert into public.product_catalog(company_id, product_code, purchase_unit, sales_unit) values ('00000000-0000-0000-0000-0000000000c1', 'KEEP', 'ea', 'ea');
-commit;
-\ir 2026-11-24-CX-138-unit-uppercase.sql
-begin;
-update public.product_catalog set purchase_unit = 'ea' where product_code = 'KEEP';
-update public.product_catalog set purchase_unit = 'KEEPUP' where product_code = 'OLD';
 commit;
 \ir 2026-11-24-CX-138-unit-uppercase.down.sql
 do $d$ begin
   if to_regprocedure('public.product_catalog_unit_uppercase_v1()') is not null then raise exception 'down_function_remains'; end if;
   if exists (select 1 from pg_trigger where tgrelid = 'public.product_catalog'::regclass and tgname = 'product_catalog_unit_uppercase') then raise exception 'down_trigger_remains'; end if;
-  if (select purchase_unit from public.product_catalog where product_code = 'OLD') <> 'KEEPUP' then raise exception 'down_changed_data'; end if;
+  if (select array[purchase_unit, sales_unit] from public.product_catalog where product_code = 'KEEP') <> array['EA', 'EA'] then raise exception 'down_changed_data'; end if;
+  if (select array[purchase_unit, sales_unit] from public.product_catalog where product_code = 'OLD') <> array['ea', 'kg'] then raise exception 'down_changed_old_row'; end if;
   insert into public.product_catalog(company_id, product_code, purchase_unit, sales_unit) values ('00000000-0000-0000-0000-0000000000c1', 'AFTER', 'ea', 'ea');
   if (select purchase_unit from public.product_catalog where product_code = 'AFTER') <> 'ea' then raise exception 'down_still_uppercases'; end if;
 end $d$;
