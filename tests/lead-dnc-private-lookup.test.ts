@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 describe("contact refusal lookup privacy boundary", () => {
   it("keeps contact values out of the request URL and returns only masked values", () => {
-    const store = readFileSync("lib/store.ts", "utf8");
+    const store = readFileSync("lib/store/09-lead-contact-governance.ts", "utf8");
     const lookup = store.split("export async function listActiveLeadDoNotContacts")[1]
       ?.split("export async function registerLeadDoNotContact")[0];
     const sql = readFileSync("docs/sql-drafts/lead-do-not-contact-rpc.sql", "utf8");
