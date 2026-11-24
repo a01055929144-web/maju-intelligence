@@ -19,8 +19,10 @@ import { isCiLayoutFixturesEnabled } from "@/lib/ci-layout-fixtures";
 import { PublicStoreTestBanner } from "@/components/public-store-test-banner";
 import { StoreAddressManagementPanel } from "@/components/store-address-management-panel";
 import { isStoreAddressCompanyEnabled } from "@/lib/store/07-store-address-management";
-import { listStorePortalAccounts, listStorePortalOrders, type StorePortalOrder } from "@/lib/store/07-store-portal";
+import { listStorePortalAccounts, listStorePortalOrders, type StorePortalAccount, type StorePortalOrder } from "@/lib/store/07-store-portal";
 import { StorePortal } from "@/components/store-portal";
+import { StoreRelationPreview } from "@/components/store-relation-preview";
+import { recordStoreActivity, relationHomeEnabled } from "@/lib/store/07-store-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +146,9 @@ export default async function StorePage({ searchParams }: {
   };
   const requestedDocument = view === "home" && typeof params.document === "string" ? params.document : null;
   const openedDocument = requestedDocument && selected?.documents.find(document => documentKey(document.href) === requestedDocument);
+  // CX-141: 로그인한 매장의 활동 기록(플래그를 켠 회사만, 실패해도 화면은 그대로). 홈 열기 = 마지막 접속.
+  const relation = (selected as StorePortalAccount | undefined)?.relation;
+  if (selected && relation) await recordStoreActivity(selected.companyId, selected.storeAccountId, requestedDocument ? "document" : view === "order" ? "catalog" : "home");
   const homeHref = storeHref("home", selected);
   const documentView = requestedDocument ? <div className="space-y-3">
     <Link className="inline-flex min-h-11 items-center underline" href={homeHref}>받은 문서 목록</Link>
@@ -153,7 +158,7 @@ export default async function StorePage({ searchParams }: {
       : <ErrorState message="받은 문서를 사용할 수 없습니다." description="선택한 매장과 링크의 열람기간을 확인해 주세요." />}
   </div> : null;
   const receivedDocuments = Boolean(selected && view === "home" && !requestedDocument &&
-    (fixture === "s4-documents" || isFeatureEnabled("STORE_RECEIVED_DOCUMENTS_HOME", selected.companyId)));
+    (fixture === "s4-documents" || isFeatureEnabled("STORE_RECEIVED_DOCUMENTS_HOME", selected.companyId) || relationHomeEnabled(selected.companyId)));
   const orderHref = selected?.documents.find(document => document.canOrder && document.href.startsWith("/store#"))?.href;
   const scheduleHref = orderHref ?? selected?.catalogHref;
   let cutoff: string | undefined;
@@ -182,6 +187,7 @@ export default async function StorePage({ searchParams }: {
     menu={STORE_VIEWS.map(value => storeHref(value, selected))}
     orders={orders} historyError={historyError} historyDetails={historyDetails} documentView={documentView}
     home={<>
+      {selected && relation && !relation.confirmed && <StoreRelationPreview companyName={(selected as StorePortalAccount).companyName} products={relation.products ?? []} />}
       {selected && PriceSearch && <PriceSearch companyId={selected.companyId} storeAccountId={selected.storeAccountId}
         documents={selected.documents.map(document => ({ key: documentKey(document.href), title: document.title, kind: document.kind }))} />}
       {selected && ReceivedDocuments ? <>

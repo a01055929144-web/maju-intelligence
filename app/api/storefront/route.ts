@@ -1,3 +1,4 @@
+import { recordStoreActivity } from "@/lib/store/07-store-activity";
 import { NextRequest, NextResponse } from "next/server";
 import { storeOrderDetailEnabled } from "@/lib/pricing/store-order-detail-feature";
 import { readStorePromotionAvailability } from "@/lib/pricing/storefront-promotion-availability";
@@ -416,6 +417,7 @@ export async function PUT(request: NextRequest) {
       const placed = await placeStoreOrderWithDelivery(eligibility
         ? {scope:{...store,deliveryAddress:`${eligibility.baseAddress} ${eligibility.addressDetail}`},payload}
         : {scope:store,payload,snapshot:body.deliverySnapshot});
+      if (member) await recordStoreActivity(store.companyId, member.storeAccountId, "order");
       const orderDocumentStatus = orderReceiptDraftEnabled(store.companyId) ? undefined : await syncStoreOrderSaleDocument(store.companyId, placed.result, member?.authUserId ?? null);
       return NextResponse.json({ ...placed, ...(orderDocumentStatus ? { orderDocumentStatus } : {}) },
         { headers: { "Cache-Control": "no-store" } });
@@ -425,6 +427,7 @@ export async function PUT(request: NextRequest) {
         ? (memberOrdering ? "rpc/place_store_catalog_member_order_v1" : "rpc/place_store_catalog_order_v1")
         : (memberOrdering ? "rpc/place_store_member_order" : "rpc/place_store_order"),
       { method: "POST", body: JSON.stringify(payload) });
+    if (member) await recordStoreActivity(store.companyId, member.storeAccountId, "order");
     const orderDocumentStatus = orderReceiptDraftEnabled(store.companyId) ? undefined : await syncStoreOrderSaleDocument(store.companyId, result, member?.authUserId ?? null);
     return NextResponse.json(
       { result, ...(orderDocumentStatus ? { orderDocumentStatus } : {}) },

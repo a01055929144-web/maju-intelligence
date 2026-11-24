@@ -6,6 +6,7 @@ import { readPublicDocument } from "@/lib/pricing/document-share";
 import { readStorefront } from "@/lib/pricing/storefront";
 import { readStorefrontCatalogPage } from "@/lib/pricing/storefront-catalog-read";
 import { getStoreMemberContext } from "@/lib/store/07-store-member-context";
+import { recordStoreActivity } from "@/lib/store/07-store-activity";
 import { listStorePortalAccounts } from "@/lib/store/07-store-portal";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
     const accounts = await listStorePortalAccounts();
     const account = accounts?.find(row => row.companyId === companyId && row.storeAccountId === storeAccountId);
     if (!account) return unavailable();
+    if (page === 1) await recordStoreActivity(companyId, storeAccountId, "search");
     if (kind === "catalog") {
       if (!isFeatureEnabled("STORE_CATALOG_LINK", companyId)) return unavailable();
       const href = account.catalogHref ?? account.documents.find(doc => doc.canOrder && doc.href.startsWith("/store#"))?.href;

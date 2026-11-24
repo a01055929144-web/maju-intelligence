@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, Building2, History, Store, Users } from "lucide-react";
 import { AdminPageHeader } from "../admin-page-header";
+import { StoreActivityList } from "@/components/store-activity-list";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
@@ -56,7 +57,7 @@ function StoreDetail({ store }: { store: Awaited<ReturnType<typeof getAdminStore
       <Info label="사업자번호" value={formatBusinessNumber(store.businessNumber)} /><Info label="영업 상태" value={statusLabel(store.businessStatus)} />
       <Info label="주소" value={store.address || "미입력"} /><Info label="가입 경로" value={originLabel(store.origin)} />
     </CardContent></Card>
-    <Section icon={Building2} title={`연결 유통사 ${store.connections.length}`} empty="연결된 유통사가 없습니다.">{store.connections.map((item) => <Row key={item.id} title={item.companyName} text={`${item.customerName} · ${statusLabel(item.status)}${item.reviewStatus === "needs_review" ? " · 매출처 확인 필요" : ""}`} />)}</Section>
+    <Section icon={Building2} title={`연결 유통사 ${store.connections.length}`} empty="연결된 유통사가 없습니다.">{store.connections.map((item) => <div className="min-w-0 space-y-2" key={item.id}><Row title={item.companyName} text={`${item.customerName} · ${statusLabel(item.status)}${item.reviewStatus === "needs_review" ? " · 매출처 확인 필요" : ""}`} /><StoreActivityList companyId={item.companyId} storeAccountId={item.id} /></div>)}</Section>
     <Section icon={Users} title={`사람 ${store.members.length}`} empty="연결된 사람이 없습니다.">{store.members.map((item) => <Row key={item.id} title={`${item.name} · ${roleLabel(item.role)}`} text={[item.phone, item.email, statusLabel(item.status)].filter(Boolean).join(" · ")} />)}</Section>
     <Section icon={History} title={`변경 기록 ${store.changes.length}`} empty="기록된 변경이 없습니다.">{store.changes.slice(0, 20).map((item) => <Row key={item.id} title={item.fields.map(fieldLabel).join(", ") || "매장 정보 변경"} text={`${item.actorName} · ${formatDate(item.createdAt)}`} />)}</Section>
     <p className="rounded-lg bg-slate-100 p-3 text-xs font-bold leading-5 text-slate-600">사업자 재확인과 멈추기·풀기, 관리자 감사 기록 쓰기는 기존 칸·함수 계약을 확인한 뒤 별도 PR로 추가합니다.</p>

@@ -145,6 +145,7 @@ export async function listActivePublicLinks(company: string) {
     path("pricing_document_share_links", company,
       `lead_id=is.null&send_id=is.null&revoked_at=is.null&expires_at=gt.${now}&select=${shareFields},view_count,first_viewed_at,last_viewed_at&order=created_at.asc&limit=500`));
   return rows.map(row => ({ id: row.id, documentId: row.document_id, createdAt: row.created_at, publicUrl: publicUrl(row), expiresAt: row.expires_at,
+    viewerPath: `/pricing-document#${issueDocumentShareToken(row.id, row.token_nonce).token}`,
     viewCount: Number(row.view_count ?? 0), firstViewedAt: row.first_viewed_at, lastViewedAt: row.last_viewed_at }));
 }
 export async function revokePublicLinkById(company: string, id: string) {

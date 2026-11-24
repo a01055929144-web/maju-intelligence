@@ -7,9 +7,9 @@ type Share={id:string;document_id:string;document_version_id:string;token_nonce:
 type Version={id:string;document_id:string;content:{title:string;kind:"sheet"|"quote";validUntil:string;lines?:Array<{visible?:boolean}>}};
 
 /** Read only: returning to a public source never grants order or acceptance rights. */
-export async function readStorePortalSourceDocuments(companyId:string,storeAccountId:string,customerId:string) {
-  if(process.env.STORE_PORTAL_SOURCE_DOCUMENTS_ENABLED!=="true" ||
-    !(process.env.FEATURE_STORE_PORTAL_SOURCE_DOCUMENTS_COMPANY_IDS||"").split(",").some(id=>id.trim()===companyId))return [];
+export async function readStorePortalSourceDocuments(companyId:string,storeAccountId:string,customerId:string,force=false) {
+  if(!force&&(process.env.STORE_PORTAL_SOURCE_DOCUMENTS_ENABLED!=="true" ||
+    !(process.env.FEATURE_STORE_PORTAL_SOURCE_DOCUMENTS_COMPANY_IDS||"").split(",").some(id=>id.trim()===companyId)))return [];
   const company=encodeURIComponent(companyId),customer=encodeURIComponent(customerId),account=encodeURIComponent(storeAccountId);
   const sources=await supabaseRequest<Source[]>(`store_owner_activation_requests?company_id=eq.${company}&store_account_id=eq.${account}&customer_id=eq.${customer}`+
     `&consumed_at=not.is.null&cancelled_at=is.null&share_link_id=not.is.null&select=document_id,document_version_id,share_link_id&order=consumed_at.desc&limit=20`);

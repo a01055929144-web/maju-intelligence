@@ -28,6 +28,8 @@ const dependencies: Record<string, unknown> = {
   "@/lib/store/07-store-address-management": { isStoreAddressCompanyEnabled: () => false },
   "@/lib/store/07-store-portal": { listStorePortalAccounts: async () => null },
   "@/components/store-portal": { StorePortal: () => null },
+  "@/components/store-relation-preview": { StoreRelationPreview: () => null },
+  "@/lib/store/07-store-activity": { recordStoreActivity: async () => undefined, relationHomeEnabled: () => false },
   "@/domains/organization/store-cost-access": accessRules,
 };
 const compiled = ts.transpileModule(readFileSync("app/store/page.tsx", "utf8"), {

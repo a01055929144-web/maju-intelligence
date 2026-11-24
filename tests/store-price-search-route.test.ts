@@ -5,6 +5,7 @@ const mock = vi.hoisted(() => ({ flag: vi.fn(), member: vi.fn(), accounts: vi.fn
 vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled: mock.flag }));
 vi.mock("@/lib/store/07-store-member-context", () => ({ getStoreMemberContext: mock.member }));
 vi.mock("@/lib/store/07-store-portal", () => ({ listStorePortalAccounts: mock.accounts }));
+vi.mock("@/lib/store/07-store-activity", () => ({ recordStoreActivity: async () => undefined }));
 vi.mock("@/lib/pricing/storefront", () => ({ readStorefront: mock.store }));
 vi.mock("@/lib/pricing/storefront-catalog-read", () => ({ readStorefrontCatalogPage: mock.catalog }));
 vi.mock("@/lib/pricing/document-share", () => ({ readPublicDocument: mock.share }));
