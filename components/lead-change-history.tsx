@@ -2,13 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { withPermitLeadCompanyQuery } from "@/components/sales-route-map-workspace";
+import { LEAD_ACTION_TYPE_LABELS as TYPE_LABELS } from "@/domains/lead/action-labels";
 
 type HistoryItem = { actor: string; at: string; detail: string; id: string; kind: "record" | "void"; type: string };
 
-const TYPE_LABELS: Record<string, string> = {
-  call: "전화", dm: "DM", email: "이메일", exclude: "제외", fax: "팩스", hold: "정보 수정·보류", quote: "견적",
-  sms: "문자", status: "단계 변경", talktalk: "톡톡", visit: "방문"
-};
 
 /** 11/4: 리드 수정 기록. 누가·언제·무엇을 했는지 시간순으로 보여줍니다(취소된 컨택 포함). */
 export function LeadChangeHistory({ leadId }: { leadId: string }) {
