@@ -4,7 +4,7 @@
 대표 결정(21:4x): **번호 없는 매장도 가격은 보여주고, 주문할 때 번호 등록(국세청 정상 확인) 후 주문** · **탈퇴 = 매장 연결 끊고 같은 카카오로 다시 가입 가능(주문 기록은 남김)**.
 
 Owner Domain: organization(store account) · Related: pricing(가격 공개), lead(CX-142 연결)
-한 PR = 한 고객 행동 → U1·U2·U3 각각 PR. 모두 새 플래그 기본 OFF + 대표 회사 allowlist.
+한 PR = 한 고객 행동 → U0·U1·U2·U3 각각 PR. 모두 새 플래그 기본 OFF + 대표 회사 allowlist.
 
 ## 지금 운영 사실 (컨트롤타워 확인)
 - 탈퇴: `/store/connection` 화면·`/api/store/connection`·`change_store_connection_v1`(owner=`close`, 구성원=`leave`)이 **이미 있다**. 그런데 ① `STORE_CONNECTION_MANAGEMENT_ENABLED`가 운영에 없음(404) ② 매장 화면 어디에도 링크가 없음.
@@ -12,6 +12,12 @@ Owner Domain: organization(store account) · Related: pricing(가격 공개), le
 - 번호 없는 초대 불가: 같은 함수가 거래처 번호 10자리가 아니면 `store_customer_business_number_required`. 카카오 콜백도 국세청 '정상'이 아니면 막음.
 - 번호 없는 가입은 공개 링크 경로에만 있음(`STORE_PREOPENING_ENABLED` 운영 ON, `registration_pending`). 이 상태는 `set_store_price_visibility_v1`·`finalize_store_signup_v1` 모두 가격 확인을 막는다.
 - 거래처 화면 버튼: 대표·관리자 세션 + provision 탐침(403)일 때만 보이고, 번호 없는 거래처는 "사업자번호 10자리 등록 후 개통"(비활성)으로 보인다. 대표 화면에서 안 보이는 원인 미확정(스크린샷 요청) — U3에서 상태 문구로 해결.
+
+## U0 — MAJU 관리자에서 매장 연결 관리 (먼저, 대표 추가 요구 21:44)
+- `/admin` 매장(store_accounts) 상세에 버튼 3개: **매장 탈퇴 처리**(close와 같은 결과) · **점주/구성원 연결 해제**(member별) · **점주 추가**(카카오 초대 링크 발급 → 기존 activation 경로 재사용).
+- 기존 `change_store_connection_v1`은 매장 구성원 본인 전용이라, 관리자용은 별도 함수(관리자 키를 event actor로 기록)로. 초안+down+PG17.
+- 탈퇴 처리한 거래처는 다시 초대 가능해야 함(U1 SQL과 같은 변경 — U0에 먼저 넣고 U1은 재사용).
+- MAJU 관리자만(고객사 세션 불가). 테스트 반복에 쓰므로 U1보다 먼저.
 
 ## U1 — 매장 탈퇴 (매장 앱)
 - 매장 홈 메뉴(설정/내 정보 근처)에 **"매장 탈퇴"** 링크 → 기존 `/store/connection` 재사용. 대표(owner)는 "매장 탈퇴(이용 종료)", 구성원은 "내 연결 해제". 확인 단계 1번(되돌릴 수 없음 안내), 완료 후 로그아웃·카카오 로그인 화면.
