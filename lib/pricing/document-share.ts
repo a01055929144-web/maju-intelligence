@@ -168,8 +168,14 @@ async function readPublicInquiry(companyId: string) {
   } catch { return { status: "unavailable" as const }; }
 }
 
-export async function readPublicDocument(token: string, requester: string) {
+export type PublicDocumentView = { deviceClass: "mobile" | "desktop" | "tablet" | "unknown"; isPreviewBot: boolean; requesterHash: string | null };
+
+export async function readPublicDocument(token: string, requester: string, view?: PublicDocumentView) {
   const { row, issuedVersionId, output, orderable, items } = await resolvePublicDocument(token, requester);
+  // 긴 주소(/pricing-document#토큰)로 열어도 조회수 1회. 집계 실패가 문서 열람을 막지 않는다.
+  if (view) await supabaseRequest("rpc/record_pricing_document_view_v1", { method: "POST", body: JSON.stringify({
+    p_company_id: row.company_id, p_share_link_id: row.id, p_device_class: view.deviceClass,
+    p_requester_hash: view.requesterHash, p_is_preview_bot: view.isPreviewBot }) }).catch(() => null);
   if (row.send_id) await supabaseRequest(path("pricing_document_sends", row.company_id,
     `id=eq.${row.send_id}&document_version_id=eq.${issuedVersionId}&lead_id=eq.${row.lead_id}&acceptance_status=eq.sent&viewed_at=is.null`), {
     method: "PATCH", body: JSON.stringify({ viewed_at: new Date().toISOString(), acceptance_status: "viewed" }),
