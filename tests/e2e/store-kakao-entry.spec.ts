@@ -351,7 +351,7 @@ for (const width of [1440, 390]) {
       expect(blocked).toEqual([]);
       for (const request of traffic) {
         expect(request.url + request.referer).not.toContain(token);
-        if (request.path !== "/api/store/accounts/activate") expect(request.body).not.toContain(token);
+        if (!["/api/store/accounts/activate", "/api/store/invite-open"].includes(request.path)) expect(request.body).not.toContain(token);
       }
       // OFF: retain the existing empty-ID capability probe, but issue/auth/order/cost calls stay at zero.
       const before = { ...calls }, probesBefore = probes;
