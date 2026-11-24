@@ -15,7 +15,9 @@ import { pricingDocumentsRepository } from "../lib/pricing/documents-repository"
 import { POST as publicPost } from "../app/api/pricing-documents/public/route";
 import { PUT as saveSalesKitPut } from "../app/api/sales-kit/route";
 import { POST as privatePost } from "../app/api/pricing-documents/route";
-import { getPublicDocumentOrderContext } from "../lib/pricing/document-share";
+import { generateMetadata as previewMetadata } from "../app/q/[previewId]/page";
+import { GET as shortLinkGet } from "../app/s/[code]/route";
+import { getPublicDocumentOrderContext, readDocumentSharePreview, resolveDocumentShortLink } from "../lib/pricing/document-share";
 import { issueDocumentShareToken, verifyDocumentShareToken } from "../lib/pricing/document-share-token";
 import { issueStoreLinkToken } from "../lib/pricing/store-link-token";
 import { publicDocumentOrderGuidanceEnabled } from "../lib/pricing/public-document-order-feature";
@@ -32,11 +34,14 @@ let links: Row[], sends: Row[], actions: Row[], content: DocumentContent, owner:
 let failInsert: boolean, failBinding: boolean, limit: string, stock: number;
 let inquiryBody: string | null, inquiryFailure: boolean, orderFooterFailure: boolean;
 let publishedNumber = 2;
+let linkedContent: DocumentContent | null = null;
+const linkedVersionId = "a0000000-0000-4000-8000-000000000001";
 const seen: string[] = [];
 
 beforeEach(() => {
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", "");
   vi.clearAllMocks(); links = []; sends = []; actions = []; seen.length = 0; owner = actor; merged = archived = failInsert = failBinding = false; limit = "allowed"; stock = 2;
-  inquiryBody = null; inquiryFailure = false; orderFooterFailure = false; publishedNumber = 2;
+  inquiryBody = null; inquiryFailure = false; orderFooterFailure = false; publishedNumber = 2; linkedContent = null;
   mocks.capability.mockReturnValue(false);
   mocks.connection.mockResolvedValue(null);
   vi.stubEnv("STORE_PUBLIC_OWNER_ONBOARDING_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS", company);
@@ -55,6 +60,7 @@ beforeEach(() => {
   mocks.db.mockImplementation(async (url: string, init?: RequestInit) => {
     seen.push(url);
     const u = new URL(url, "https://fixture.test/"), table = u.pathname.slice(1), p = u.searchParams;
+    if (table === "rpc/resolve_pricing_document_link_head_v1") return linkedContent ? linkedVersionId : null;
     if (table === "store_order_settings") {
       expect(p.get("company_id")).toBe(`eq.${company}`);
       expect(init?.method || "GET").toBe("GET");
@@ -84,7 +90,7 @@ beforeEach(() => {
       if (failBinding) { failBinding = false; throw new Error("synthetic atomic commit response lost"); }
       return { sendId: saved.id, leadActionId: saved.id, documentId: saved.document_id, documentVersionId: saved.document_version_id };
     }
-    const matches = (r: Row) => Array.from(p.entries()).every(([k, v]) => !v.startsWith("eq.") || r[k] === v.slice(3)) &&
+    const matches = (r: Row) => (!p.has("or") || p.get("or")!.slice(1, -1).split(",").some(part => part === `preview_id.eq.${r.preview_id}` || part === `id.eq.${r.id}`)) && Array.from(p.entries()).every(([k, v]) => !v.startsWith("eq.") || r[k] === v.slice(3)) &&
       Array.from(p.entries()).every(([k, v]) => v !== "is.null" || r[k] == null);
     if (table === "pricing_document_share_links" || table === "pricing_document_sends") {
       const rows = table.endsWith("share_links") ? links : sends;
@@ -117,6 +123,8 @@ beforeEach(() => {
       return inquiryBody === null ? [] : [{ company_id: company, template_key: "lead_dm_kit", body: inquiryBody }];
     }
     if (p.get("company_id") !== `eq.${company}`) return [];
+    if (table === "pricing_document_versions" && p.get("id") === `eq.${linkedVersionId}` && linkedContent)
+      return [{ id: linkedVersionId, document_id: doc, version: 3, revision: 4, published_at: "2026-11-23T00:00:00Z", content: linkedContent }];
     if (table === "pricing_document_versions") return p.get("id") === `eq.${version}` ? [{ id: version, document_id: doc, version: publishedNumber, revision: 3, published_at: "2026-11-06T00:00:00Z", content: { ...content, cost: "COST-CANARY", supplier: "SUPPLIER-CANARY" } }] : [];
     if (table === "pricing_documents") return [{ id: doc, kind: content.kind, owner_key: owner, archived_at: archived ? "2026-11-06" : null }];
     if (table === "business_permit_leads") return merged ? [] : [{ id: lead }];
@@ -618,4 +626,143 @@ it("reads no policy for OFF companies, invalid tokens or revoked links", async (
   links[0].revoked_at = new Date().toISOString();
   expect((await publicPost(request({ token: token(prepared.publicUrl) }))).status).toBe(404);
   expect(seen.some(path => path.startsWith("store_order_settings?"))).toBe(false);
+});
+
+// CX-132: same issuance/authorization boundary; no operating short-code DDL prerequisite.
+async function brandedShare() {
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", company);
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  return service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+}
+const openShort = (code: string, userAgent = "Mozilla/5.0") => shortLinkGet(new Request(`https://fixture.test/s/${code}`,
+  { headers: { "user-agent": userAgent, "x-forwarded-for": "192.0.2.1" } }), { params: Promise.resolve({ code }) });
+
+it("CX-132 issues an opaque code once, keeps prices/version and supports original fragment links", async () => {
+  const result = await brandedShare(), frozen = JSON.stringify({ links, content });
+  expect(result.publicUrl).toMatch(/^\/s\/[0-9a-f]{32}\.[A-Za-z0-9_-]{22}$/);
+  expect(links[0].preview_title).toBe("MAJU · 합성 회사 합성 견적");
+  const again = await brandedShare(); expect(again).toEqual(result);
+  const response = await openShort(result.publicUrl.slice(3));
+  expect(response.status).toBe(302); expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  const original = new URL(response.headers.get("location")!);
+  expect(original.pathname).toBe("/pricing-document"); expect(original.search).toBe("");
+  const opened = await publicPost(request({ token: original.hash.slice(1) }));
+  expect(opened.status).toBe(200); expect((await opened.json()).document.lines[0].price).toBe(1100); // Existing taxable fixture: 1,000 supply + 100 VAT.
+  expect(JSON.stringify({ links, content })).toBe(frozen);
+  expect(sends).toEqual([]); expect(actions).toEqual([]);
+});
+
+it("CX-132 Kakao/Twitter bots receive token-free OG/Twitter metadata only", async () => {
+  const result = await brandedShare(), code = result.publicUrl.slice(3);
+  for (const userAgent of ["KAKAOTALK-SCRAP/1.0", "Twitterbot/1.0"]) {
+    const response = await openShort(code, userAgent), location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe(`/q/${links[0].preview_id}`); expect(location.hash).toBe(""); expect(location.search).toBe("");
+  }
+  const meta = await previewMetadata({ params: Promise.resolve({ previewId: String(links[0].preview_id) }) });
+  expect(meta).toMatchObject({ title: "MAJU · 합성 회사 합성 견적", referrer: "no-referrer", robots: { index: false, follow: false },
+    openGraph: { title: "MAJU · 합성 회사 합성 견적", description: expect.stringContaining("가입 전 단가표 확인") },
+    twitter: { title: "MAJU · 합성 회사 합성 견적", description: expect.stringContaining("간편 주문") } });
+  await mkdir("test-results/readonly-pg17/cx132", { recursive: true });
+  await writeFile("test-results/readonly-pg17/cx132/metadata.json", JSON.stringify({ source: "synthetic handler + database fixture", realKakaoCacheTested: false, metadata: meta, shortLinkCacheControl: "no-store", tokenInBotRedirect: false }, null, 2));
+  const serialized = JSON.stringify(meta);
+  for (const forbidden of ["PRIVATE-", "777777", String(links[0].token_nonce), String(links[0].token_hash), doc, version, "#", "synthetic-test-key"])
+    expect(serialized).not.toContain(forbidden);
+});
+
+it.each(["revoked", "expired", "other-company", "archived", "rotated-key", "rate-limited"])("CX-132 denies %s short links without redirecting", async state => {
+  const result = await brandedShare();
+  if (state === "revoked") links[0].revoked_at = "2026-11-23";
+  if (state === "expired") links[0].expires_at = "2020-01-01T00:00:00Z";
+  if (state === "other-company") links[0].company_id = other;
+  if (state === "archived") archived = true;
+  if (state === "rotated-key") vi.stubEnv("LEAD_DOCUMENT_LINK_SECRET", "synthetic-rotated-secret-longer-than-32-bytes");
+  if (state === "rate-limited") limit = "rate_limited";
+  const response = await openShort(result.publicUrl.slice(3));
+  expect(response.status).toBe(404); expect(response.headers.get("location")).toBeNull();
+  expect(await response.text()).not.toContain("PRIVATE-");
+  if (["revoked", "expired", "other-company"].includes(state))
+    expect(await readDocumentSharePreview(String(links[0].preview_id))).toBeNull();
+});
+
+it("CX-132 defaults OFF and rejects malformed codes before database access", async () => {
+  await expect(resolveDocumentShortLink("a".repeat(32), "fixture")).rejects.toMatchObject({ status: 404 });
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", company);
+  await expect(resolveDocumentShortLink("bad", "fixture")).rejects.toMatchObject({ status: 404 });
+  expect(mocks.db).not.toHaveBeenCalled();
+});
+
+it("CX-132 hides metadata when public entry is disabled and preserves legacy lead previews", async () => {
+  await brandedShare(); const id = String(links[0].preview_id);
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "false");
+  expect(await readDocumentSharePreview(id)).toBeNull();
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", "");
+  vi.stubEnv("INDUSTRY_BASKETS", "true"); vi.stubEnv("INDUSTRY_BASKETS_COMPANY_IDS", company);
+  const legacy = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, idempotencyKey: "90000000-0000-4000-8000-000000000001" });
+  expect(legacy.publicUrl).toMatch(/^\/q\/[0-9a-f-]{36}#/);
+  const previewId = legacy.publicUrl.split("/")[2].split("#")[0];
+  expect(await readDocumentSharePreview(previewId)).toMatchObject({ title: "합성 회사 · 합성 견적" });
+});
+
+it("CX-132 cannot derive document access from a metadata-only preview ID or tampered short tag", async () => {
+  const result = await brandedShare(), seenBefore = mocks.db.mock.calls.length;
+  const idOnly = String(links[0].preview_id).replaceAll("-", "");
+  const signed = result.publicUrl.slice(3), badTag = signed.slice(0, 33) + (signed[33] === "A" ? "B" : "A") + signed.slice(34);
+  for (const code of [idOnly, idOnly + ".AAAAAAAAAAAAAAAAAAAAAA", badTag, signed.slice(0, -1) + "!"])
+    await expect(resolveDocumentShortLink(code, "fixture")).rejects.toMatchObject({ status: 404 });
+  expect(mocks.db.mock.calls.length).toBe(seenBefore);
+});
+
+it("CX-132 aliases legacy rows without backfilling metadata, replacing links or republishing", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const input = { ...prepare, leadId: null };
+  const old = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, input);
+  expect(links[0].preview_id).toBeNull(); const frozen = JSON.stringify({ links, content });
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", company);
+  const alias = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, input);
+  expect(alias.shareLinkId).toBe(old.shareLinkId); expect(alias.publicUrl).toMatch(/^\/s\/[0-9a-f]{32}\.[A-Za-z0-9_-]{22}$/);
+  expect(JSON.stringify({ links, content })).toBe(frozen);
+  expect((await openShort(alias.publicUrl.slice(3))).status).toBe(302);
+  const bot = await openShort(alias.publicUrl.slice(3), "KAKAOTALK-SCRAP/1.0");
+  expect(bot.headers.get("location")).toBe(`https://fixture.test/q/${links[0].id}`);
+  expect(await readDocumentSharePreview(String(links[0].id))).toMatchObject({ title: "MAJU · 합성 회사 합성 견적" });
+  expect((await publicPost(request({ token: token(old.publicUrl) }))).status).toBe(200);
+  expect(JSON.stringify({ links, content })).toBe(frozen); expect(sends).toEqual([]); expect(actions).toEqual([]);
+});
+
+it("CX-132 refuses ambiguous metadata IDs instead of selecting another share", async () => {
+  await brandedShare();
+  const previewId = String(links[0].preview_id);
+  links.push({ ...links[0], id: previewId, preview_id: null, idempotency_key: "90000000-0000-4000-8000-000000000002" });
+  expect(await readDocumentSharePreview(previewId)).toBeNull();
+});
+
+it("CX-132 image metadata follows the same current publication head and excludes hidden/private fields", async () => {
+  const result = await brandedShare(), frozen = JSON.stringify(links);
+  vi.stubEnv("PRICING_DOCUMENT_EXTENSION_ENABLED", "true"); vi.stubEnv("PRICING_DOCUMENT_EXTENSION_COMPANY_IDS", company);
+  linkedContent = { ...structuredClone(content), title: "합성 연장 단가표", validUntil: "2100-01-31" };
+  linkedContent.lines.push({ ...linkedContent.lines[0], productId: "50000000-0000-4000-8000-000000000002", visible: false });
+  const preview = await readDocumentSharePreview(String(links[0].preview_id));
+  expect(preview).toMatchObject({ title: "MAJU · 합성 회사 합성 연장 단가표", image: { companyName: "합성 회사", title: "합성 연장 단가표", itemCount: 1, validUntil: "2100-01-31" } });
+  expect(JSON.stringify(preview)).not.toMatch(/PRIVATE-|777777|token_hash|token_nonce|customer_id/);
+  const redirect = await openShort(result.publicUrl.slice(3));
+  const opened = await publicPost(request({ token: new URL(redirect.headers.get("location")!).hash.slice(1) }));
+  expect((await opened.json()).document).toMatchObject({ title: "합성 연장 단가표", version: 3, validUntil: "2100-01-31" });
+  expect(JSON.stringify(links)).toBe(frozen);
+});
+it("CX-132 exposes only a branding switch to the verified general reader and preserves OFF responses", async () => {
+  const result = await brandedShare(); const redirect = await openShort(result.publicUrl.slice(3));
+  const signedToken = new URL(redirect.headers.get("location")!).hash.slice(1);
+  expect(await (await publicPost(request({ token: signedToken }))).json()).toHaveProperty("brandingAvailable", true);
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", "");
+  expect(await (await publicPost(request({ token: signedToken }))).json()).not.toHaveProperty("brandingAvailable");
+});
+
+it("CX-132 leaves lead sales previews and reader branding unchanged", async () => {
+  vi.stubEnv("DOCUMENT_SHARE_BRANDING_COMPANY_IDS", company);
+  vi.stubEnv("INDUSTRY_BASKETS", "true"); vi.stubEnv("INDUSTRY_BASKETS_COMPANY_IDS", company);
+  const result = await prepared();
+  const preview = await readDocumentSharePreview(String(links[0].preview_id));
+  expect(preview?.title).toBe("합성 회사 · 합성 견적"); expect(preview).not.toHaveProperty("image");
+  expect(await (await publicPost(request({ token: token(result.publicUrl) }))).json()).not.toHaveProperty("brandingAvailable");
 });

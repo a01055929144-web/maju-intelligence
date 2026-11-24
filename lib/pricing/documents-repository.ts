@@ -162,6 +162,12 @@ export const pricingDocumentsRepository: PricingDocumentsRepository = {
       });
       return { ...result, token } as T;
     }
+    if (action === "extension-policy") {
+      const input = payload as Record<string, unknown>;
+      return supabaseRequest<T>("rpc/pricing_document_extension_policy_v1", { method: "POST", body: JSON.stringify({
+        p_company: scope.companyId, p_actor: scope.actor, p_manager: scope.manager, p_document: input.id,
+      }) });
+    }
     if (action === "extension-catalog") {
       const input = payload as Record<string, unknown>;
       return supabaseRequest<T>("rpc/pricing_document_extension_catalog_v1", { method: "POST", body: JSON.stringify({

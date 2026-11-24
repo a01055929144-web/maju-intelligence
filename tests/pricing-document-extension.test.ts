@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { reviewDocumentExtension, publishDocumentExtension, readDocumentExtensionCatalog } from "../lib/pricing/document-extension-client";
+import { reviewDocumentExtension, publishDocumentExtension, readDocumentExtensionCatalog, readDocumentExtensionPolicy } from "../lib/pricing/document-extension-client";
 import { documentExtensionEnabled } from "../lib/pricing/document-extension-feature";
+import { documentRequestError } from "../lib/pricing/document-request-error";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -11,6 +12,18 @@ it("defaults OFF and requires both flag and verified company allowlist", () => {
   vi.stubEnv("PRICING_DOCUMENT_EXTENSION_ENABLED", "true");
   expect(documentExtensionEnabled("a")).toBe(true);
   expect(documentExtensionEnabled("b")).toBe(false);
+});
+
+it("explains that a company-common sheet can only keep published products and prices", () => {
+  const error = new Error('Supabase request failed: 400 {"code":"P0001","message":"extension_common_new_price_required"}');
+  expect(documentRequestError(error, true)).toMatchObject({ status: 400, code: "extension_common_new_price_required",
+    message: expect.stringContaining("기존 품목과 가격 그대로") });
+});
+
+it("accepts only an explicit server extension policy", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ result: { customerLinked: false,
+    allowedModes: ["keep"], canAddProducts: false, reason: "company_common_keep_only" } })));
+  await expect(readDocumentExtensionPolicy("company", "document")).resolves.toMatchObject({ allowedModes: ["keep"], canAddProducts: false });
 });
 
 it("never falls back to old catalog or ordinary publish on unavailable server contract", async () => {
@@ -59,4 +72,13 @@ it("never returns lookup prices when the extension catalog POST fails", async ()
   vi.stubGlobal("fetch", fetch);
   await expect(readDocumentExtensionCatalog("company", { id: "document", expected: 2, mode: "keep" }, { search: "합성" })).rejects.toThrow("연장 가격 조회 실패");
   expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it("maps publish validation failures to actionable messages instead of a storage error", () => {
+  const body = (message: string) => new Error(`Supabase request failed: 400 ${JSON.stringify({ code: "P0001", message })}`);
+  expect(documentRequestError(body("published_unit_unconfirmed"), true)).toMatchObject({ status: 400, code: "published_unit_unconfirmed" });
+  expect(documentRequestError(body("published_product_unconfirmed"), true)).toMatchObject({ status: 400, code: "published_product_unconfirmed" });
+  expect(documentRequestError(body("published_quote_duplicate_product"), true)).toMatchObject({ status: 400, code: "duplicate_product" });
+  expect(documentRequestError(body("published_lines_required"), true)).toMatchObject({ status: 400, code: "no_visible_products" });
+  expect(documentRequestError(body("something_else"), true)).toMatchObject({ status: 503, code: "document_storage_failed" });
 });

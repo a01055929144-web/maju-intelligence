@@ -20,6 +20,47 @@ import { readLatestBriefing } from "./analytics/briefing-read";
 import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
 import { getRouteDistanceCacheMap } from "./store/02-route-distance-cache";
 import { getDefaultCompanyId, getSupabaseConfig, isProductionStoreConfigured, normalizeCompanyKind, supabaseRequest, type CompanyKind, type SupabaseConfig } from "./store/00-core";
+import {
+  isMissingCustomerPlaceLinksColumnError,
+  isMissingCustomerHoursMenuColumnError,
+  isMissingCustomerRelationshipStatusColumnError,
+  isMissingColumnError,
+  isMissingDeliveryIdempotencyColumnError,
+  removePasswordHashFromBody,
+  removeCompanyWorkspaceFieldsFromBody,
+  appUsersRequest,
+  companiesRequest,
+  isMissingTelegramChatIdColumnError,
+  supabaseStorageRequest,
+  upsertCompany
+} from "./store/00-supabase-helpers";
+export { supabaseStorageRequest } from "./store/00-supabase-helpers";
+import {
+  CUSTOMER_MASTER_SELECT,
+  CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS,
+  CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU,
+  CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS,
+  CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE,
+  CUSTOMER_MASTER_SELECT_WITH_REVIEWS,
+  CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD,
+  CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY,
+  CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE,
+  CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS,
+  CUSTOMER_MASTER_SELECT_WITH_BUSINESS_IDENTITY,
+  CUSTOMER_MASTER_FETCH_LIMIT,
+  SALES_TRANSACTIONS_FETCH_LIMIT
+} from "./store/01-customer-master-select";
+import { isMissingStaffMobileLocationSchemaError, staffStoreRequest } from "./store/01-staff-store-errors";
+import { isPermitStatusActive, computePermitLeadScoreBreakdown, permitLeadGradeFromScore, computePermitLeadNextAction, toPermitLeadItem } from "./store/08-permit-lead-scoring";
+export { getExcelMappingPreset, upsertExcelMappingPreset, deleteExcelMappingPreset } from "./store/08-excel-mapping-presets";
+export { addBusinessNumberException, getBusinessNumberExceptions, getExemptBusinessNumberSet, removeBusinessNumberException } from "./store/09-business-number-exceptions";
+export type { BusinessNumberException } from "./store/09-business-number-exceptions";
+import { getExemptBusinessNumberSet } from "./store/09-business-number-exceptions";
+import { matchSalesTransactionsToCustomer, summarizeSalesTransactions } from "./store/08-sales-transaction-summary";
+export { matchSalesTransactionsToCustomer };
+import type { TerritoryResolutionContext } from "./store/08-delivery-territories";
+import { assignCustomerByTerritory, assignCustomerByTerritoryFromContext, getCompanyStaffMemberOptions, getCustomerAssignmentOptionValues, getDeliveryTerritories, loadTerritoryResolutionContext, saveDeliveryTerritory } from "./store/08-delivery-territories";
+export { assignCustomerByTerritory, getCompanyStaffMemberOptions, getCustomerAssignmentOptionValues, getDeliveryTerritories, saveDeliveryTerritory };
 import { accountLoginV2Enabled } from "./account-login-feature";
 import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
@@ -51,14 +92,13 @@ import { resolveStaffWorkWindow } from "../domains/delivery/staff-location";
 import {
   LEAD_CONTACT_ACTION_TYPES,
   isLeadContactActionType,
-  isMobilePhoneNumber,
   normalizeEmailInput,
   normalizeFaxNumberInput,
   normalizeNaverTalktalkInput,
   type LeadContactChannel,
   type LeadContactFilterChannel
 } from "../domains/lead/contact-channels";
-import { displayLeadNextAction, recommendLeadNextAction } from "../domains/lead/next-action";
+import { displayLeadNextAction } from "../domains/lead/next-action";
 export { classifyPermitLeadIndustry } from "../domains/lead/industry-classification";
 import {
   extractLeadAdministrativeArea,
@@ -941,516 +981,8 @@ type SupabaseRow = Record<string, unknown>;
 const CUSTOMER_ATTACHMENT_BUCKET = "customer-attachments";
 const SALES_QUOTE_PHOTO_BUCKET = CUSTOMER_ATTACHMENT_BUCKET;
 const AUTH_CREDENTIALS_ID = "maju-default";
-const CUSTOMER_MASTER_SELECT =
-  "id,customer_name,business_registration_number,representative_name,opening_date,region,address,phone,email,birth_date,industry,monthly_revenue,last_order_days,visit_count,delivery_km,delivery_minutes,delivery_manager,delivery_zone,loading_position,business_status,business_status_checked_at,business_license_file_url,bank_account_file_url";
-const CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS = `${CUSTOMER_MASTER_SELECT},naver_place_url,kakao_place_url,google_map_url,place_links_checked_at`;
-const CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU = `${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS},business_hours,menu_summary`;
-const CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS = `${CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU},relationship_status,relationship_status_updated_at,relationship_status_note`;
-// 배송차(deliveryVehicle)는 담당자(deliveryDriver)와 별개로 지정할 수 있는 독립된 값입니다.
-// supabase/migrations/20260818_customer_delivery_vehicle.sql을 아직 실행하지 않은 환경에서도
-// 나머지 거래처 조회가 함께 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
-const CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE = `${CUSTOMER_MASTER_SELECT_WITH_RELATIONSHIP_STATUS},delivery_vehicle`;
-// 거래처 카드에 리뷰 기반 키워드 뱃지·AI 요약을 보여주기 위한 컬럼입니다.
-// supabase/migrations/20260818b_customer_contacts_and_review_enrichment.sql을 아직 실행하지 않은 환경에서도
-// 나머지 거래처 조회가 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
-const CUSTOMER_MASTER_SELECT_WITH_REVIEWS = `${CUSTOMER_MASTER_SELECT_WITH_DELIVERY_VEHICLE},review_summary,review_keywords,review_source,reviews_updated_at`;
-// 거래처 출입방법(열쇠/카드/비밀번호/숨김위치)·비밀번호를 저장하기 위한 컬럼입니다(2026-08-24 피드백:
-// "거래처의 출입방법과 비밀번호를 저장해야해. 놓친 것 같아"). supabase/migrations/20260824_customer_access_method.sql을
-// 아직 실행하지 않은 환경에서도 나머지 거래처 조회가 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
-const CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD = `${CUSTOMER_MASTER_SELECT_WITH_REVIEWS},access_method_type,access_note,access_password`;
-// 동시 편집 감지(낙관적 동시성 제어)용 updated_at입니다. supabase/migrations/20260831c_normalized_customers_updated_at.sql을
-// 아직 실행하지 않은 환경에서도 나머지 거래처 조회가 깨지지 않도록 가장 바깥쪽(가장 넓은) select 티어로 추가합니다.
-const CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY = `${CUSTOMER_MASTER_SELECT_WITH_ACCESS_METHOD},updated_at`;
-// 수동 등급은 월 매출 기반 자동 등급보다 우선합니다. 마이그레이션이 아직 적용되지 않은 환경은
-// 바로 아래 조회 티어로 폴백해 기존 자동 등급을 계속 사용합니다.
-const CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE = `${CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY},grade_override`;
-// PHASE 1 assignment IDs are the authoritative references once populated. This remains the
-// outermost tier so older/local databases can still fall back to the legacy text-only model.
-const CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS = `${CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE},assigned_staff_member_id,delivery_vehicle_id,delivery_territory_id`;
-const CUSTOMER_MASTER_SELECT_WITH_BUSINESS_IDENTITY = `${CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS},business_name,sub_business_number,business_entity_type,corporate_registration_number`;
-// Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
-const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
-const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
-const STAFF_INVITATIONS_MIGRATION_MESSAGE =
-  "직원 초대 저장소가 아직 준비되지 않았습니다. Supabase SQL Editor에서 직원 초대 스키마를 적용한 뒤 다시 시도해주세요.";
-// 2026-09-11 감사: staff_invitations.assigned_manager_name/assigned_vehicle(카카오 닉네임과
-// 등록된 담당자명이 달라 자동 매칭이 실패하는 경우를 위한 수동 배정 override, 20260907_
-// staff_assignment_override.sql)은 초대 코드 조회 select= 목록에 하드코딩되어 있어, 이 마이그
-// 레이션이 프로덕션에 적용되지 않은 상태면 초대 링크로 들어오는 모든 조회(모바일 직원
-// 가입/로그인 포함)가 원인을 알 수 없는 Supabase 원본 에러로 즉시 실패한다. 다른 다섯 개
-// 마이그레이션(company_message_settings/company_job_titles/company_closure/login_throttle/
-// permit_sync_cursor)은 이미 각자 "어떤 마이그레이션을 실행하라"는 명확한 안내로 잡혀 있는데
-// 이 컬럼만 빠져 있었다(docs/pages/settings.md KNOWN ISSUES 참고) — 진단 메시지만 보강한다.
-const STAFF_ASSIGNMENT_OVERRIDE_MIGRATION_MESSAGE =
-  "담당자/차량 수동 배정을 저장하거나 불러올 수 없습니다. Supabase에 assigned_manager_name/assigned_vehicle 컬럼이 아직 없습니다. supabase/migrations/20260907_staff_assignment_override.sql을 먼저 실행하세요.";
-const SUPABASE_CONNECTION_KEY_MESSAGE =
-  "Supabase 연결 키가 현재 프로젝트와 맞지 않습니다. Vercel 환경변수의 SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY를 같은 Supabase 프로젝트 값으로 맞춘 뒤 재배포해주세요.";
 
 
-
-type TerritoryResolutionContext = {
-  territories: DeliveryTerritoryItem[];
-  staff: CompanyStaffMemberOption[];
-};
-
-async function loadTerritoryResolutionContext(companyId: string): Promise<TerritoryResolutionContext> {
-  const [territories, staff] = await Promise.all([
-    getDeliveryTerritories(companyId),
-    getCompanyStaffMemberOptions(companyId)
-  ]);
-  return { territories, staff };
-}
-
-function assignCustomerByTerritoryFromContext(address: string, context: TerritoryResolutionContext): CustomerTerritoryRecommendation {
-  const administrativeArea = normalizeAdministrativeArea(address);
-  const territory = context.territories.find(
-    (item) => item.isActive && item.areas.some((area) => normalizeAdministrativeArea(area) === administrativeArea)
-  );
-  if (!territory) return { administrativeArea: administrativeArea || undefined, status: "unassigned" };
-  const firstStaff = territory.defaultStaff.slice().sort((a, b) => a.priority - b.priority)[0];
-  return {
-    administrativeArea: administrativeArea || undefined,
-    territoryId: territory.id,
-    territoryName: territory.name,
-    assignedStaffMemberId: firstStaff?.staffMemberId,
-    assignedStaffName: firstStaff?.staffName,
-    status: "matched"
-  };
-}
-
-/** 신규 거래처 등록 시에만 호출하는 공통 권역 추천 함수입니다. 이 함수 자체는 DB를 수정하지 않습니다. */
-export async function assignCustomerByTerritory(companyId: string, address: string): Promise<CustomerTerritoryRecommendation> {
-  return assignCustomerByTerritoryFromContext(address, await loadTerritoryResolutionContext(companyId));
-}
-
-export async function getCompanyStaffMemberOptions(companyId: string): Promise<CompanyStaffMemberOption[]> {
-  if (!isProductionStoreConfigured()) return [];
-  const rows = await supabaseRequest<Array<{ id: string; role: string; user_id: string; app_users: { name: string | null } | null }>>(
-    `company_members?select=id,user_id,role,app_users(name)&company_id=eq.${encodeURIComponent(companyId)}&status=eq.active&order=created_at.asc`
-  );
-  const userIds = rows.map((row) => row.user_id).filter(Boolean);
-  const invitationNames = await getAcceptedStaffInvitationNames(companyId, userIds);
-  return rows.map((row) => ({
-    id: row.id,
-    name: resolveCompanyStaffDisplayName({ appUserName: row.app_users?.name, invitationEmployeeName: invitationNames.get(row.user_id) }),
-    role: row.role
-  }));
-}
-
-/** 직원 설정 선택지에 필요한 문자열만 읽어 거래처 원장 전체 로드를 피합니다. */
-export async function getCustomerAssignmentOptionValues(companyId: string) {
-  if (!isProductionStoreConfigured()) return { managers: [] as string[], vehicles: [] as string[] };
-  const rows = await supabaseRequest<Array<{ delivery_manager: string | null; delivery_vehicle: string | null }>>(
-    `normalized_customers?select=delivery_manager,delivery_vehicle&company_id=eq.${encodeURIComponent(companyId)}&order=customer_name.asc&limit=5000`
-  );
-  const unique = (values: Array<string | null>) =>
-    Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "ko"));
-  return {
-    managers: unique(rows.map((row) => row.delivery_manager)),
-    vehicles: unique(rows.map((row) => row.delivery_vehicle))
-  };
-}
-
-async function getAcceptedStaffInvitationNames(companyId: string, userIds: string[]) {
-  if (!userIds.length) return new Map<string, string>();
-  const filter = userIds.map((id) => encodeURIComponent(id)).join(",");
-  const rows = await supabaseRequest<Array<{ accepted_by: string | null; employee_name: string | null }>>(
-    `staff_invitations?select=accepted_by,employee_name&company_id=eq.${encodeURIComponent(companyId)}&status=eq.accepted&accepted_by=in.(${filter})&order=accepted_at.desc`
-  ).catch(() => []);
-  const names = new Map<string, string>();
-  rows.forEach((row) => {
-    if (row.accepted_by && row.employee_name && !names.has(row.accepted_by)) names.set(row.accepted_by, row.employee_name);
-  });
-  return names;
-}
-
-export async function getDeliveryTerritories(companyId: string): Promise<DeliveryTerritoryItem[]> {
-  if (!isProductionStoreConfigured()) return [];
-  const [territories, areas, assignments, staff] = await Promise.all([
-    supabaseRequest<Array<{ id: string; name: string; is_active: boolean }>>(
-      `delivery_territories?select=id,name,is_active&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.asc`
-    ),
-    supabaseRequest<Array<{ territory_id: string; administrative_area: string }>>(
-      `delivery_territory_areas?select=territory_id,administrative_area&company_id=eq.${encodeURIComponent(companyId)}&order=administrative_area.asc`
-    ),
-    supabaseRequest<Array<{ territory_id: string; staff_member_id: string; priority: number; is_active: boolean }>>(
-      `territory_staff_assignments?select=territory_id,staff_member_id,priority,is_active&company_id=eq.${encodeURIComponent(companyId)}&assignment_role=eq.customer_default&order=priority.asc`
-    ),
-    getCompanyStaffMemberOptions(companyId)
-  ]);
-  const staffById = new Map(staff.map((item) => [item.id, item]));
-  return territories.map((territory) => ({
-    id: territory.id,
-    name: territory.name,
-    isActive: territory.is_active,
-    areas: areas.filter((area) => area.territory_id === territory.id).map((area) => area.administrative_area),
-    defaultStaff: assignments
-      .filter((assignment) => assignment.territory_id === territory.id && assignment.is_active)
-      .map((assignment) => ({
-        staffMemberId: assignment.staff_member_id,
-        staffName: staffById.get(assignment.staff_member_id)?.name || "퇴사·미확인 직원",
-        priority: assignment.priority
-      }))
-  }));
-}
-
-export async function saveDeliveryTerritory(companyId: string, input: {
-  id?: string; name: string; isActive?: boolean; areas: string[]; staffMemberIds: string[];
-}): Promise<string> {
-  const name = input.name.trim();
-  if (!name) throw new Error("권역명을 입력해주세요.");
-  const areas = Array.from(new Set(input.areas.map(normalizeAdministrativeArea).filter(Boolean)));
-  const staffMemberIds = Array.from(new Set(input.staffMemberIds.filter(Boolean)));
-  const [occupiedAreas, activeStaff] = await Promise.all([
-    areas.length
-      ? supabaseRequest<Array<{ administrative_area: string; territory_id: string; delivery_territories: { name: string | null } | null }>>(
-          `delivery_territory_areas?select=administrative_area,territory_id,delivery_territories(name)&company_id=eq.${encodeURIComponent(companyId)}&administrative_area=in.(${areas.map((area) => encodeURIComponent(area)).join(",")})`
-        )
-      : Promise.resolve([]),
-    getCompanyStaffMemberOptions(companyId)
-  ]);
-  const conflict = occupiedAreas.find((area) => area.territory_id !== input.id);
-  if (conflict) throw new Error(`${conflict.administrative_area}는 ${conflict.delivery_territories?.name || "다른"} 권역에 이미 포함되어 있습니다.`);
-  const activeStaffIds = new Set(activeStaff.map((staff) => staff.id));
-  const inactiveStaffId = staffMemberIds.find((id) => !activeStaffIds.has(id));
-  if (inactiveStaffId) throw new Error("비활성 또는 다른 회사 직원은 권역 담당자로 지정할 수 없습니다.");
-  let territoryId = input.id;
-  let createdNewTerritory = false;
-  const previousTerritory = territoryId
-    ? (await supabaseRequest<Array<{ name: string; is_active: boolean }>>(
-        `delivery_territories?select=name,is_active&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(territoryId)}&limit=1`
-      ))[0]
-    : undefined;
-  if (territoryId) {
-    if (!previousTerritory) throw new Error("수정할 권역을 찾을 수 없습니다.");
-    await supabaseRequest(`delivery_territories?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(territoryId)}`, {
-      method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ name, is_active: input.isActive !== false, updated_at: new Date().toISOString() })
-    });
-  } else {
-    const created = await supabaseRequest<Array<{ id: string }>>("delivery_territories?select=id", {
-      method: "POST", body: JSON.stringify({ company_id: companyId, name, is_active: input.isActive !== false })
-    });
-    territoryId = created[0]?.id;
-    createdNewTerritory = true;
-  }
-  if (!territoryId) throw new Error("권역 저장 결과를 확인하지 못했습니다.");
-  const [previousAreas, previousAssignments] = await Promise.all([
-    supabaseRequest<Array<{ administrative_area: string }>>(`delivery_territory_areas?select=administrative_area&company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`),
-    supabaseRequest<Array<{ staff_member_id: string; priority: number; is_active: boolean }>>(`territory_staff_assignments?select=staff_member_id,priority,is_active&company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}&assignment_role=eq.customer_default`)
-  ]);
-  try {
-    await supabaseRequest(`delivery_territory_areas?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
-    await supabaseRequest(`territory_staff_assignments?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
-    if (input.isActive !== false && areas.length) {
-      await supabaseRequest("delivery_territory_areas", { method: "POST", body: JSON.stringify(areas.map((area) => ({ company_id: companyId, territory_id: territoryId, administrative_area: area }))) });
-    }
-    if (input.isActive !== false && staffMemberIds.length) {
-      await supabaseRequest("territory_staff_assignments", {
-        method: "POST",
-        body: JSON.stringify(staffMemberIds.map((staffMemberId, index) => ({ company_id: companyId, territory_id: territoryId, staff_member_id: staffMemberId, assignment_role: "customer_default", priority: index + 1, is_active: true })))
-      });
-    }
-  } catch (error) {
-    // RPC 도입 전 방어선: 교체 중 실패하면 직전 지역·담당자 구성을 최선 노력으로 복원합니다.
-    await supabaseRequest(`delivery_territory_areas?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } }).catch(() => null);
-    await supabaseRequest(`territory_staff_assignments?company_id=eq.${encodeURIComponent(companyId)}&territory_id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } }).catch(() => null);
-    if (previousAreas.length) await supabaseRequest("delivery_territory_areas", { method: "POST", body: JSON.stringify(previousAreas.map((area) => ({ company_id: companyId, territory_id: territoryId, administrative_area: area.administrative_area }))) }).catch(() => null);
-    if (previousAssignments.length) await supabaseRequest("territory_staff_assignments", { method: "POST", body: JSON.stringify(previousAssignments.map((assignment) => ({ company_id: companyId, territory_id: territoryId, staff_member_id: assignment.staff_member_id, assignment_role: "customer_default", priority: assignment.priority, is_active: assignment.is_active }))) }).catch(() => null);
-    if (createdNewTerritory) {
-      await supabaseRequest(`delivery_territories?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(territoryId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } }).catch(() => null);
-    } else if (previousTerritory) {
-      await supabaseRequest(`delivery_territories?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(territoryId)}`, {
-        method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ name: previousTerritory.name, is_active: previousTerritory.is_active, updated_at: new Date().toISOString() })
-      }).catch(() => null);
-    }
-    throw error;
-  }
-  return territoryId;
-}
-
-function isMissingStaffInvitationTableError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("PGRST205") && message.includes("staff_invitations");
-}
-
-function isMissingStaffMobileLocationSchemaError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return (
-    message.includes("staff_mobile_devices") &&
-    (message.includes("PGRST205") ||
-      message.includes("last_lat") ||
-      message.includes("last_lng") ||
-      message.includes("last_location_at") ||
-      message.includes("location_status") ||
-      message.includes("schema cache"))
-  );
-}
-
-function isInvalidSupabaseApiKeyError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("Invalid API key") || message.includes("Forbidden use of secret API key");
-}
-
-function isMissingCustomerPlaceLinksColumnError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return ["naver_place_url", "kakao_place_url", "google_map_url", "place_links_checked_at"].some((column) => message.includes(column));
-}
-
-function isMissingCustomerHoursMenuColumnError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return ["business_hours", "menu_summary"].some((column) => message.includes(column));
-}
-
-function isMissingCustomerRelationshipStatusColumnError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return ["relationship_status", "relationship_status_updated_at", "relationship_status_note"].some((column) => message.includes(column));
-}
-
-// Generic "column does not exist" detector. Used to cascade through progressively narrower
-// select lists AND progressively narrower insert/upsert payloads WITHOUT naming specific columns.
-// This matters because PostgREST reports missing columns differently depending on where they show
-// up: a SELECT referencing an unknown column fails with raw Postgres error 42703 ("column ... does
-// not exist"), while an INSERT/UPSERT body containing an unknown JSON key fails with PostgREST's
-// own code PGRST204 ("Could not find the 'x' column of 'y' in the schema cache") — no "42703" or
-// "does not exist" text at all. Matching only the SELECT-side signature silently breaks every
-// payload-tier cascade (UPSERT_PAYLOAD_TIERS etc.) whenever the newest column hasn't been migrated
-// yet: the first (widest) tier throws an error this function fails to recognize, so it's rethrown
-// instead of falling back. Match both signatures here so a single check covers reads and writes.
-function isMissingColumnError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("42703") || message.includes("does not exist") || message.includes("PGRST204") || message.includes("schema cache");
-}
-
-function isMissingDeliveryIdempotencyColumnError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("idempotency_key") && isMissingColumnError(error);
-}
-
-function removePasswordHashFromBody(body: BodyInit | null | undefined) {
-  if (!body || typeof body !== "string" || !body.includes("password_hash")) return body;
-  try {
-    const parsed = JSON.parse(body);
-    const strip = (row: Record<string, unknown>) => {
-      const next = { ...row };
-      delete next.password_hash;
-      return next;
-    };
-    if (Array.isArray(parsed)) return JSON.stringify(parsed.map((row) => (row && typeof row === "object" ? strip(row as Record<string, unknown>) : row)));
-    if (parsed && typeof parsed === "object") return JSON.stringify(strip(parsed as Record<string, unknown>));
-  } catch {
-    return body;
-  }
-  return body;
-}
-
-function removeCompanyWorkspaceFieldsFromBody(body: BodyInit | null | undefined) {
-  if (!body || typeof body !== "string" || (!body.includes("workspace_type") && !body.includes("owner_user_id"))) return body;
-  try {
-    const parsed = JSON.parse(body);
-    const strip = (row: Record<string, unknown>) => {
-      const next = { ...row };
-      delete next.workspace_type;
-      delete next.owner_user_id;
-      return next;
-    };
-    if (Array.isArray(parsed)) return JSON.stringify(parsed.map((row) => (row && typeof row === "object" ? strip(row as Record<string, unknown>) : row)));
-    if (parsed && typeof parsed === "object") return JSON.stringify(strip(parsed as Record<string, unknown>));
-  } catch {
-    return body;
-  }
-  return body;
-}
-
-async function appUsersRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  try {
-    return await supabaseRequest<T>(path, init);
-  } catch (error) {
-    const bodyWithoutPasswordHash = removePasswordHashFromBody(init.body);
-    if (!isMissingColumnError(error) || bodyWithoutPasswordHash === init.body) throw error;
-    return supabaseRequest<T>(path, { ...init, body: bodyWithoutPasswordHash });
-  }
-}
-
-async function companiesRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  try {
-    return await supabaseRequest<T>(path, init);
-  } catch (error) {
-    const bodyWithoutWorkspaceFields = removeCompanyWorkspaceFieldsFromBody(init.body);
-    if (!isMissingColumnError(error) || bodyWithoutWorkspaceFields === init.body) throw error;
-    return supabaseRequest<T>(path, { ...init, body: bodyWithoutWorkspaceFields });
-  }
-}
-
-function isMissingTelegramChatIdColumnError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("telegram_chat_id");
-}
-
-function isMissingStaffAssignmentOverrideColumnError(error: unknown) {
-  if (!isMissingColumnError(error)) return false;
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("assigned_manager_name") || message.includes("assigned_vehicle");
-}
-
-function normalizeStaffStoreError(error: unknown): never {
-  if (isMissingStaffInvitationTableError(error)) throw new Error(STAFF_INVITATIONS_MIGRATION_MESSAGE);
-  if (isMissingStaffAssignmentOverrideColumnError(error)) throw new Error(STAFF_ASSIGNMENT_OVERRIDE_MIGRATION_MESSAGE);
-  if (isInvalidSupabaseApiKeyError(error)) throw new Error(SUPABASE_CONNECTION_KEY_MESSAGE);
-  throw error instanceof Error ? error : new Error(String(error));
-}
-
-function staffStoreRequest<T>(request: Promise<T>) {
-  return request.catch(normalizeStaffStoreError);
-}
-
-export async function supabaseStorageRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const config = getSupabaseConfig();
-  if (!config) throw new Error("Supabase is not configured.");
-
-  const response = await fetch(`${config.url}/storage/v1/${path}`, {
-    ...init,
-    headers: {
-      apikey: config.serviceRoleKey,
-      Authorization: `Bearer ${config.serviceRoleKey}`,
-      ...(init.headers || {})
-    },
-    cache: "no-store"
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Supabase storage request failed: ${response.status} ${message}`);
-  }
-
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
-}
-
-
-
-export async function getExcelMappingPreset(
-  uploadType: "customer-master" | "sales-analysis",
-  companyId?: string,
-  presetName = "default"
-): Promise<{ persisted: boolean; preset: ExcelMappingPreset | null }> {
-  const id = companyId || getDefaultCompanyId();
-  if (!isProductionStoreConfigured()) return { persisted: false, preset: null };
-
-  const rows = await supabaseRequest<
-    Array<{
-      id: string;
-      company_id: string;
-      erp_name: string | null;
-      mapping: ColumnMapping | null;
-      preset_name: string;
-      upload_type: "customer-master" | "sales-analysis";
-      updated_at: string;
-    }>
-  >(
-    `excel_mapping_presets?select=id,company_id,upload_type,preset_name,erp_name,mapping,updated_at&company_id=eq.${encodeURIComponent(
-      id
-    )}&upload_type=eq.${encodeURIComponent(uploadType)}&preset_name=eq.${encodeURIComponent(presetName)}&limit=1`
-  );
-
-  const row = rows[0];
-  if (!row) return { persisted: true, preset: null };
-
-  return {
-    persisted: true,
-    preset: {
-      id: row.id,
-      companyId: row.company_id,
-      erpName: row.erp_name || undefined,
-      mapping: row.mapping || {},
-      presetName: row.preset_name,
-      uploadType: row.upload_type,
-      updatedAt: row.updated_at
-    }
-  };
-}
-
-export async function upsertExcelMappingPreset(input: {
-  companyId?: string;
-  erpName?: string;
-  mapping: ColumnMapping;
-  presetName?: string;
-  uploadType: "customer-master" | "sales-analysis";
-}): Promise<{ persisted: boolean; preset: ExcelMappingPreset }> {
-  const companyId = input.companyId || getDefaultCompanyId();
-  const presetName = input.presetName || "default";
-  const preset: ExcelMappingPreset = {
-    companyId,
-    erpName: input.erpName,
-    mapping: input.mapping,
-    presetName,
-    uploadType: input.uploadType
-  };
-
-  if (!isProductionStoreConfigured()) return { persisted: false, preset };
-
-  await upsertCompany(companyId, "마주식자재");
-  const rows = await supabaseRequest<
-    Array<{
-      id: string;
-      company_id: string;
-      erp_name: string | null;
-      mapping: ColumnMapping | null;
-      preset_name: string;
-      upload_type: "customer-master" | "sales-analysis";
-      updated_at: string;
-    }>
-  >("excel_mapping_presets?on_conflict=company_id,upload_type,preset_name", {
-    method: "POST",
-    headers: {
-      Prefer: "resolution=merge-duplicates,return=representation"
-    },
-    body: JSON.stringify([
-      {
-        company_id: companyId,
-        erp_name: input.erpName || null,
-        mapping: input.mapping,
-        preset_name: presetName,
-        upload_type: input.uploadType,
-        updated_at: new Date().toISOString()
-      }
-    ])
-  });
-  const row = rows[0];
-
-  return {
-    persisted: true,
-    preset: {
-      id: row.id,
-      companyId: row.company_id,
-      erpName: row.erp_name || undefined,
-      mapping: row.mapping || {},
-      presetName: row.preset_name,
-      uploadType: row.upload_type,
-      updatedAt: row.updated_at
-    }
-  };
-}
-
-export async function deleteExcelMappingPreset(
-  uploadType: "customer-master" | "sales-analysis",
-  companyId?: string,
-  presetName = "default"
-): Promise<{ persisted: boolean }> {
-  const id = companyId || getDefaultCompanyId();
-  if (!isProductionStoreConfigured()) return { persisted: false };
-
-  await supabaseRequest(
-    `excel_mapping_presets?company_id=eq.${encodeURIComponent(id)}&upload_type=eq.${encodeURIComponent(uploadType)}&preset_name=eq.${encodeURIComponent(presetName)}`,
-    {
-      method: "DELETE",
-      headers: {
-        Prefer: "return=minimal"
-      }
-    }
-  );
-
-  return { persisted: true };
-}
 
 export function getFallbackAuthCredentials(): AuthCredentials {
   return {
@@ -6101,155 +5633,6 @@ export async function summarizeCustomerReviewText(
 // 코드였습니다("전반적인 흐름을 위해 필요없는건 걷어내" 조치). 특정 거래처를 수동으로 새로고침하는
 // syncGoogleReviewsForCustomer()/syncCustomerGoogleReviews()는 "리뷰 새로고침" 버튼에서 계속 사용되므로 그대로 둡니다.
 
-export type BusinessNumberException = {
-  id: string;
-  businessRegistrationNumber: string;
-  memo: string;
-  createdAt: string;
-};
-
-function isMissingBusinessNumberExceptionsTableError(error: unknown) {
-  return error instanceof Error && error.message.includes("business_number_exceptions");
-}
-
-/**
- * 하나의 사업자등록번호(종사업자번호 등)로 여러 거래처를 운영하는 회사를 위한 예외 목록입니다.
- * 이 목록에 등록된 사업자번호는 데이터 등록/업로드 시 normalized_key를 사업자번호 대신
- * 상호명+주소 기준으로 계산해, 서로 다른 거래처가 같은 레코드로 병합되거나 중복으로
- * 잘못 경고되지 않도록 합니다. getExemptBusinessNumberSet()과 함께 사용하세요.
- */
-export async function getBusinessNumberExceptions(companyId: string): Promise<{ exceptions: BusinessNumberException[]; persisted: boolean }> {
-  if (!companyId) throw new Error("고객사 ID가 필요합니다.");
-  if (!isProductionStoreConfigured()) return { exceptions: [], persisted: false };
-
-  try {
-    const rows = await supabaseRequest<Array<{ id: string; business_registration_number: string; memo: string | null; created_at: string }>>(
-      `business_number_exceptions?select=id,business_registration_number,memo,created_at&company_id=eq.${encodeURIComponent(
-        companyId
-      )}&order=created_at.desc`
-    );
-    return {
-      persisted: true,
-      exceptions: rows.map((row) => ({
-        id: row.id,
-        businessRegistrationNumber: row.business_registration_number,
-        memo: row.memo || "",
-        createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
-      }))
-    };
-  } catch (error) {
-    if (isMissingBusinessNumberExceptionsTableError(error)) return { exceptions: [], persisted: false };
-    throw error;
-  }
-}
-
-/** normalized_key 계산에서 businessNumber || ... 폴백을 우회해야 할 사업자번호 집합만 가볍게 가져옵니다. */
-export async function getExemptBusinessNumberSet(companyId?: string): Promise<Set<string>> {
-  const id = companyId || getDefaultCompanyId();
-  if (!isProductionStoreConfigured()) return new Set();
-
-  try {
-    const rows = await supabaseRequest<Array<{ business_registration_number: string }>>(
-      `business_number_exceptions?select=business_registration_number&company_id=eq.${encodeURIComponent(id)}`
-    );
-    return new Set(rows.map((row) => normalizeBusinessNumber(row.business_registration_number)));
-  } catch (error) {
-    if (isMissingBusinessNumberExceptionsTableError(error)) return new Set();
-    throw error;
-  }
-}
-
-export async function addBusinessNumberException(
-  companyId: string,
-  businessRegistrationNumber: string,
-  memo: string,
-  auditContext: AuditActorContext = {}
-): Promise<{ exception: BusinessNumberException; persisted: boolean }> {
-  if (!companyId) throw new Error("고객사 ID가 필요합니다.");
-  const businessNumber = normalizeBusinessNumber(businessRegistrationNumber || "");
-  if (!businessNumber) throw new Error("사업자등록번호를 입력하세요.");
-
-  if (!isProductionStoreConfigured()) {
-    return {
-      persisted: false,
-      exception: {
-        id: globalThis.crypto.randomUUID(),
-        businessRegistrationNumber: businessNumber,
-        memo: memo.trim(),
-        createdAt: "서버 저장 미확인"
-      }
-    };
-  }
-
-  try {
-    const rows = await supabaseRequest<Array<{ id: string; business_registration_number: string; memo: string | null; created_at: string }>>(
-      "business_number_exceptions?on_conflict=company_id,business_registration_number",
-      {
-        method: "POST",
-        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-        body: JSON.stringify([
-          {
-            company_id: companyId,
-            business_registration_number: businessNumber,
-            memo: memo.trim() || null,
-            created_by: auditContext.actorName || "시스템"
-          }
-        ])
-      }
-    );
-    const row = rows[0];
-    const exception: BusinessNumberException = {
-      id: row.id,
-      businessRegistrationNumber: row.business_registration_number,
-      memo: row.memo || "",
-      createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
-    };
-
-    await writeAdminAuditLog({
-      companyId,
-      action: "business_number_exception_created",
-      targetType: "business_number_exception",
-      targetId: exception.id,
-      metadata: {
-        actorName: auditContext.actorName || "시스템",
-        actorRole: auditContext.actorRole || "unknown",
-        businessRegistrationNumber: exception.businessRegistrationNumber
-      }
-    }).catch(() => null);
-
-    return { persisted: true, exception };
-  } catch (error) {
-    if (isMissingBusinessNumberExceptionsTableError(error)) {
-      throw new Error(
-        "중복 허용 사업자번호를 저장할 수 없습니다. Supabase에 business_number_exceptions 테이블이 아직 없습니다. supabase/migrations/20260814_business_number_exceptions.sql을 먼저 실행하세요."
-      );
-    }
-    throw error;
-  }
-}
-
-export async function removeBusinessNumberException(companyId: string, exceptionId: string, auditContext: AuditActorContext = {}): Promise<void> {
-  if (!companyId) throw new Error("고객사 ID가 필요합니다.");
-  if (!exceptionId) throw new Error("삭제할 항목 ID가 필요합니다.");
-  if (!isProductionStoreConfigured()) return;
-
-  await supabaseRequest(`business_number_exceptions?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(exceptionId)}`, {
-    method: "DELETE",
-    headers: { Prefer: "return=minimal" }
-  });
-
-  await writeAdminAuditLog({
-    companyId,
-    action: "business_number_exception_removed",
-    targetType: "business_number_exception",
-    targetId: exceptionId,
-    metadata: {
-      actorName: auditContext.actorName || "시스템",
-      actorRole: auditContext.actorRole || "unknown"
-    }
-  }).catch(() => null);
-}
-
 // 이 상수/타입의 실제 정의는 lib/staff-job-titles.ts에 있습니다(클라이언트 컴포넌트도 값을
 // import해야 하는데, 이 파일 lib/store.ts는 서버 전용 코드라 여기서 직접 값을 export하면 그걸
 // import하는 클라이언트 컴포넌트의 번들에 서버 코드 전체가 딸려 들어가 런타임 에러가 납니다).
@@ -8606,7 +7989,7 @@ type PermitLeadActionRow = {
   created_at: string;
 };
 
-type PermitLeadRow = {
+export type PermitLeadRow = {
   id: string;
   business_name: string;
   business_number: string | null;
@@ -8660,165 +8043,6 @@ type PermitLeadRow = {
   store_area_sqm?: number | null;
 };
 
-function isPermitStatusActive(statusText?: string) {
-  if (!statusText) return true;
-  const inactiveKeywords = ["폐업", "말소", "취소", "영업정지", "직권말소", "휴업"];
-  return !inactiveKeywords.some((keyword) => statusText.includes(keyword));
-}
-
-/**
- * v1 점수 산식입니다. 설계 문서의 6개 축 중 5개를 계산합니다: 인허가(개업일 우선) 신선도,
- * 업종 적합도, 연락처/주소 기반 영업 접근성은 실데이터로 바로 계산하고, 키워드 검색량·리뷰
- * 활성도는 외부 보강(네이버 데이터랩 검색량, 구글 리뷰) 값이 들어온 뒤부터 채워집니다
- * (2026-08-24, "영업리드는 영업이 잘되는지·리뷰가 좋은지가 중요하다" 피드백 반영).
- * 나머지 1개(동선 적합도)는 아직 계산 기반이 없어 0점으로 둡니다.
- * 보강 전 리드는 A등급(85점 이상)에 도달하기 어렵지만, 화면은 등급보다 "다음 액션"을
- * 우선 노출하므로(computePermitLeadNextAction 참고) 보강 전이라도 오늘 전화할 곳은 놓치지 않습니다.
- */
-function computePermitLeadScoreBreakdown(input: {
-  leadPeriod: PermitLeadPeriod;
-  isTarget: boolean;
-  industryKnown: boolean;
-  hasPhone: boolean;
-  hasAddress: boolean;
-  keywordVolume?: number;
-  reviewCount?: number;
-  rating?: number;
-}) {
-  const freshness = input.leadPeriod === "today" ? 30 : input.leadPeriod === "week" ? 22 : input.leadPeriod === "month" ? 14 : 6;
-  const industryFit = !input.isTarget ? 0 : input.industryKnown ? 20 : 10;
-  const outreachFit = (input.hasPhone ? 6 : 0) + (input.hasAddress ? 2 : 0);
-
-  // 검색량 지수(앵커 "커피"=100 기준 상대값)를 0~15점으로 환산합니다. 대부분의 개별 매장명은
-  // 지수가 한 자릿수~수십 대라 15점 만점을 받는 경우는 드물고, 온라인에서 화제가 되는 매장만
-  // 높은 점수를 받습니다.
-  const keywordDemand =
-    typeof input.keywordVolume === "number" && input.keywordVolume > 0 ? Math.min(15, Math.round(input.keywordVolume / 5)) : 0;
-
-  // 리뷰 활성도는 평점(최대 8점)과 리뷰 수(최대 7점, 로그 스케일 — 리뷰 10개와 100개의 차이가
-  // 100개와 1000개의 차이보다 체감상 크다고 보고 완만하게 늘어나도록 함)를 합산합니다.
-  const ratingPoints = typeof input.rating === "number" && input.rating > 0 ? Math.round((Math.min(input.rating, 5) / 5) * 8) : 0;
-  const reviewCountPoints =
-    typeof input.reviewCount === "number" && input.reviewCount > 0 ? Math.min(7, Math.round(Math.log10(input.reviewCount + 1) * 3)) : 0;
-  const placeActivity = ratingPoints + reviewCountPoints;
-
-  return {
-    license_freshness_score: freshness,
-    industry_fit_score: industryFit,
-    keyword_demand_score: keywordDemand,
-    place_activity_score: placeActivity,
-    route_fit_score: 0,
-    outreach_fit_score: outreachFit
-  };
-}
-
-function permitLeadGradeFromScore(scoreTotal: number): "A" | "B" | "C" | null {
-  if (scoreTotal >= 85) return "A";
-  if (scoreTotal >= 70) return "B";
-  if (scoreTotal >= 55) return "C";
-  return null;
-}
-
-/** 화면에 점수 대신 먼저 보여줄 "다음 액션"과 근거 3줄 이내를 계산합니다. */
-function computePermitLeadNextAction(input: {
-  isActive: boolean;
-  isDuplicate: boolean;
-  isTarget: boolean;
-  industryKnown: boolean;
-  isNewLead: boolean;
-  leadPeriod: PermitLeadPeriod;
-  hasPhone: boolean;
-  phone?: string;
-  hasAddress: boolean;
-  industryPrimary: string;
-}): { action: string; reasons: string[] } {
-  if (!input.isActive) return { action: "제외 검토", reasons: ["사업장 상태가 폐업·휴업·영업정지 등 비활성"] };
-  if (input.isDuplicate) return { action: "제외 검토", reasons: ["이미 등록된 거래처와 사업자번호 일치"] };
-  if (!input.isTarget) return { action: "제외 검토", reasons: ["식자재 유통 영업 대상 업종이 아님"] };
-
-  if (!input.hasAddress || !input.industryKnown) {
-    const reasons: string[] = [];
-    if (!input.hasAddress) reasons.push("주소 정보 부족");
-    if (!input.industryKnown) reasons.push("업종 분류 확인 필요");
-    if (!input.hasPhone) reasons.push("전화번호 없음");
-    return { action: "정보 보강", reasons };
-  }
-
-  // 2026-09-07 피드백 대응: 개업일이 확인 안 되는 리드(영업리드)를 "최근 90일 신규 인허가"라고
-  // 잘못 표시하던 문제를 고칩니다 — leadPeriod가 today/week/month가 아니면 예전엔 무조건 "최근
-  // 90일 신규 인허가"라고 썼는데, 실제로는 "날짜를 아예 모르는 경우"와 "확인은 됐지만 90일보다
-  // 오래된 경우"가 둘 다 여기 섞여 있었습니다(카카오 키워드 탐색 영업리드도 마찬가지로 날짜가
-  // 없어 매번 이 문구가 잘못 붙었습니다). isNewLead가 false면 "개업일 확인 안 됨" 대신 검색량
-  // 기반 영업리드라는 근거를 명확히 씁니다.
-  const periodLabel = !input.isNewLead
-    ? "영업리드(검색량 기반 타겟팅)"
-    : input.leadPeriod === "today"
-      ? "오늘 신규 인허가"
-      : input.leadPeriod === "week"
-        ? "이번 주 신규 인허가"
-        : input.leadPeriod === "month"
-          ? "이번 달 신규 인허가"
-          : "최근 90일 신규 인허가";
-
-  const recommendation = recommendLeadNextAction({ phone: input.phone });
-  return {
-    action: recommendation.label,
-    reasons: [periodLabel, `${input.industryPrimary} 업종`, isMobilePhoneNumber(input.phone) ? "010 휴대폰 확인됨" : "유선 콜드콜 제외"]
-  };
-}
-
-function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
-  return {
-    id: row.id,
-    businessName: row.business_name,
-    businessNumber: row.business_number || undefined,
-    representativeName: row.representative_name || undefined,
-    permitStatus: row.permit_status || undefined,
-    isActive: row.is_active,
-    permitDate: row.permit_date || undefined,
-    targetType: row.target_type === "distributor" ? "distributor" : "restaurant",
-    openDate: row.open_date || undefined,
-    address: row.address || undefined,
-    phone: row.phone || undefined,
-    ownerMobilePhone: row.owner_mobile_phone || undefined,
-    storePhone: row.store_phone || undefined,
-    jurisdiction: row.jurisdiction || undefined,
-    latitude: row.latitude ?? undefined,
-    longitude: row.longitude ?? undefined,
-    leadPeriod: row.lead_period,
-    industryPrimary: row.industry_primary || "미분류",
-    industryTags: row.industry_tags || [],
-    isTargetIndustry: row.is_target_industry,
-    isTemporaryOperation: row.status === "임시 영업" || row.exclude_reason === "임시 영업",
-    isTemporaryOperationSuspected: row.status === "임시 영업 의심",
-    isDuplicate: row.is_duplicate,
-    matchedCustomerId: row.matched_customer_id || undefined,
-    status: row.status,
-    nextAction: row.next_action || undefined,
-    nextActionReasons: row.next_action_reasons || [],
-    lastContactAt: row.last_contact_at || undefined,
-    lastContactChannel: row.last_contact_channel || undefined,
-    lastContactSummary: row.last_contact_summary || undefined,
-    excludeReason: row.exclude_reason || undefined,
-    scoreTotal: row.score_total,
-    scoreBreakdown: row.score_breakdown || {},
-    grade: (row.grade as "A" | "B" | "C" | null) || null,
-    naverPlaceUrl: row.naver_place_url || undefined,
-    kakaoPlaceUrl: row.kakao_place_url || undefined,
-    googlePlaceUrl: row.google_place_url || undefined,
-    instagramUrl: row.instagram_url || undefined,
-    fax: row.fax || undefined,
-    email: row.email || undefined,
-    naverTalktalkUrl: row.naver_talktalk_url || undefined,
-    reviewCount: row.review_count ?? undefined,
-    rating: row.rating ?? undefined,
-    keywordVolume: row.keyword_volume ?? undefined,
-    source: row.source || undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    storeAreaSqm: row.store_area_sqm ?? undefined
-  };
-}
 
 type LeadEnrichmentMetadataRow = {
   attempted_at: string;
@@ -13865,154 +13089,6 @@ export async function sendDailyChurnRiskDigests(): Promise<ChurnRiskDigestResult
   );
 }
 
-export async function matchSalesTransactionsToCustomer(
-  companyId: string,
-  customerKey: string,
-  targetCustomerId: string
-): Promise<{ matchedTransactionCount: number; customerName: string }> {
-  if (!isProductionStoreConfigured()) throw new Error("Supabase is not configured.");
-  if (!customerKey.trim()) throw new Error("연결할 거래처 key가 없습니다.");
-
-  const targetRows = await supabaseRequest<Array<{ id: string; customer_name: string; normalized_key: string }>>(
-    `normalized_customers?select=id,customer_name,normalized_key&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(
-      targetCustomerId
-    )}&limit=1`
-  );
-  const targetCustomer = targetRows[0];
-  if (!targetCustomer) throw new Error("연결할 거래처를 찾을 수 없습니다.");
-  if (!targetCustomer.normalized_key) throw new Error("대상 거래처에 기준 key가 없어 연결할 수 없습니다.");
-
-  const updatedRows = await supabaseRequest<Array<{ id: string }>>(
-    `sales_transactions?company_id=eq.${encodeURIComponent(companyId)}&customer_key=eq.${encodeURIComponent(customerKey)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ customer_key: targetCustomer.normalized_key })
-    }
-  );
-
-  return { matchedTransactionCount: updatedRows.length, customerName: targetCustomer.customer_name };
-}
-
-function summarizeSalesTransactions(items: SalesTransactionItem[], truncated = false): SalesTransactionSummary {
-  const totalAmount = items.reduce((total, item) => total + item.salesAmount, 0);
-  const matchedAmount = items.filter((item) => item.matched).reduce((total, item) => total + item.salesAmount, 0);
-  const unmatchedAmount = totalAmount - matchedAmount;
-  const matchedCustomerIds = new Set(items.filter((item) => item.matched && item.customerId).map((item) => item.customerId as string));
-  const unmatchedCustomerNames = new Set(items.filter((item) => !item.matched).map((item) => item.customerName || "미지정 거래처"));
-  const distinctCustomerKeys = new Set(items.map((item) => item.customerId || `name:${item.customerName || "미지정 거래처"}`));
-
-  const customerGroups = new Map<
-    string,
-    { customerId?: string; customerName: string; matched: boolean; latestSalesDate?: string; totalAmount: number; transactionCount: number }
-  >();
-
-  for (const item of items) {
-    const groupKey = item.customerId || `name:${item.customerName || "미지정 거래처"}`;
-    const current = customerGroups.get(groupKey) || {
-      customerId: item.customerId,
-      customerName: item.customerName || "미지정 거래처",
-      matched: item.matched,
-      totalAmount: 0,
-      transactionCount: 0
-    };
-    current.totalAmount += item.salesAmount;
-    current.transactionCount += 1;
-    if (!current.latestSalesDate || compareDateText(item.salesDate, current.latestSalesDate) > 0) {
-      current.latestSalesDate = item.salesDate;
-    }
-    customerGroups.set(groupKey, current);
-  }
-
-  const topCustomers = Array.from(customerGroups.values())
-    .sort((a, b) => b.totalAmount - a.totalAmount)
-    .slice(0, 8)
-    .map((group) => ({
-      customerId: group.customerId,
-      customerName: group.customerName,
-      matched: group.matched,
-      grade: getSalesAmountGrade(group.totalAmount),
-      latestSalesDate: group.latestSalesDate,
-      share: totalAmount ? Math.round((group.totalAmount / totalAmount) * 100) : 0,
-      totalAmount: group.totalAmount,
-      transactionCount: group.transactionCount
-    }));
-  const topProducts = summarizeSalesGroup(items, (item) => item.productName || "미지정 품목").slice(0, 8).map((item) => ({
-    productName: item.key,
-    share: totalAmount ? Math.round((item.totalAmount / totalAmount) * 100) : 0,
-    totalAmount: item.totalAmount,
-    transactionCount: item.transactionCount
-  }));
-
-  const unmatchedGroupMap = new Map<
-    string,
-    { customerKey: string; customerName: string; latestSalesDate?: string; totalAmount: number; transactionCount: number }
-  >();
-  for (const item of items) {
-    if (item.matched || !item.customerKey) continue;
-    const current = unmatchedGroupMap.get(item.customerKey) || {
-      customerKey: item.customerKey,
-      customerName: item.customerName || "미지정 거래처",
-      totalAmount: 0,
-      transactionCount: 0
-    };
-    current.totalAmount += item.salesAmount;
-    current.transactionCount += 1;
-    if (!current.latestSalesDate || compareDateText(item.salesDate, current.latestSalesDate) > 0) {
-      current.latestSalesDate = item.salesDate;
-    }
-    unmatchedGroupMap.set(item.customerKey, current);
-  }
-  const unmatchedGroups = Array.from(unmatchedGroupMap.values()).sort((a, b) => b.totalAmount - a.totalAmount);
-
-  return {
-    averageOrderAmount: items.length ? Math.round(totalAmount / items.length) : 0,
-    topCustomers,
-    topProducts,
-    unmatchedGroups,
-    totalAmount,
-    transactionCount: items.length,
-    customerCount: distinctCustomerKeys.size,
-    matchedCustomerCount: matchedCustomerIds.size,
-    unmatchedCustomerCount: unmatchedCustomerNames.size,
-    matchedAmount,
-    unmatchedAmount,
-    matchRate: totalAmount ? Math.round((matchedAmount / totalAmount) * 100) : 0,
-    latestSalesDate: items.find((item) => item.salesDate)?.salesDate,
-    items,
-    truncated
-  };
-}
-
-function summarizeSalesGroup(items: SalesTransactionItem[], getKey: (item: SalesTransactionItem) => string) {
-  const groups = new Map<string, { key: string; latestSalesDate?: string; totalAmount: number; transactionCount: number }>();
-
-  for (const item of items) {
-    const key = getKey(item).trim() || "미지정";
-    const current = groups.get(key) || { key, totalAmount: 0, transactionCount: 0 };
-    current.totalAmount += item.salesAmount;
-    current.transactionCount += 1;
-    if (!current.latestSalesDate || compareDateText(item.salesDate, current.latestSalesDate) > 0) {
-      current.latestSalesDate = item.salesDate;
-    }
-    groups.set(key, current);
-  }
-
-  return Array.from(groups.values()).sort((a, b) => b.totalAmount - a.totalAmount);
-}
-
-function compareDateText(left?: string, right?: string) {
-  if (!left && !right) return 0;
-  if (!left) return -1;
-  if (!right) return 1;
-  return left.localeCompare(right);
-}
-
-function getSalesAmountGrade(amount: number): "A" | "B" | "C" {
-  if (amount >= 2500000) return "A";
-  if (amount >= 1800000) return "B";
-  return "C";
-}
-
 export async function getSalesAssistantDrafts(companyId?: string): Promise<SalesAssistantDraft[]> {
   const timeline = await getVisitTimeline(companyId);
   const targetItems = timeline.filter((item) => item.result === "quote-requested" || item.result === "interested" || item.result === "visited").slice(0, 8);
@@ -14775,7 +13851,7 @@ export async function getAdminAuditLogs(companyId?: string, limit = 12): Promise
   });
 }
 
-async function writeAdminAuditLog({
+export async function writeAdminAuditLog({
   action,
   companyId,
   metadata,
@@ -14955,25 +14031,6 @@ function countDuplicates(rows: CustomerRow[]) {
   });
 
   return duplicates;
-}
-
-async function upsertCompany(companyId: string, name: string) {
-  await supabaseRequest<Array<{ id: string }>>("companies?on_conflict=id", {
-    method: "POST",
-    headers: {
-      // 호출부의 기본 이름은 새 회사 생성용 폴백일 뿐입니다. 기존 회사와 충돌할 때
-      // merge하면 고객이 설정한 회사명이 "마주식자재"로 되돌아가므로 기존 행은 보존합니다.
-      Prefer: "resolution=ignore-duplicates,return=representation"
-    },
-    body: JSON.stringify([
-      {
-        id: companyId,
-        name,
-        status: "active",
-        updated_at: new Date().toISOString()
-      }
-    ])
-  });
 }
 
 async function getNormalizedCustomersForAnalysis(companyId: string): Promise<CustomerRow[]> {

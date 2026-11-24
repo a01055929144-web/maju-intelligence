@@ -29,7 +29,9 @@ describe("lead DM settings (CC-31b)", () => {
     const panel = readFileSync("components/lead-contact-channels-panel.tsx", "utf8");
     expect(panel).toContain("isDistributorLead ? { excluded: dmSettings?.excluded");
     expect(panel).toContain("{isDistributorLead ? null : <input");
-    expect(store).toContain('row.target_type === "distributor" ? "distributor" : "restaurant"');
+    // toPermitLeadItem은 lib/store/08-permit-lead-scoring.ts로 옮겨져 그 파일을 읽는다(검사 문구는 그대로).
+    const permitScoring = readFileSync("lib/store/08-permit-lead-scoring.ts", "utf8");
+    expect(permitScoring).toContain('row.target_type === "distributor" ? "distributor" : "restaurant"');
   });
 });
 

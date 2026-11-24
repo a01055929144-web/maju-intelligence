@@ -72,6 +72,7 @@ export type StoreSession = {
 type StoreOwnerActivationProof = {
   token: string;
   storePhone?: string;
+  representativeName?: string;
   returnTo?: string;
   termsAcceptedAt?: string;
   authUserId?: string;
@@ -186,23 +187,26 @@ export async function setStoreOwnerActivationProof(token: string, returnTo?: str
   return true;
 }
 
-export async function setPublicStoreOwnerKakaoProof(token: string, returnTo: string) {
+export async function setPublicStoreOwnerKakaoProof(token: string, returnTo: string, termsAcceptedAt: string) {
   if (!storeMemberSessionEnabled() || !/^[A-Za-z0-9_-]{43}$/.test(token) ||
     !returnTo.startsWith("/pricing-document#") || returnTo.startsWith("//") || returnTo.length > 1500) return false;
   const now = Math.floor(Date.now() / 1000), cookieStore = await cookies();
-  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ token, returnTo, stage: "kakao", expiresAt: now + 900 }), {
+  if (Number.isNaN(Date.parse(termsAcceptedAt))) return false;
+  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ token, returnTo, termsAcceptedAt, stage: "kakao", expiresAt: now + 900 }), {
     httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
   });
   return true;
 }
 
-export async function setPublicStoreOwnerProfileProof(input: { authUserId: string; returnTo: string; token: string; storePhone?: string }) {
+export async function setPublicStoreOwnerProfileProof(input: { authUserId: string; returnTo: string; token: string; storePhone?: string; representativeName?: string; termsAcceptedAt?: string }) {
   if (!storeMemberSessionEnabled() || !UUID_PATTERN.test(input.authUserId) || !/^[A-Za-z0-9_-]{43}$/.test(input.token) ||
     !input.returnTo.startsWith("/pricing-document#") || input.returnTo.startsWith("//") || input.returnTo.length > 1500) return false;
   const now = Math.floor(Date.now() / 1000), cookieStore = await cookies();
   const phone = input.storePhone?.replace(/^\+82\s?/, "0").replace(/\D/g, "") || "";
+  const representativeName = input.representativeName?.trim().slice(0, 50) || "";
   cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ authUserId: input.authUserId, returnTo: input.returnTo,
-    token: input.token, ...(/^\d{9,11}$/.test(phone) ? { storePhone: phone } : {}), stage: "profile", expiresAt: now + 900 }), {
+    token: input.token, ...(/^\d{9,11}$/.test(phone) ? { storePhone: phone } : {}), ...(representativeName ? { representativeName } : {}),
+    ...(input.termsAcceptedAt && !Number.isNaN(Date.parse(input.termsAcceptedAt)) ? { termsAcceptedAt: input.termsAcceptedAt } : {}), stage: "profile", expiresAt: now + 900 }), {
     httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
   });
   return true;

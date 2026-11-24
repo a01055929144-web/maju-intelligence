@@ -34,7 +34,7 @@ afterEach(() => vi.unstubAllEnvs());
 
 it("uses synthetic store defaults without exposing a server test number or current Kakao contact", () => {
   const html = renderToStaticMarkup(createElement(StoreOwnerActivationPanel, {
-    enabled: true, profileStep: true, testMode: true, initialStorePhone: "synthetic-private-canary",
+    enabled: true, profileStep: true, testMode: true, initialProfile: { phone: "synthetic-private-canary" },
   }));
   expect(html).toContain("시험 전용 매장"); expect(html).toContain("시험 배송지");
   expect(html).toContain("서버에 지정된 시험번호");
