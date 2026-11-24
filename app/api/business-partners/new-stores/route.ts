@@ -3,6 +3,7 @@ import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } f
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { listPendingStoreCustomerReviews } from "@/lib/business-partner-new-stores";
 import { StoreReviewError, confirmNewCustomer, linkExistingCustomer, reviewCandidates } from "@/lib/pricing/store-customer-review";
+import { signupIncompleteReviewEnabled } from "@/lib/store/signup-incomplete-review-feature";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const noStore = { "Cache-Control": "no-store" };
@@ -20,7 +21,8 @@ async function authorize(request: NextRequest, companyId?: string) {
 export async function GET(request: NextRequest) {
   const auth = await authorize(request, request.nextUrl.searchParams.get("companyId") || undefined);
   if ("error" in auth) return auth.error;
-  return json({ items: await listPendingStoreCustomerReviews(auth.scope.companyId) });
+  return json({ items: await listPendingStoreCustomerReviews(auth.scope.companyId),
+    ...(signupIncompleteReviewEnabled(auth.scope.companyId) ? { signupIncompleteAvailable: true, incompleteSignups: [] } : {}) });
 }
 
 export async function POST(request: NextRequest) {

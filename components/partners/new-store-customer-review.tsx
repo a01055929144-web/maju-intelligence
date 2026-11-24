@@ -6,6 +6,8 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { PendingStoreCustomerReview } from "@/lib/business-partner-new-stores";
 import type { ReviewCandidate } from "@/lib/pricing/store-customer-review";
 
+type IncompleteSignup = { id: string; name: string; phone: string | null; startedAt: string; sourceLabel: string };
+
 function businessNumber(value: string | null) {
   const digits = value?.replace(/\D/g, "") || "";
   return digits.length === 10 ? digits.replace(/(\d{3})(\d{2})(\d{5})/, "$1-$2-$3") : value;
@@ -18,6 +20,9 @@ export function NewStoreCustomerReview({ companyId = "" }: { companyId?: string 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"registered" | "incomplete">("registered");
+  const [incompleteAvailable, setIncompleteAvailable] = useState(false);
+  const [incompleteSignups, setIncompleteSignups] = useState<IncompleteSignup[]>([]);
 
   const api = useCallback(async (body?: Record<string, unknown>) => {
     const response = await fetchWithTimeout(
@@ -36,7 +41,10 @@ export function NewStoreCustomerReview({ companyId = "" }: { companyId?: string 
     setLoading(true);
     setError("");
     try {
-      setItems((await api()).items || []);
+      const result = await api();
+      setItems(result.items || []);
+      setIncompleteAvailable(result.signupIncompleteAvailable === true);
+      setIncompleteSignups(result.incompleteSignups || []);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "새 매장을 불러오지 못했습니다.");
     } finally {
@@ -77,13 +85,23 @@ export function NewStoreCustomerReview({ companyId = "" }: { companyId?: string 
       <button className="maju-button-secondary min-h-11" onClick={() => void load()} type="button">새로고침</button>
     </div>
     <p className="text-xs text-slate-500">출입 비밀번호는 이 확인 목록에 포함되지 않습니다.</p>
+    {incompleteAvailable ? <div className="flex gap-2" role="tablist" aria-label="새 매장 확인 단계">
+      <button aria-selected={tab === "registered"} className="min-h-11 rounded-full border px-4 text-sm font-bold" onClick={() => setTab("registered")} role="tab" type="button">매장 등록 완료 {items.length}</button>
+      <button aria-selected={tab === "incomplete"} className="min-h-11 rounded-full border px-4 text-sm font-bold" onClick={() => setTab("incomplete")} role="tab" type="button">가입 미완료 {incompleteSignups.length}</button>
+    </div> : null}
     {message ? <p role="status">{message}</p> : null}
     {loading ? <LoadingState bare label="새 매장을 불러오는 중입니다..." /> : null}
     {!loading && error ? <ErrorState bare message={error} onRetry={() => void load()} /> : null}
-    {!loading && !error && !items.length ? <EmptyState bare message="확인할 새 매장이 없습니다." /> : null}
-    {!loading && !error && items.length ? <ul className="space-y-2">{items.map((item) => <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3" key={item.storeAccountId}>
+    {!loading && !error && tab === "registered" && !items.length ? <EmptyState bare message="확인할 새 매장이 없습니다." /> : null}
+    {!loading && !error && tab === "registered" && items.length ? <ul className="space-y-2">{items.map((item) => <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3" key={item.storeAccountId}>
       <span><b>{item.name}</b><br/><span className="text-sm text-slate-600">{item.address || "주소 없음"}</span>{item.businessNumber ? <><br/><span className="text-xs text-slate-500">사업자번호 {businessNumber(item.businessNumber)}</span></> : null}</span>
       <button className="maju-button-secondary min-h-11" onClick={() => void review(item)} type="button">매출처 확인</button>
+    </li>)}</ul> : null}
+    {!loading && !error && tab === "incomplete" && !incompleteSignups.length ? <EmptyState bare message="가입을 시작하고 매장 등록을 기다리는 점주가 없습니다." /> : null}
+    {!loading && !error && tab === "incomplete" && incompleteSignups.length ? <ul className="space-y-2">{incompleteSignups.map(item => <li className="rounded-xl border p-3" key={item.id}>
+      <div className="flex flex-wrap items-start justify-between gap-3"><span><b>{item.name || "이름 확인 전"}</b><br/><span className="text-sm text-slate-600">{new Date(item.startedAt).toLocaleString("ko-KR")} · {item.sourceLabel}</span></span>
+        {item.phone ? <a className="inline-flex min-h-11 items-center rounded border px-3 font-bold" href={`tel:${item.phone.replace(/[^0-9+]/g, "")}`}>전화</a> : <span className="text-sm text-slate-500">동의 연락처 없음</span>}</div>
+      <ol className="mt-3 grid gap-1 text-xs text-slate-600 sm:grid-cols-5"><li className="font-bold text-teal-700">열람 완료</li><li className="font-bold text-teal-700">가입 시작</li><li>매장 등록 대기</li><li>외식업 확인 대기</li><li>첫 주문 대기</li></ol>
     </li>)}</ul> : null}
     {selected ? <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
       <h3 className="font-black">{selected.name} 후보</h3>
