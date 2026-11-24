@@ -14,6 +14,7 @@ import { industryBasketsEnabled } from "./industry-basket-feature";
 import { documentSharePreview } from "../../domains/pricing/industry-basket";
 import { documentShareBrandingEnabled } from "./document-share-branding-feature";
 import { documentExtensionServerEnabled } from "./document-extension-server";
+import { isFeatureEnabled } from "../feature-flags";
 
 type ShareRow = {
   id: string; company_id: string; document_id: string; document_version_id: string; lead_id: string | null;
@@ -71,6 +72,27 @@ export async function limitDocumentShare(company: string, identity: string, acti
   if (result === "rate_limited") throw new DocumentSendError("요청이 많습니다. 잠시 후 다시 시도해 주세요.", 429);
   if (result !== "allowed") throw new DocumentSendError("요청을 확인하지 못했습니다. 다시 시도해 주세요.", 503);
 }
+/** 회수되지 않은 공개 링크(만료일은 보지 않는다 — 만료는 최신 게시본을 따라 연장되고, 새 링크는 회수한 뒤에만 만든다). */
+async function activePublicLink(company: string, documentId: string) {
+  const rows = await supabaseRequest<ShareRow[]>(path("pricing_document_share_links", company,
+    `document_id=eq.${documentId}&lead_id=is.null&send_id=is.null&revoked_at=is.null&select=${shareFields}&order=created_at.asc&limit=1`));
+  return rows[0] ?? null;
+}
+async function reusedShare(row: ShareRow, version: DocumentVersion): Promise<PreparedDocumentShare> {
+  let expiresAt = row.expires_at;
+  const wanted = publicDocumentLinkExpiry(version.content.validUntil);
+  if (isFeatureEnabled("COMPANY_LINK_UNIFY", row.company_id)) {
+    // 새 게시본의 기간에 맞춰 같은 링크의 만료일만 늘린다(줄이지는 않는다).
+    if (Date.parse(wanted) > Date.parse(expiresAt)) {
+      await supabaseRequest(path("pricing_document_share_links", row.company_id, `id=eq.${row.id}&revoked_at=is.null`),
+        { method: "PATCH", body: JSON.stringify({ expires_at: wanted }) });
+      expiresAt = wanted;
+    }
+  } else if (Date.parse(expiresAt) <= Date.now())
+    throw new DocumentSendError("기간이 지난 공개 링크가 있습니다. 링크 관리에서 회수한 뒤 새로 만들어 주세요.", 409);
+  return { shareLinkId: row.id, sendId: null, documentId: row.document_id, documentVersionId: row.document_version_id,
+    publicUrl: publicUrl(row), expiresAt, deliveryRecorded: false };
+}
 export async function prepareDocumentShare(scope: DocumentScope, input: PrepareDocumentShare): Promise<PreparedDocumentShare> {
   enabled(scope);
   if (input.leadId === null && !publicDocumentOrderEntryEnabled(scope.companyId)) missing();
@@ -94,11 +116,18 @@ export async function prepareDocumentShare(scope: DocumentScope, input: PrepareD
   const previewId = preview ? randomUUID() : null;
   const expected = { company_id: scope.companyId, document_id: version.documentId, document_version_id: version.id,
     lead_id: input.leadId, idempotency_key: input.idempotencyKey, created_by_key: scope.actor, ttl_days: input.ttlDays };
-  if (!existing) await supabaseRequest("pricing_document_share_links?on_conflict=company_id,idempotency_key", {
+  // CX-140: 문서당 활성 공개 링크 1개. 이미 있으면 새로 만들지 않고 가장 오래된(이미 퍼진) 링크를 돌려준다.
+  if (!existing && input.leadId === null) { const active = await activePublicLink(scope.companyId, version.documentId); if (active) return reusedShare(active, version); }
+  if (!existing) try { await supabaseRequest("pricing_document_share_links?on_conflict=company_id,idempotency_key", {
     method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
     body: JSON.stringify({ ...expected, id, token_nonce: issued.nonce, token_hash: issued.hash,
       preview_id: previewId, preview_title: preview?.title || null, preview_description: preview?.description || null }),
-  });
+  }); } catch (error) {
+    // 동시에 만들면 DB 부분 unique 인덱스가 한쪽을 막는다 → 먼저 만들어진 링크를 돌려준다.
+    const active = input.leadId === null && error instanceof Error && /pricing_public_share_link_one_per_document_uq|duplicate key|23505/.test(error.message) ? await activePublicLink(scope.companyId, version.documentId) : null;
+    if (!active) throw error;
+    return reusedShare(active, version);
+  }
   const saved = existing || (await supabaseRequest<ShareRow[]>(keyPath))[0];
   if (!saved) throw new Error("Share preparation unconfirmed");
   if (Object.entries(expected).some(([key, value]) => saved[key as keyof ShareRow] !== value))
@@ -210,6 +239,19 @@ async function currentDocumentShareHead(row: ShareRow) {
   return id && isId(id) ? { ...row, document_version_id: id } : row;
 }
 
+/** CX-140 ②: 공개 링크는 버전이 바뀌어도 같은 주소로 그 문서의 최신 게시본을 연다(기존 행은 수정하지 않음). */
+async function latestDocumentShareHead(row: ShareRow) {
+  const rows = await supabaseRequest<Array<{ id: string }>>(path("pricing_document_versions", row.company_id,
+    `document_id=eq.${row.document_id}&published_at=not.is.null&select=id&order=version.desc&limit=1`));
+  return rows[0] && isId(rows[0].id) ? { ...row, document_version_id: rows[0].id } : row;
+}
+/** CX-140: 기간이 끝난 공개 링크는 404 대신 발행 회사와 연락처를 알려 준다. */
+async function throwExpiredPublic(company: string, companyName: string): Promise<never> {
+  const inquiry = await readPublicInquiry(company);
+  const contact = inquiry.status === "available" ? `(${inquiry.label ? `${inquiry.label} ` : ""}${inquiry.phone})` : "";
+  throw new DocumentSendError(`기간이 끝난 단가표입니다. ${companyName || "발행 회사"}에 새 단가표를 요청해 주세요${contact}.`, 404);
+}
+
 async function resolvePublicDocument(token: string, requester: string) {
   if (!documentSharingEnabled()) missing();
   const decoded = verifyDocumentShareToken(token);
@@ -218,7 +260,8 @@ async function resolvePublicDocument(token: string, requester: string) {
   let row = rows[0];
   if (!row || !documentSharingEnabled(row.company_id) || row.revoked_at || !equalShareHash(row.token_hash, decoded.hash) ||
     row.token_nonce !== decoded.nonce || !Number.isFinite(Date.parse(row.expires_at))) missing();
-  if (Date.parse(row.expires_at) <= Date.now()) {
+  const unify = row.lead_id === null && isFeatureEnabled("COMPANY_LINK_UNIFY", row.company_id);
+  if (!unify && Date.parse(row.expires_at) <= Date.now()) {
     if (row.lead_id === null && publicDocumentOrderEntryEnabled(row.company_id))
       throw new DocumentSendError("링크 열람기간이 끝났습니다. 발행 회사에 새 링크를 요청해 주세요.", 404);
     missing();
@@ -228,9 +271,10 @@ async function resolvePublicDocument(token: string, requester: string) {
   if (row.lead_id === null) {
     if (!publicDocumentOrderEntryEnabled(row.company_id) || row.send_id) missing();
   } else await assertLead(row.company_id, row.lead_id);
-  row = await currentDocumentShareHead(row);
+  row = unify ? await latestDocumentShareHead(row) : await currentDocumentShareHead(row);
   const version = await published(row.company_id, row.document_version_id, row.created_by_key);
   if (version.documentId !== row.document_id) missing();
+  if (unify && Date.parse(publicDocumentLinkExpiry(version.content.validUntil)) <= Date.now()) await throwExpiredPublic(row.company_id, version.content.companyName);
   const ids = Array.from(new Set(version.content.lines.flatMap(l => l.promotionId ? [l.promotionId] : [])));
   const promotions: Array<{ id: string; stock: number | null; startsOn: string; endsOn: string }> = [];
   for (let offset = 0; offset < ids.length; offset += 100) {
@@ -259,9 +303,9 @@ export async function readDocumentSharePreview(previewId: string): Promise<{ tit
   const row = rows[0];
   if (!row || !documentSharingEnabled(row.company_id) ||
     !(industryBasketsEnabled(row.company_id) || (row.lead_id === null && documentShareBrandingEnabled(row.company_id))) ||
-    row.revoked_at || !(Date.parse(row.expires_at) > Date.now()) ||
+    row.revoked_at || !(row.lead_id === null && isFeatureEnabled("COMPANY_LINK_UNIFY", row.company_id) || Date.parse(row.expires_at) > Date.now()) ||
     (row.lead_id === null && !publicDocumentOrderEntryEnabled(row.company_id))) return null;
-  const current = await currentDocumentShareHead(row);
+  const current = row.lead_id === null && isFeatureEnabled("COMPANY_LINK_UNIFY", row.company_id) ? await latestDocumentShareHead(row) : await currentDocumentShareHead(row);
   const version = await published(row.company_id, current.document_version_id, row.created_by_key);
   if (version.documentId !== row.document_id) return null;
   if (row.lead_id === null && documentShareBrandingEnabled(row.company_id)) {

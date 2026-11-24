@@ -123,6 +123,7 @@ beforeEach(() => {
       return inquiryBody === null ? [] : [{ company_id: company, template_key: "lead_dm_kit", body: inquiryBody }];
     }
     if (p.get("company_id") !== `eq.${company}`) return [];
+    if (table === "pricing_document_versions" && !p.get("id") && p.get("document_id") === `eq.${doc}`) return [{ id: linkedContent ? linkedVersionId : version }];
     if (table === "pricing_document_versions" && p.get("id") === `eq.${linkedVersionId}` && linkedContent)
       return [{ id: linkedVersionId, document_id: doc, version: 3, revision: 4, published_at: "2026-11-23T00:00:00Z", content: linkedContent }];
     if (table === "pricing_document_versions") return p.get("id") === `eq.${version}` ? [{ id: version, document_id: doc, version: publishedNumber, revision: 3, published_at: "2026-11-06T00:00:00Z", content: { ...content, cost: "COST-CANARY", supplier: "SUPPLIER-CANARY" } }] : [];
@@ -572,6 +573,41 @@ it("keeps printed QR alive beyond 14 days, hides prices at the KST cutoff, and c
   vi.setSystemTime(new Date(result.expiresAt));
   response = await publicPost(request({ token: token(result.publicUrl) }));
   expect(response.status).toBe(404); expect((await response.json()).message).toContain("링크 열람기간이 끝났습니다");
+});
+it("CX-140: a second public prepare for the same document returns the existing link; lead links stay separate", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const first = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  const again = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null, idempotencyKey: "40000000-0000-4000-8000-000000000009" });
+  expect(again.shareLinkId).toBe(first.shareLinkId); expect(again.publicUrl).toBe(first.publicUrl);
+  expect(links).toHaveLength(1);
+  const a = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, idempotencyKey: "40000000-0000-4000-8000-00000000000a" });
+  expect(a.shareLinkId).toBeTruthy(); expect(links.filter(l => l.lead_id === lead)).toHaveLength(1);
+});
+it("CX-140: reusing a public link extends its expiry with the flag, and a stale expired one asks for revocation without it", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const first = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  links[0].expires_at = "2026-01-01T00:00:00Z";
+  const again = { ...prepare, leadId: null, idempotencyKey: "40000000-0000-4000-8000-00000000000b" };
+  await expect(service.execute(scope, again)).rejects.toMatchObject({ status: 409 });
+  vi.stubEnv("FEATURE_COMPANY_LINK_UNIFY_COMPANY_IDS", company);
+  const reused = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, again);
+  expect(reused.shareLinkId).toBe(first.shareLinkId); expect(reused.expiresAt).toBe(publicDocumentLinkExpiry(content.validUntil));
+  expect(links).toHaveLength(1); expect(links[0].expires_at).toBe(publicDocumentLinkExpiry(content.validUntil));
+  links[0].revoked_at = new Date().toISOString();
+  const fresh = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...again, idempotencyKey: "40000000-0000-4000-8000-00000000000c" });
+  expect(fresh.shareLinkId).not.toBe(first.shareLinkId);
+});
+it("CX-140: with the flag a public link follows the latest version and ends by that version's date with contact guidance", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true"); vi.stubEnv("FEATURE_COMPANY_LINK_UNIFY_COMPANY_IDS", company);
+  inquiryBody = JSON.stringify({ publicContactEnabled: true, contactPhone: "02-1234-5678", contactLabel: "영업팀" });
+  const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  linkedContent = { ...content, title: "새 버전 단가표", validUntil: "2099-12-31" };
+  expect((await (await publicPost(request({ token: token(result.publicUrl) }))).json()).document.title).toBe("새 버전 단가표");
+  linkedContent = { ...content, validUntil: "2020-01-01" };
+  const response = await publicPost(request({ token: token(result.publicUrl) }));
+  expect(response.status).toBe(404);
+  const message = (await response.json()).message as string;
+  expect(message).toContain("기간이 끝난 단가표입니다"); expect(message).toContain("합성 회사"); expect(message).toContain("0212345678");
 });
 it("does not accept a caller TTL that would shorten or extend public printed QR policy", () => {
   vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
