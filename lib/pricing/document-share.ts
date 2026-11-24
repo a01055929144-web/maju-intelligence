@@ -138,6 +138,26 @@ export async function prepareDocumentShare(scope: DocumentScope, input: PrepareD
   return { shareLinkId: saved.id, sendId: null, documentId: saved.document_id, documentVersionId: saved.document_version_id,
     publicUrl: publicUrl(saved), expiresAt: saved.expires_at, deliveryRecorded: false };
 }
+/** CX-140: 회사의 활성 공개 링크 목록(조회수·마지막 열람·만료일 포함). 회사 경계는 company_id 조건으로만 정한다. */
+export async function listActivePublicLinks(company: string) {
+  const now = encodeURIComponent(new Date().toISOString());
+  const rows = await supabaseRequest<Array<ShareRow & { view_count: number | null; first_viewed_at: string | null; last_viewed_at: string | null }>>(
+    path("pricing_document_share_links", company,
+      `lead_id=is.null&send_id=is.null&revoked_at=is.null&expires_at=gt.${now}&select=${shareFields},view_count,first_viewed_at,last_viewed_at&order=created_at.asc&limit=500`));
+  return rows.map(row => ({ id: row.id, documentId: row.document_id, createdAt: row.created_at, publicUrl: publicUrl(row), expiresAt: row.expires_at,
+    viewCount: Number(row.view_count ?? 0), firstViewedAt: row.first_viewed_at, lastViewedAt: row.last_viewed_at }));
+}
+export async function revokePublicLinkById(company: string, id: string) {
+  const rows = await supabaseRequest<Array<{ id: string }>>(path("pricing_document_share_links", company,
+    `id=eq.${id}&lead_id=is.null&send_id=is.null&revoked_at=is.null`), { method: "PATCH", headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ revoked_at: new Date().toISOString() }) });
+  return rows.length === 1;
+}
+/** 서버 호출용 공개 링크 준비: 이미 있으면 그 링크를 돌려준다(prepareDocumentShare의 CX-140 규칙). */
+export async function preparePublicLinkAs(company: string, actor: string, documentId: string, documentVersionId: string) {
+  return prepareDocumentShare({ companyId: company, actor, manager: true, sharingEnabled: true },
+    { documentId, documentVersionId, leadId: null, idempotencyKey: randomUUID(), ttlDays: null });
+}
 export async function revokeDocumentShare(scope: DocumentScope, id: string) {
   const row = await link(scope, id);
   await supabaseRequest(path("pricing_document_share_links", scope.companyId, `id=eq.${id}&revoked_at=is.null`), {
