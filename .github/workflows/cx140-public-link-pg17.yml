@@ -27,3 +27,5 @@ jobs:
       - uses: actions/checkout@v5
       - run: createdb cx140_test
       - run: psql -X --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/2026-11-24-CX-140-public-link-unique.pg17.test.sql
+      - run: createdb cx140_test2
+      - run: psql -X --set=ON_ERROR_STOP=1 --dbname=cx140_test2 --file=docs/sql-drafts/2026-11-24-CX-140-default-price-sheet.pg17.test.sql
