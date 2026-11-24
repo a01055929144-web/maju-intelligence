@@ -88,22 +88,3 @@ export const countsAsVisit = (photoCount: number) => photoCount >= 1;
 export function fieldMediaExtension(mimeType: string) {
   return ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "video/quicktime": "mov" } as Record<string, string>)[mimeType] ?? "bin";
 }
-
-/** 화면이 보내는 multipart 폼을 만든다(서버 API와 같은 필드 이름). 사진·영상 한도는 서버가 다시 검사한다. */
-export function buildFieldRecordForm(input: {
-  accuracyM: number; capturedAt: string; customerId?: string | null; idempotencyKey: string; kind: FieldRecordKind; latitude: number;
-  leadId?: string | null; longitude: number; memo?: string; photos: readonly File[]; placementTypes: readonly FieldPlacementType[];
-  video?: { durationSeconds: number; file: File } | null;
-}): FormData {
-  const form = new FormData();
-  form.set("kind", input.kind);
-  for (const type of input.kind === "placement" ? input.placementTypes : []) form.append("placementTypes", type);
-  if (input.customerId) form.set("customerId", input.customerId);
-  if (input.leadId) form.set("leadId", input.leadId);
-  form.set("latitude", String(input.latitude)); form.set("longitude", String(input.longitude)); form.set("accuracyM", String(input.accuracyM));
-  form.set("capturedAt", input.capturedAt); form.set("idempotencyKey", input.idempotencyKey);
-  if (input.memo?.trim()) form.set("memo", input.memo.trim());
-  for (const photo of input.photos) form.append("media", photo);
-  if (input.video) { form.append("media", input.video.file); form.set("videoDurationSeconds", String(input.video.durationSeconds)); }
-  return form;
-}

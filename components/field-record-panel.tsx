@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, Camera, CheckCircle2, Crosshair } from "lucide-react";
 import {
-  buildFieldRecordForm, FIELD_MEDIA_MAX_COUNT, FIELD_PLACEMENT_LABELS, FIELD_PLACEMENT_TYPES, FIELD_RECORD_KIND_LABELS, FIELD_RECORD_KINDS, FIELD_VIDEO_MAX_SECONDS,
+  FIELD_MEDIA_MAX_COUNT, FIELD_PLACEMENT_LABELS, FIELD_PLACEMENT_TYPES, FIELD_RECORD_KIND_LABELS, FIELD_RECORD_KINDS, FIELD_VIDEO_MAX_SECONDS,
   validateFieldMedia, type FieldPlacementType, type FieldRecordKind
 } from "@/domains/field-record/field-record";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { shrinkPhoto, submitFieldRecord } from "@/lib/field-records/client";
 
 type Geo = { accuracyM: number; latitude: number; longitude: number };
 type Props = { readonly customerId?: string; readonly leadId?: string; readonly targetName?: string };
@@ -33,6 +33,7 @@ export function FieldRecordPanel({ customerId, leadId, targetName }: Props) {
   const [geo, setGeo] = useState<Geo | null>(null);
   const [geoMessage, setGeoMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [shrinking, setShrinking] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ countsAsVisit: boolean } | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(newKey);
@@ -53,7 +54,7 @@ export function FieldRecordPanel({ customerId, leadId, targetName }: Props) {
     ...(video ? [{ durationSeconds: video.durationSeconds, mimeType: video.file.type, size: video.file.size }] : [])
   ]);
   const needsMaterial = kind === "placement" && placement.length === 0;
-  const canSubmit = !busy && Boolean(geo) && !needsMaterial && mediaCheck.ok;
+  const canSubmit = !busy && !shrinking && Boolean(geo) && !needsMaterial && mediaCheck.ok;
 
   async function pickVideo(file: File | undefined) {
     if (!file) { setVideo(null); return; }
@@ -64,14 +65,21 @@ export function FieldRecordPanel({ customerId, leadId, targetName }: Props) {
     setError(""); setVideo({ durationSeconds: Math.round(seconds * 100) / 100, file });
   }
 
+  /** 사진은 고르는 즉시 줄인다(긴 변 1600px·JPEG 0.8). 줄인 파일만 올라간다. */
+  async function pickPhotos(list: FileList | null) {
+    const picked = Array.from(list ?? []).slice(0, FIELD_MEDIA_MAX_COUNT);
+    setError(""); setShrinking(true);
+    try { setPhotos(await Promise.all(picked.map(shrinkPhoto))); }
+    catch (cause) { setPhotos([]); setError(cause instanceof Error ? cause.message : "사진을 줄이지 못했습니다."); }
+    finally { setShrinking(false); }
+  }
+
   async function submit() {
     if (!canSubmit || !geo) return;
     setBusy(true); setError(""); setResult(null);
     try {
-      const form = buildFieldRecordForm({ ...geo, capturedAt: new Date().toISOString(), customerId, idempotencyKey, kind, leadId, memo, photos, placementTypes: placement, video });
-      const response = await fetchWithTimeout("/api/field-records", { method: "POST", body: form }, 60_000);
-      const body = await response.json().catch(() => ({})) as { countsAsVisit?: boolean; message?: string };
-      if (!response.ok) throw new Error(body.message || "현장 기록을 저장하지 못했습니다. 같은 화면에서 다시 눌러 주세요.");
+      // 사진·영상은 저장소로 직접 올라가고(함수 본문 한도 회피), 기록 요청에는 경로만 담긴다.
+      const body = await submitFieldRecord({ ...geo, capturedAt: new Date().toISOString(), customerId, idempotencyKey, kind, leadId, memo, photos, placementTypes: placement, video });
       setResult({ countsAsVisit: body.countsAsVisit === true });
       setPhotos([]); setVideo(null); setMemo(""); setPlacement([]); setIdempotencyKey(newKey());
     } catch (cause) {
@@ -108,8 +116,8 @@ export function FieldRecordPanel({ customerId, leadId, targetName }: Props) {
       ) : null}
       <div className="grid grid-cols-2 gap-2">
         <label className="mobile-secondary-action inline-flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-lg border text-sm font-semibold">
-          <Camera aria-hidden="true" className="h-4 w-4" />사진 찍기·선택 {photos.length ? `(${photos.length})` : ""}
-          <input accept="image/*" capture="environment" className="sr-only" multiple onChange={(event) => setPhotos(Array.from(event.target.files ?? []).slice(0, FIELD_MEDIA_MAX_COUNT))} type="file" />
+          <Camera aria-hidden="true" className="h-4 w-4" />{shrinking ? "사진 줄이는 중…" : `사진 찍기·선택 ${photos.length ? `(${photos.length})` : ""}`}
+          <input accept="image/*" capture="environment" className="sr-only" multiple onChange={(event) => void pickPhotos(event.target.files)} type="file" />
         </label>
         <label className="mobile-secondary-action inline-flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-lg border text-sm font-semibold">
           영상(선택 · {FIELD_VIDEO_MAX_SECONDS}초) {video ? "✓" : ""}
@@ -133,7 +141,7 @@ export function FieldRecordPanel({ customerId, leadId, targetName }: Props) {
         </p>
       ) : null}
       <button className="mobile-primary-action min-h-12 w-full rounded-lg text-sm font-black disabled:opacity-50" disabled={!canSubmit} onClick={() => void submit()} type="button">
-        {busy ? "저장 중…" : "기록 저장"}
+        {busy ? "올리는 중…" : "기록 저장"}
       </button>
       {needsMaterial ? <p className="text-xs font-semibold text-amber-700">비치한 자료를 1개 이상 선택해 주세요.</p> : null}
     </section>
