@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculatePrice, calculateItemPrice, resolvePriceRule, needsRecalculation, type PriceItem } from "../domains/pricing/price-rules";
+import { PRICE_ROUNDING_UNITS, calculatePrice, calculateItemPrice, resolvePriceRule, needsRecalculation, type PriceItem } from "../domains/pricing/price-rules";
 import { priceSheetsEnabled } from "../lib/pricing/feature";
 const groups = [{ id: "g", name: "기본", margin: 20, rounding: 10 }];
 const item: PriceItem = { id: "p", name: "품목", category: "채소", itemMargin: null, cost: 800, price: 960, groupId: "g", appliedCost: 800, appliedMargin: 20, appliedRounding: 10, active: true, directPrice: null };
@@ -68,4 +68,21 @@ describe("pricing cost and margin visibility", () => {
     expect(canManagePriceSheets(null)).toBe(false);
     expect(canManagePriceSheets({ role: "owner" })).toBe(true);
   });
+});
+
+// CX-133: choosing a rounding rule is not applying it to confirmed prices.
+it.each([[1,2017],[10,2020],[50,2050],[100,2100]])("rounds 1833 plus ten percent upward by %i won", (unit, expected) => {
+ expect(calculatePrice(1833,10,unit)).toBe(expected);
+});
+it.each([[49.99,50],[50,50],[50.01,100],[2050,2050],[0,0]])("keeps exact fifty-won boundaries for %s", (cost,expected) => {
+ expect(calculatePrice(cost,0,50)).toBe(expected);
+});
+it("queues a fifty-won rule without mutating the confirmed item", () => {
+ expect(PRICE_ROUNDING_UNITS).toEqual([1,10,50,100]);
+ const confirmed=Object.freeze({...item,groupId:null,cost:1833,price:2020,appliedCost:1833,appliedMargin:10,appliedRounding:10});
+ expect(needsRecalculation(confirmed,[],[],10,50)).toBe(true);
+ expect(calculateItemPrice(confirmed,[],[],10,50)).toBe(2050);
+ expect(confirmed).toMatchObject({price:2020,appliedRounding:10});
+ expect(calculatePrice(1833,10,50,1997)).toBe(1997);
+ expect(()=>calculatePrice(1833,10,25)).toThrow();
 });
