@@ -1889,7 +1889,7 @@ export default function CrmTimelinePage() {
                   ) : null}
                   {activationUrl && inviteStatus ? (
                     <p className="mt-2 text-xs font-bold text-teal-900" role="status">
-                      {inviteStatus.signedUp ? "가입 완료" : inviteStatus.expired ? "초대 기간 만료" : `열람 ${inviteStatus.openCount}회${inviteStatus.lastOpenedAt ? ` · 마지막 ${new Date(inviteStatus.lastOpenedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}` : " · 아직 열지 않음"}`}
+                      {inviteStatus.signedUp ? "가입 완료" : inviteStatus.expired ? "초대 기간 만료" : `개통 시작 ${inviteStatus.openCount}회${inviteStatus.lastOpenedAt ? ` · 마지막 ${new Date(inviteStatus.lastOpenedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}` : " · 아직 시작 전"}`}
                     </p>
                   ) : null}
                 </div>
