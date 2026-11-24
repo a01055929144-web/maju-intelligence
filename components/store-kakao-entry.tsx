@@ -59,6 +59,8 @@ export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, 
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
     if (/^[A-Za-z0-9_-]{43}$/.test(value) || /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) {
       token.current = value; publicFlow.current = value.includes("."); setReady(true);
+      // 거래처 초대 링크(43자)를 열었다는 익명 기록. 실패해도 개통 흐름은 그대로.
+      if (!publicFlow.current) void fetch("/api/store/invite-open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: value }) }).catch(() => null);
     }
     else setError("개통 링크를 확인할 수 없습니다. 담당자에게 받은 전체 링크를 다시 열어 주세요.");
   }, [profileStep]);

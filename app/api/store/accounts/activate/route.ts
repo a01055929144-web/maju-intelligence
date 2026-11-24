@@ -1,3 +1,4 @@
+import { finalizeStoreSignup } from "@/lib/store/07-store-signup-link";
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes, randomUUID } from "crypto";
 
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
         stage = "test_ordering";
         await preparePublicOwnerTestOrdering(activation.companyId, activated.storeAccountId);
       }
+      await finalizeStoreSignup({ companyId: activation.companyId, storeAccountId: activated.storeAccountId, route: "company_link", token: proof.token });
       stage = "session";
       if (!(await setStoreSession(proof.authUserId))) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       await getStoreOwnerActivationProof({ consume: true });
