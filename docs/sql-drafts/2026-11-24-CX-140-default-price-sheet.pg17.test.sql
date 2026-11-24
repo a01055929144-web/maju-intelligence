@@ -28,7 +28,7 @@ begin
   -- 다른 회사 문서는 지정할 수 없다
   ok := false;
   begin insert into public.pricing_default_public_documents(company_id, document_id, set_by_key)
-    values ('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d2', repeat('a', 64));
+    values ('00000000-0000-0000-0000-0000000000c2','00000000-0000-0000-0000-0000000000d1', repeat('a', 64));
   exception when foreign_key_violation then ok := true; end;
   if not ok then raise exception 'cross_company_document'; end if;
   -- 형식이 틀린 지정자 키 거부
