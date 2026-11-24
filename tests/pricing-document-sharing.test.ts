@@ -766,3 +766,19 @@ it("CX-132 leaves lead sales previews and reader branding unchanged", async () =
   expect(preview?.title).toBe("합성 회사 · 합성 견적"); expect(preview).not.toHaveProperty("image");
   expect(await (await publicPost(request({ token: token(result.publicUrl) }))).json()).not.toHaveProperty("brandingAvailable");
 });
+
+it("CX-137: 긴 주소로 열면 조회수 함수를 한 번 부르고, 미리보기 봇은 세지 않게 표시하며, 조회수 실패가 열람을 막지 않는다", async () => {
+  const p = await prepared();
+  const views = () => mocks.db.mock.calls.filter(([path]) => path === "rpc/record_pricing_document_view_v1").map(([, init]) => JSON.parse(init.body));
+  const ok = await publicPost(request({ token: token(p.publicUrl) }, "https://fixture.test", { "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17)" }));
+  expect(ok.status).toBe(200);
+  expect(views()).toEqual([{ p_company_id: company, p_share_link_id: p.shareLinkId, p_device_class: "mobile", p_requester_hash: null, p_is_preview_bot: false }]);
+  await publicPost(request({ token: token(p.publicUrl) }, "https://fixture.test", { "user-agent": "kakaotalk-scrap/1.0" }));
+  expect(views()[1]).toMatchObject({ p_is_preview_bot: true });
+  const base = mocks.db.getMockImplementation()!;
+  mocks.db.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url.startsWith("rpc/record_pricing_document_view_v1")) throw new Error("synthetic view outage");
+    return base(url, init);
+  });
+  expect((await publicPost(request({ token: token(p.publicUrl) }))).status).toBe(200);
+});
