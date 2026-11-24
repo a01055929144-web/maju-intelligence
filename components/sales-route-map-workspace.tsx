@@ -1,4 +1,5 @@
 "use client";
+import { StoreSignupBadge, useStoreSignupStatus } from "@/components/store-signup-badge";
 import { CustomerDirectoryView, OperationalEmptyState, countGrades } from "@/components/map/customer-directory-view";
 export { DirectoryStat, OperationalEmptyState } from "@/components/map/customer-directory-view";
 import { QuickRegisterDrawer } from "@/components/map/quick-register-drawer";
@@ -3210,6 +3211,7 @@ function PermitLeadMapQuickCard({
   const [isRestoring, setIsRestoring] = useState(false);
   const [message, setMessage] = useState("");
   const [addressCopied, setAddressCopied] = useState(false);
+  const storeSignupStatus = useStoreSignupStatus();
   // 카드를 사용자가 자유롭게 끌어서 옮길 수 있게 합니다(2026-08-24 피드백: "리드 카드를 사용자가
   // 자유롭게 움직일 수 있도록 만들어"). 기존 절대 위치(positionClassName) 위에 transform으로만
   // 오프셋을 얹어, 리드가 바뀌어도 기본 위치 로직은 그대로 유지합니다.
@@ -3328,6 +3330,7 @@ function PermitLeadMapQuickCard({
         <div className="min-w-0 flex-1">
           <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{lead.businessName}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <StoreSignupBadge state={storeSignupStatus?.leads[lead.id]} />
             <Badge className={`px-1.5 py-0 text-xs ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.industryPrimary}</span>
             {typeof lead.distanceKm === "number" ? (
