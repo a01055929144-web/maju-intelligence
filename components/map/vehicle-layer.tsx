@@ -1,5 +1,6 @@
 "use client";
 
+import { LOCATION_ROLE_COLORS, LOCATION_ROLE_LABELS } from "@/domains/delivery/location-role";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -150,7 +151,9 @@ export function DeliveryAssignmentPanel({
     const vehicle = findVehicleForLiveLocation(location);
     if (vehicle && !liveVehicleByDeliveryGroup.has(vehicle.id)) liveVehicleByDeliveryGroup.set(vehicle.id, location);
   });
-  const unassignedLiveVehicles = liveVehicles.filter((location) => !findVehicleForLiveLocation(location));
+  // 영업·알바(현장) 위치는 차량과 연결하는 대상이 아니다. 지도에 역할 색으로 보이고 아래 별도 목록에 나온다.
+  const fieldStaffLiveVehicles = liveVehicles.filter((location) => (location.locationRole ?? "delivery") !== "delivery");
+  const unassignedLiveVehicles = liveVehicles.filter((location) => (location.locationRole ?? "delivery") === "delivery" && !findVehicleForLiveLocation(location));
   const registeredVehicleCount = vehicleMasterAvailable
     ? vehicleMasterVehicles.filter((vehicle) => vehicle.status === "active").length
     : vehicles.filter((vehicle) => !vehicle.isUnassigned).length;
@@ -476,6 +479,24 @@ export function DeliveryAssignmentPanel({
         {!filteredVehicles.length ? <p className="p-4 text-center text-xs font-bold text-slate-500">조건에 맞는 담당자·차량이 없습니다.</p> : null}
       </div>
       </section>
+      {fieldStaffLiveVehicles.length ? (
+        <section aria-labelledby="field-staff-live-heading" className="border-t-4 border-sky-100 bg-sky-50/60">
+          <span className="block px-3 pt-2 text-xs font-semibold text-sky-900" id="field-staff-live-heading">영업·알바 위치 · {fieldStaffLiveVehicles.length}명</span>
+          <div className="space-y-1 px-3 py-2">
+            {fieldStaffLiveVehicles.map((location) => {
+              const role = location.locationRole ?? "field";
+              return (
+                <button className="flex w-full items-center gap-2 rounded-md border border-sky-200 bg-white p-2 text-left" key={location.id} onClick={() => onSelectLiveVehicle(location)} type="button">
+                  <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: location.isStale ? "#64748b" : (LOCATION_ROLE_COLORS[role] ?? "#64748b") }} />
+                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700">{LOCATION_ROLE_LABELS[role]}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-900">{location.displayName}</span>
+                  <span className="text-xs font-medium text-slate-500">{formatVehicleLocationAge(location.lastLocationAt) || "수신 전"}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
       {unassignedLiveVehicles.length ? (
         <section aria-labelledby="unassigned-live-heading" className="border-t-4 border-amber-100 bg-amber-50/70">
           <button aria-expanded={unassignedLiveOpen} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left" onClick={() => setUnassignedLiveOpen((value) => !value)} type="button">

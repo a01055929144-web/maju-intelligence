@@ -1,4 +1,5 @@
 import { resolveStaffWorkWindow } from "../../domains/delivery/staff-location";
+import { locationRoleFromDuties } from "../../domains/delivery/location-role";
 import { resolveCompanyStaffDisplayName } from "../../domains/organization/staff-display-name";
 import type { StaffLocationEvent, StaffMobileLocationInput, StaffVehicleLocation } from "../store";
 import { getErrorMessage } from "../store";
@@ -19,7 +20,7 @@ function toStaffVehicleLocation(row: {
   last_seen_at?: string | null;
   location_status?: string | null;
   user_id: string;
-}, identity?: { assignedManagerName?: string; assignedVehicle?: string; employeeName?: string; userName?: string }): StaffVehicleLocation | null {
+}, identity?: { assignedManagerName?: string; assignedVehicle?: string; duties?: readonly string[] | null; employeeName?: string; userName?: string }): StaffVehicleLocation | null {
   const lat = Number(row.last_lat);
   const lng = Number(row.last_lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
@@ -60,6 +61,7 @@ function toStaffVehicleLocation(row: {
     lastSeenAt: row.last_seen_at || undefined,
     lat,
     lng,
+    locationRole: locationRoleFromDuties(identity?.duties),
     // 좌표는 current_customer_id가 있던 실제 배송 업무 이벤트에서만 가져옵니다. 따라서 기사가
     // 앱을 종료했더라도 그 좌표는 사생활 위치가 아니라 마지막 운행 위치이며 지도에 남깁니다.
     status: isStale ? "stale" : ((row.location_status || "active") as StaffVehicleLocation["status"]),
@@ -233,8 +235,8 @@ export async function getStaffVehicleLocations(companyId?: string, options: { us
   if (!companyId || !isProductionStoreConfigured()) return [];
   try {
     const memberFilter = options.userId ? `&user_id=eq.${encodeURIComponent(options.userId)}` : "";
-    const members = await supabaseRequest<Array<{ user_id: string; app_users: { name: string | null; status: string | null } | null }>>(
-      `company_members?select=user_id,app_users(name,status)&company_id=eq.${encodeURIComponent(companyId)}&status=eq.active${memberFilter}&limit=100`
+    const members = await supabaseRequest<Array<{ user_id: string; duties?: string[] | null; app_users: { name: string | null; status: string | null } | null }>>(
+      `company_members?select=user_id,duties,app_users(name,status)&company_id=eq.${encodeURIComponent(companyId)}&status=eq.active${memberFilter}&limit=100`
     );
     const activeMembers = members.filter((member) => member.app_users?.status !== "inactive" && member.app_users?.status !== "deleted");
     const userIds = Array.from(new Set(activeMembers.map((member) => member.user_id).filter(Boolean)));
@@ -265,6 +267,7 @@ export async function getStaffVehicleLocations(companyId?: string, options: { us
       }).catch(() => [])
     ]);
     const userNameById = new Map(activeMembers.map((member) => [member.user_id, member.app_users?.name || undefined]));
+    const dutiesByUserId = new Map(activeMembers.map((member) => [member.user_id, member.duties ?? []]));
     const deviceByUserId = new Map<string, (typeof devices)[number]>();
     devices.forEach((row) => { if (!deviceByUserId.has(row.user_id)) deviceByUserId.set(row.user_id, row); });
     const invitationByUserId = new Map<string, (typeof invitationRows)[number]>();
@@ -291,6 +294,7 @@ export async function getStaffVehicleLocations(companyId?: string, options: { us
         }, {
           assignedManagerName: invitation?.assigned_manager_name || undefined,
           assignedVehicle: invitation?.assigned_vehicle || undefined,
+          duties: dutiesByUserId.get(event.user_id),
           employeeName: invitation?.employee_name || undefined,
           userName: userNameById.get(event.user_id)
         });
