@@ -148,17 +148,17 @@ for (const width of [1440, 390]) for (const failure of ["category-and-recalculat
 });
 
 for (const width of [1440, 390]) test('CX133 saves rounding before applying prices at '+width+'px', async ({ page }, info) => {
- let rounding=10, appliedRounding=10, price=2020, pendingCount=0;
+ let rounding=10, appliedRounding=10, price=2020, pendingCount=0, lastBatch:string|null=null;
  const commands:string[]=[];
  const item=()=>({id:productId,name:'합성 상품',category:'합성 분류',cost:1833,price,appliedCost:1833,appliedMargin:10,appliedRounding,groupId:null,itemMargin:null,directPrice:null,active:true});
- const state=()=>({groups:[],categories:[],items:[item()],defaultMargin:10,defaultRounding:rounding,pendingCount,total:1,page:1,pageSize:50,lastBatch:null,restored:false});
+ const state=()=>({groups:[],categories:[],items:[item()],defaultMargin:10,defaultRounding:rounding,pendingCount,total:1,page:1,pageSize:50,lastBatch,restored:false});
  expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:'ci-owner-layout-password-2026'}})).ok()).toBeTruthy();
  await page.setViewportSize({width,height:1000});
  await page.route(/\/api\/price-sheets(?:\?|$)/,async route=>{
   if(route.request().method()==='POST'){
    const command=route.request().postDataJSON();commands.push(command.action);
    if(command.action==='defaults'){rounding=command.rounding;pendingCount=rounding===appliedRounding?0:1;}
-   if(command.action==='recalculate'){price=rounding===50?2050:2020;appliedRounding=rounding;pendingCount=0;}
+   if(command.action==='recalculate'){price=rounding===50?2050:2020;appliedRounding=rounding;pendingCount=0;lastBatch='batch-1';}
   }
   return route.fulfill({json:state()});
  });
