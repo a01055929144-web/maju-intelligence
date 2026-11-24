@@ -972,7 +972,7 @@ export type DatabaseCheck = {
 
 
 type SupabaseRow = Record<string, unknown>;
-const CUSTOMER_ATTACHMENT_BUCKET = "customer-attachments";
+export const CUSTOMER_ATTACHMENT_BUCKET = "customer-attachments";
 const SALES_QUOTE_PHOTO_BUCKET = CUSTOMER_ATTACHMENT_BUCKET;
 const AUTH_CREDENTIALS_ID = "maju-default";
 
@@ -4881,6 +4881,8 @@ export { getStaffLocationEvents, getStaffVehicleLocations, upsertStaffMobileLoca
 export { getDeliveryCompletionEvents, getDeliveryHistoryForDate, getDeliveryHistorySummary } from "./store/09-delivery-history";
 export { LEAD_DNC_WRITE_ENABLED, listActiveLeadDoNotContacts, listLeadContactFieldSources, recordLeadContactFieldSource, registerLeadDoNotContact, releaseLeadDoNotContact } from "./store/09-lead-contact-governance";
 export { buildLeadEnrichmentEventOutcome, shouldAutoApplyKakaoPhone, shouldClearKakaoPhoneOnReject } from "./store/09-lead-enrichment-outcome";
+export { createCustomerAttachmentSignedUrl, getCustomerAttachmentOwnerByStoragePath, uploadCustomerAttachmentFile } from "./store/09-customer-attachment-files";
+import { createCustomerAttachmentSignedUrl } from "./store/09-customer-attachment-files";
 import { buildLeadEnrichmentEventOutcome, shouldAutoApplyKakaoPhone, shouldClearKakaoPhoneOnReject } from "./store/09-lead-enrichment-outcome";
 export type { ActiveLeadDoNotContact } from "./store/09-lead-contact-governance";
 const toKstDateKey = (iso: string): string => kstDateKey(iso);
@@ -5838,112 +5840,6 @@ async function applyAcceptedLeadQuotesAfterCustomerConversion(
     leadId,
     request: supabaseRequest
   });
-}
-
-export async function uploadCustomerAttachmentFile(
-  input: {
-    attachmentType: string;
-    bytes: ArrayBuffer;
-    companyId?: string;
-    contentType: string;
-    createdByName?: string;
-    customerId: string;
-    filename: string;
-    idempotencyKey?: string;
-    title: string;
-  }
-) {
-  const companyId = input.companyId || getDefaultCompanyId();
-  const title = input.title.trim() || input.filename;
-
-  if (!isProductionStoreConfigured() || input.customerId.startsWith("sample-") || input.customerId.startsWith("local-")) {
-    return {
-      attachment: {
-        id: `local-upload-${Date.now()}`,
-        attachmentType: input.attachmentType || "etc",
-        createdAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
-        fileUrl: "",
-        mimeType: input.contentType,
-        storagePath: undefined,
-        title
-      },
-      persisted: false,
-      uploaded: false
-    };
-  }
-
-  if (input.idempotencyKey) {
-    const existing = await supabaseRequest<Array<{ id: string; attachment_type: string; created_at: string; file_url: string | null; mime_type: string | null; storage_path: string | null; title: string }>>(
-      `customer_attachments?select=id,attachment_type,created_at,file_url,mime_type,storage_path,title&company_id=eq.${encodeURIComponent(companyId)}&customer_id=eq.${encodeURIComponent(input.customerId)}&idempotency_key=eq.${encodeURIComponent(input.idempotencyKey)}&limit=1`
-    ).catch((error) => {
-      if (isMissingDeliveryIdempotencyColumnError(error)) return [];
-      throw error;
-    });
-    if (existing[0]) return { attachment: toCustomerAttachmentItem(existing[0]), persisted: true, reused: true, uploaded: true };
-  }
-  const stablePrefix = input.idempotencyKey ? sanitizeStorageFilename(input.idempotencyKey) : String(Date.now());
-  const storagePath = `${companyId}/${input.customerId}/${stablePrefix}-${sanitizeStorageFilename(input.filename)}`;
-  await supabaseStorageRequest(`object/${CUSTOMER_ATTACHMENT_BUCKET}/${storagePath}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": input.contentType || "application/octet-stream",
-      "x-upsert": "true"
-    },
-    body: input.bytes
-  });
-
-  const result = await addCustomerAttachment(
-    {
-      attachmentType: input.attachmentType || "etc",
-      createdByName: input.createdByName,
-      customerId: input.customerId,
-      idempotencyKey: input.idempotencyKey,
-      fileUrl: `/api/customer-attachments/file?path=${encodeURIComponent(storagePath)}`,
-      mimeType: input.contentType,
-      storagePath,
-      title
-    },
-    companyId
-  );
-
-  return {
-    ...result,
-    uploaded: true
-  };
-}
-
-export async function createCustomerAttachmentSignedUrl(storagePath: string, expiresInSeconds = 60 * 10) {
-  if (!isProductionStoreConfigured()) throw new Error("Supabase is not configured.");
-  const cleanPath = storagePath.replace(/^\/+/, "");
-  const result = await supabaseStorageRequest<{ signedURL: string }>(
-    `object/sign/${CUSTOMER_ATTACHMENT_BUCKET}/${encodeStoragePath(cleanPath)}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ expiresIn: Math.max(60, Math.min(expiresInSeconds, 7 * 24 * 60 * 60)) })
-    }
-  );
-
-  const config = getSupabaseConfig();
-  if (!config) throw new Error("Supabase is not configured.");
-  return result.signedURL.startsWith("http") ? result.signedURL : `${config.url}/storage/v1${result.signedURL}`;
-}
-
-export async function getCustomerAttachmentOwnerByStoragePath(companyId: string, storagePath: string): Promise<{
-  attachmentId: string;
-  attachmentType: string;
-  customerId: string;
-} | null> {
-  if (!companyId || !storagePath || !isProductionStoreConfigured()) return null;
-
-  const rows = await supabaseRequest<Array<{ attachment_type: string; customer_id: string; id: string }>>(
-    `customer_attachments?select=id,customer_id,attachment_type&company_id=eq.${encodeURIComponent(companyId)}&storage_path=eq.${encodeURIComponent(storagePath)}&limit=1`
-  );
-
-  const row = rows[0];
-  return row ? { attachmentId: row.id, attachmentType: row.attachment_type, customerId: row.customer_id } : null;
 }
 
 async function supabaseExactCount(path: string) {
@@ -12833,7 +12729,7 @@ function toCustomerNoteItem(row: {
   };
 }
 
-function toCustomerAttachmentItem(row: {
+export function toCustomerAttachmentItem(row: {
   id: string;
   attachment_type: string;
   created_at: string;
