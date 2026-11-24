@@ -1,4 +1,4 @@
-import { finalizeStoreSignup } from "@/lib/store/07-store-signup-link";
+import { finalizeStoreSignup, recordInviteOpen } from "@/lib/store/07-store-signup-link";
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes, randomUUID } from "crypto";
 
@@ -99,6 +99,8 @@ export async function POST(request: NextRequest) {
     if (!activation || !isStoreMemberCompanyAllowlisted(activation.companyId) || !(await setStoreOwnerActivationProof(body.token))) {
       return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
     }
+    // CX-142: 초대 토큰은 이 서버 경로로만 들어온다 — 개통 시작(약관 동의) 횟수·시각을 서버가 해시로 기록한다(플래그 OFF면 아무 일도 없음).
+    await recordInviteOpen(activation.companyId, body.token).catch(() => false);
     const query = new URLSearchParams({ activation: "1", companyId: activation.companyId,
       store: "1", storeAccountId: activation.storeAccountId });
     return NextResponse.json({ loginUrl: `/api/auth/kakao/start?${query}`, termsVersion: STORE_TERMS_VERSION });

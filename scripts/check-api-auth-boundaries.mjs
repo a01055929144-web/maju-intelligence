@@ -29,7 +29,6 @@ const publicRoutes = new Map([
   ["public/quotes/[token]/route.ts", "token-based public quote lookup validates UUID and expiry while excluding cost and margin fields"],
   ["staff/invite-preview/route.ts", "rate-limited invite preview required before sign-in"],
   ["store/accounts/activate/route.ts", "default-OFF one-time owner token plus explicit terms acceptance; stores proof only in a signed HttpOnly cookie before Kakao OAuth"],
-  ["store/invite-open/route.ts", "default-OFF STORE_SIGNUP_LINK; same-origin POST of the one-time 43-char invite token; records only an anonymous open count/time and always answers 204"],
   ["store/members/accept/route.ts", "default-OFF same-origin one-time member invite token; stores proof only in a signed HttpOnly cookie before Kakao OAuth"],
   ["store/profile/route.ts", "default-OFF STORE_DIRECT_SIGNUP_ENABLED; signed Kakao store session cookie; same-origin POST creates only the caller's own profile; GET lists only the caller's own profiles"],
   ["store/connect/route.ts", "default-OFF STORE_DIRECT_SIGNUP_ENABLED; signed Kakao store session cookie; same-origin POST; DB-backed failure throttle; connects only the caller's own owner profile and reveals nothing about which distributor a code belongs to"],
