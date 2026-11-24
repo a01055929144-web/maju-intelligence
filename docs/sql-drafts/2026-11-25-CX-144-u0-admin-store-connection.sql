@@ -28,7 +28,9 @@ alter table public.store_owner_activation_requests add constraint store_owner_ac
   (customer_id is not null and public_idempotency_key is null and num_nonnulls(prepared_by_company_member_id,prepared_by_admin_key)=1)
   or (prepared_by_company_member_id is null and prepared_by_admin_key is null and public_idempotency_key is not null
     and num_nonnulls(document_id,document_version_id,share_link_id)=3
-    and num_nonnulls(store_name,representative_name,address,phone,business_registration_number) in (0,5)));
+    and (num_nonnulls(store_name,representative_name,address,phone,business_registration_number)=0
+      or (num_nonnulls(store_name,representative_name,address,phone)=4 and business_registration_number is null)
+      or num_nonnulls(store_name,representative_name,address,phone,business_registration_number)=5)));
 
 -- 같은 매장 행을 다시 여는 재초대는 이전 요청 행(사용 완료·취소)이 남으므로, 매장당 고유 규칙을 "사용 전·취소 전인 요청만 하나"로 좁힌다.
 alter table public.store_owner_activation_requests drop constraint store_owner_activation_requests_company_id_store_account_id_key;
