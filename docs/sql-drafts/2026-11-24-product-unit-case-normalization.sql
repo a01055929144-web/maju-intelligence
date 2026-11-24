@@ -31,7 +31,7 @@ do $normalize$
 declare company uuid; products integer; documents integer; document_lines integer; quotes integer; quote_lines integer;
   publication_hash text; fixed_price_hash text; non_draft_quote_hash text; changed integer;
 begin
-  select min(company_id),count(*) into company,products from public.product_catalog
+  select (array_agg(distinct company_id))[1],count(*) into company,products from public.product_catalog
   where (purchase_unit is not null and purchase_unit<>upper(purchase_unit) and purchase_unit~'[a-z]')
      or (sales_unit is not null and sales_unit<>upper(sales_unit) and sales_unit~'[a-z]');
   if products<>169 or (select count(distinct company_id) from public.product_catalog where
