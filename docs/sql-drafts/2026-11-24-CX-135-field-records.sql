@@ -86,7 +86,8 @@ grant select, insert on table public.field_records, public.field_record_photos t
 revoke all on function public.field_record_photo_count_sync_v1() from public, anon, authenticated, service_role;
 
 -- 기록 한 번에 만들기(원자적·멱등). 서버가 업로드를 마친 저장 경로만 넘긴다.
--- 리드에 연결되면 리드 영업 기록(lead_actions, action_type=visit)에도 한 줄을 남겨 타임라인에 보이게 한다.
+-- 리드에 연결되면 리드 영업 기록(lead_actions)에도 action_type=field_visit 한 줄을 남겨 타임라인에 "현장 기록"으로 보이게 한다.
+-- visit은 영업 성과의 "연락"(LEAD_CONTACT_ACTION_TYPES)으로 세어지므로 쓰지 않는다(알바는 상담을 하지 않는다).
 create function public.create_field_record_v1(
   p_company_id uuid, p_actor_user_id uuid, p_actor_member_id uuid, p_kind text, p_placement_types text[],
   p_customer_id uuid, p_lead_id uuid, p_assignment_id uuid, p_latitude numeric, p_longitude numeric,
@@ -95,11 +96,25 @@ create function public.create_field_record_v1(
 language plpgsql security definer set search_path = '' as $$
 declare
   v_id uuid; v_existing public.field_records%rowtype; v_item jsonb; v_i integer := 0; v_photos integer := 0;
-  v_materials text[]; v_lead_action uuid;
+  v_materials text[]; v_lead_action uuid; v_prefix text := p_company_id::text || '/field-records/';
 begin
+  -- 기록자는 이 회사의 활성 구성원이어야 한다(다른 회사 사람·비활성·다른 사람의 member id 거부).
+  if p_actor_user_id is null or not exists (
+    select 1 from public.company_members m
+    where m.company_id = p_company_id and m.user_id = p_actor_user_id and m.status = 'active'
+      and (p_actor_member_id is null or m.id = p_actor_member_id)
+  ) then raise exception 'field_record_actor_forbidden'; end if;
   if p_media is null or jsonb_typeof(p_media) <> 'array' or jsonb_array_length(p_media) > 10 then
     raise exception 'field_record_media_invalid';
   end if;
+  -- 저장 경로는 이 회사의 현장 기록 폴더 안이어야 한다(다른 회사·다른 폴더·상위 경로 거부).
+  for v_item in select * from jsonb_array_elements(p_media) loop
+    if jsonb_typeof(v_item) <> 'object' or coalesce(v_item->>'storage_path', '') = ''
+      or left(v_item->>'storage_path', char_length(v_prefix)) <> v_prefix
+      or position('..' in v_item->>'storage_path') > 0 then
+      raise exception 'field_record_media_invalid';
+    end if;
+  end loop;
   select * into v_existing from public.field_records
   where company_id = p_company_id and idempotency_key = p_idempotency_key;
   if found then
@@ -123,7 +138,7 @@ begin
     v_materials := array(select case t when 'price_sheet' then '단가표' when 'quote' then '견적서' when 'catalog' then '브로슈어' end
       from unnest(coalesce(p_placement_types, '{}')) t);
     insert into public.lead_actions(company_id, lead_id, action_type, result, memo, actor_name, collateral_types, metadata)
-    values (p_company_id, p_lead_id, 'visit',
+    values (p_company_id, p_lead_id, 'field_visit',
       case when v_photos >= 1 then '현장 기록' else '현장 기록(사진 없음 · 방문 인정 안 됨)' end,
       nullif(btrim(coalesce(p_memo, '')), ''), nullif(btrim(coalesce(p_actor_name, '')), ''), coalesce(v_materials, '{}'),
       jsonb_build_object('fieldRecordId', v_id, 'fieldRecordKind', p_kind, 'countsAsVisit', v_photos >= 1))

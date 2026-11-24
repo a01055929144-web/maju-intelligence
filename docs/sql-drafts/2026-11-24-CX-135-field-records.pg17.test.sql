@@ -8,6 +8,7 @@ end $r$;
 begin;
 create table public.companies(id uuid primary key);
 create table public.app_users(id uuid primary key);
+create table public.company_members(id uuid primary key default gen_random_uuid(), company_id uuid not null, user_id uuid not null, status text not null);
 create table public.normalized_customers(id uuid primary key, company_id uuid not null, unique (company_id, id));
 create table public.business_permit_leads(id uuid primary key, company_id uuid not null, unique (company_id, id));
 create table public.lead_actions(
@@ -21,7 +22,11 @@ commit;
 
 begin;
 insert into public.companies values ('00000000-0000-0000-0000-0000000000c1'), ('00000000-0000-0000-0000-0000000000c2');
-insert into public.app_users values ('00000000-0000-0000-0000-0000000000a1');
+insert into public.app_users values ('00000000-0000-0000-0000-0000000000a1'), ('00000000-0000-0000-0000-0000000000a2'), ('00000000-0000-0000-0000-0000000000a3');
+insert into public.company_members(id, company_id, user_id, status) values
+  ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1', 'active'),
+  ('00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-0000000000a2', 'active'),
+  ('00000000-0000-0000-0000-0000000000e3', '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a3', 'inactive');
 insert into public.normalized_customers values ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000c1'),
   ('00000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-0000000000c2');
 insert into public.business_permit_leads values ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000c1');
@@ -32,7 +37,7 @@ do $t$
 declare
   c uuid := '00000000-0000-0000-0000-0000000000c1'; a uuid := '00000000-0000-0000-0000-0000000000a1';
   cust uuid := '00000000-0000-0000-0000-0000000000b1'; lead uuid := '00000000-0000-0000-0000-0000000000d1';
-  photo jsonb := '[{"kind":"photo","storage_path":"c1/a.jpg","mime_type":"image/jpeg","size_bytes":1000}]';
+  photo jsonb := '[{"kind":"photo","storage_path":"00000000-0000-0000-0000-0000000000c1/field-records/a.jpg","mime_type":"image/jpeg","size_bytes":1000}]';
   r jsonb; n integer; msg text;
 begin
   -- 비치 + 사진 1장 + 리드 연결: 방문 인정, 리드 영업 기록 한 줄(단가표·브로슈어)
@@ -42,6 +47,10 @@ begin
   if (select counts_as_visit from public.field_records where id = (r->>'id')::uuid) is not true then raise exception 'counts_as_visit_true'; end if;
   if (select collateral_types from public.lead_actions where lead_id = lead) <> array['단가표','브로슈어'] then raise exception 'lead_collateral'; end if;
   if (select metadata->>'fieldRecordId' from public.lead_actions where lead_id = lead) <> r->>'id' then raise exception 'lead_metadata'; end if;
+  -- 리드 영업 기록은 field_visit이다. 영업 성과 "연락"으로 세는 종류(LEAD_CONTACT_ACTION_TYPES)에는 들어가지 않는다.
+  if (select action_type from public.lead_actions where lead_id = lead) <> 'field_visit' then raise exception 'lead_action_type_not_field_visit'; end if;
+  if (select count(*) from public.lead_actions where lead_id = lead
+      and action_type = any (array['call','dm','visit','quote','sms','talktalk','email','fax'])) <> 0 then raise exception 'field_record_counted_as_contact'; end if;
   -- 같은 멱등 키는 새 기록을 만들지 않는다
   r := public.create_field_record_v1(c, a, null, 'placement', array['price_sheet','catalog'], cust, lead, null, 37.5665, 126.978, 12.5, now(), '문 앞에 두고 옴', 'idem-key-0001', photo, '합성 알바');
   if (r->>'reused')::boolean is not true then raise exception 'not_idempotent'; end if;
@@ -52,26 +61,29 @@ begin
   if (select result from public.lead_actions where id = (r->>'leadActionId')::uuid) not like '%방문 인정 안 됨%' then raise exception 'lead_no_photo_label'; end if;
   -- 영상만 있으면 사진 수 0 → 인정 안 됨. 영상 30초·50MB는 통과
   r := public.create_field_record_v1(c, a, null, 'visit', '{}', null, null, null, 37.5, 127.0, 5, now(), null, 'idem-key-0003',
-    '[{"kind":"video","storage_path":"c1/v.mp4","mime_type":"video/mp4","size_bytes":52428800,"duration_seconds":30}]', null);
+    '[{"kind":"video","storage_path":"00000000-0000-0000-0000-0000000000c1/field-records/v.mp4","mime_type":"video/mp4","size_bytes":52428800,"duration_seconds":30}]', null);
   if (r->>'countsAsVisit')::boolean or (select photo_count from public.field_records where id = (r->>'id')::uuid) <> 0 then raise exception 'video_only_counted'; end if;
   -- 사진 + 영상 → 사진 1장으로 인정
   r := public.create_field_record_v1(c, a, null, 'flyer', '{}', cust, null, null, 37.5, 127.0, 5, now(), null, 'idem-key-0004',
-    '[{"kind":"photo","storage_path":"c1/b.jpg","mime_type":"image/jpeg","size_bytes":10},{"kind":"video","storage_path":"c1/w.mp4","mime_type":"video/mp4","size_bytes":10,"duration_seconds":12.5}]', null);
+    '[{"kind":"photo","storage_path":"00000000-0000-0000-0000-0000000000c1/field-records/b.jpg","mime_type":"image/jpeg","size_bytes":10},{"kind":"video","storage_path":"00000000-0000-0000-0000-0000000000c1/field-records/w.mp4","mime_type":"video/mp4","size_bytes":10,"duration_seconds":12.5}]', null);
   if (r->>'countsAsVisit')::boolean is not true then raise exception 'photo_plus_video'; end if;
 end $t$;
 rollback;
 
 -- 거절 규칙(각각 실패해야 함)
 begin;
-create function pg_temp.expect_fail(p_name text, p_sql text) returns void language plpgsql as $f$
+create function pg_temp.expect_fail(p_name text, p_sql text, p_like text default '%') returns void language plpgsql as $f$
 begin
-  begin execute p_sql; exception when others then return; end;
+  begin execute p_sql; exception when others then
+    if sqlerrm like p_like and not (p_like = '%' and (sqlerrm like '%field_record_media_invalid%' or sqlerrm like '%field_record_actor_forbidden%')) then return; end if;
+    raise exception 'failed_for_wrong_reason: % -> %', p_name, sqlerrm;
+  end;
   raise exception 'should_have_failed: %', p_name;
 end $f$;
-select pg_temp.expect_fail('video_31s', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0101','[{"kind":"video","storage_path":"x","mime_type":"video/mp4","size_bytes":10,"duration_seconds":30.01}]',null) $q$);
-select pg_temp.expect_fail('video_51mb', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0102','[{"kind":"video","storage_path":"x","mime_type":"video/mp4","size_bytes":52428801,"duration_seconds":10}]',null) $q$);
-select pg_temp.expect_fail('video_no_duration', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0103','[{"kind":"video","storage_path":"x","mime_type":"video/mp4","size_bytes":10}]',null) $q$);
-select pg_temp.expect_fail('photo_9mb', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0104','[{"kind":"photo","storage_path":"x","mime_type":"image/jpeg","size_bytes":8388609}]',null) $q$);
+select pg_temp.expect_fail('video_31s', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0101','[{"kind":"video","storage_path":"00000000-0000-0000-0000-0000000000c1/field-records/x","mime_type":"video/mp4","size_bytes":10,"duration_seconds":30.01}]',null) $q$);
+select pg_temp.expect_fail('video_51mb', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0102','[{"kind":"video","storage_path":"00000000-0000-0000-0000-0000000000c1/field-records/x","mime_type":"video/mp4","size_bytes":52428801,"duration_seconds":10}]',null) $q$);
+select pg_temp.expect_fail('video_no_duration', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0103','[{"kind":"video","storage_path":"00000000-0000-0000-0000-0000000000c1/field-records/x","mime_type":"video/mp4","size_bytes":10}]',null) $q$);
+select pg_temp.expect_fail('photo_9mb', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0104','[{"kind":"photo","storage_path":"00000000-0000-0000-0000-0000000000c1/field-records/x","mime_type":"image/jpeg","size_bytes":8388609}]',null) $q$);
 select pg_temp.expect_fail('placement_without_types', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'placement','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0105','[]',null) $q$);
 select pg_temp.expect_fail('visit_with_types', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{quote}',null,null,null,37.5,127,5,now(),null,'idem-key-0106','[]',null) $q$);
 select pg_temp.expect_fail('bad_placement_type', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'placement','{business_card}',null,null,null,37.5,127,5,now(),null,'idem-key-0107','[]',null) $q$);
@@ -81,10 +93,20 @@ select pg_temp.expect_fail('accuracy_missing', $q$ select public.create_field_re
 select pg_temp.expect_fail('captured_missing', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,null,null,'idem-key-0111','[]',null) $q$);
 select pg_temp.expect_fail('memo_501', format($q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),%L,'idem-key-0112','[]',null) $q$, repeat('가', 501)));
 select pg_temp.expect_fail('cross_company_customer', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}','00000000-0000-0000-0000-0000000000b2',null,null,37.5,127,5,now(),null,'idem-key-0113','[]',null) $q$);
-select pg_temp.expect_fail('cross_company_lead', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c2','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,'00000000-0000-0000-0000-0000000000d1',null,37.5,127,5,now(),null,'idem-key-0114','[]',null) $q$);
+select pg_temp.expect_fail('cross_company_lead', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c2','00000000-0000-0000-0000-0000000000a2',null,'visit','{}',null,'00000000-0000-0000-0000-0000000000d1',null,37.5,127,5,now(),null,'idem-key-0114','[]',null) $q$);
 select pg_temp.expect_fail('eleven_media', format($q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0115',%L,null) $q$,
-  (select jsonb_agg(jsonb_build_object('kind','photo','storage_path','p'||g,'mime_type','image/jpeg','size_bytes',1)) from generate_series(1, 11) g)));
+  (select jsonb_agg(jsonb_build_object('kind','photo','storage_path','00000000-0000-0000-0000-0000000000c1/field-records/p'||g,'mime_type','image/jpeg','size_bytes',1)) from generate_series(1, 11) g)), '%field_record_media_invalid%');
 select pg_temp.expect_fail('short_idempotency_key', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'short','[]',null) $q$);
+
+-- 새 규칙: 저장 경로는 이 회사의 현장 기록 폴더 안, 기록자는 이 회사의 활성 구성원
+select pg_temp.expect_fail('media_other_company', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0401','[{"kind":"photo","storage_path":"00000000-0000-0000-0000-0000000000c2/field-records/a.jpg","mime_type":"image/jpeg","size_bytes":1}]',null) $q$, '%field_record_media_invalid%');
+select pg_temp.expect_fail('media_no_prefix', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0402','[{"kind":"photo","storage_path":"a.jpg","mime_type":"image/jpeg","size_bytes":1}]',null) $q$, '%field_record_media_invalid%');
+select pg_temp.expect_fail('media_other_folder', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0403','[{"kind":"photo","storage_path":"00000000-0000-0000-0000-0000000000c1/customer-attachments/a.jpg","mime_type":"image/jpeg","size_bytes":1}]',null) $q$, '%field_record_media_invalid%');
+select pg_temp.expect_fail('media_dotdot', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0404','[{"kind":"photo","storage_path":"00000000-0000-0000-0000-0000000000c1/field-records/../x.jpg","mime_type":"image/jpeg","size_bytes":1}]',null) $q$, '%field_record_media_invalid%');
+select pg_temp.expect_fail('actor_other_company', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a2',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0405','[]',null) $q$, '%field_record_actor_forbidden%');
+select pg_temp.expect_fail('actor_inactive', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a3',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0406','[]',null) $q$, '%field_record_actor_forbidden%');
+select pg_temp.expect_fail('actor_unknown_user', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000ff',null,'visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0407','[]',null) $q$, '%field_record_actor_forbidden%');
+select pg_temp.expect_fail('actor_member_id_of_other_company', $q$ select public.create_field_record_v1('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1','00000000-0000-0000-0000-0000000000e2','visit','{}',null,null,null,37.5,127,5,now(),null,'idem-key-0408','[]',null) $q$, '%field_record_actor_forbidden%');
 rollback;
 
 -- 권한: anon/authenticated는 읽기·쓰기·함수 실행 모두 거부
