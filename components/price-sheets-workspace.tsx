@@ -3,7 +3,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
-import { calculatePrice } from "@/domains/pricing/price-rules";
+import { calculatePrice, PRICE_ROUNDING_UNITS } from "@/domains/pricing/price-rules";
 import { templatePrice, type MarginTemplate } from "@/domains/pricing/margin-template";
 import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/manage-price-sheets";
 
@@ -122,11 +122,12 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
     const margin = Number(defaultMargin);
     const rounding = Number(defaultRounding);
     if (!Number.isFinite(margin) || margin < 0) return null;
-    try { return { cost: 10000, price: calculatePrice(10000, margin, rounding) }; } catch { return null; }
+    try { return { cost: 1833, price: calculatePrice(1833, margin, rounding) }; } catch { return null; }
   }, [defaultMargin, defaultRounding]);
 
   if (!state) return <div className="space-y-3">{error ? <ErrorState message={error} /> : <LoadingState label="불러오는 중…" />}</div>;
 
+  const deferFifty = Number(defaultRounding) === 50 || state.defaultRounding === 50;
   const zeroMargin = state.defaultMargin === 0;
   return <div className="space-y-4" aria-busy={busy}>
     {error && <ErrorState message={error} />}
@@ -150,15 +151,15 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
       <PricingSheetFromPrices busy={busy} companyId={companyId} folder={folder} />
       </div>
       {zeroMargin ? <p className="mt-1 text-sm font-bold text-amber-900">지금 기본 마진이 0%라 판매가가 매입가와 같습니다. 먼저 기본 마진을 정해 주세요.</p> : null}
-      {showDefault || zeroMargin ? <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={(e) => { e.preventDefault(); void run([{ action: "defaults", margin: Number(defaultMargin), rounding: Number(defaultRounding) }], `기본 마진 ${defaultMargin}%를 저장하고 판매가에 반영했습니다.`); }}>
+      {showDefault || zeroMargin ? <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={(e) => { e.preventDefault(); void run([{ action: "defaults", margin: Number(defaultMargin), rounding: Number(defaultRounding) }], deferFifty ? "설정을 저장했습니다. 변경 대기 건을 확인한 뒤 지금 반영을 눌러 주세요." : `기본 마진 ${defaultMargin}%를 저장하고 판매가에 반영했습니다.`, !deferFifty); }}>
         <label className="text-sm font-bold">기본 마진
           <span className="mt-1 flex items-center gap-1"><input aria-label="기본 마진율" className={`${box} w-24 text-right text-lg font-black`} inputMode="decimal" max="1000" min="0" onChange={(e) => setDefaultMargin(e.target.value)} required step="0.01" type="number" value={defaultMargin} /><span className="text-lg font-black">%</span></span>
         </label>
         <label className="text-sm font-bold">끝자리 올림
-          <select className={`${box} mt-1 block`} onChange={(e) => setDefaultRounding(e.target.value)} value={defaultRounding}>{[1, 10, 100].map((n) => <option key={n} value={n}>{n}원 단위</option>)}</select>
+          <select aria-label="끝자리 올림" className={`${box} mt-1 block min-h-11`} onChange={(e) => setDefaultRounding(e.target.value)} value={defaultRounding}>{PRICE_ROUNDING_UNITS.map((n) => <option key={n} value={n}>{n}원 단위 올림</option>)}</select>
         </label>
         <div className="flex flex-wrap gap-1.5">{[5, 10, 15, 20, 25, 30].map((n) => <button className={`rounded-full px-3 py-1.5 text-sm font-bold ${Number(defaultMargin) === n ? "bg-teal-700 text-white" : "bg-slate-100"}`} key={n} onClick={() => setDefaultMargin(String(n))} type="button">{n}%</button>)}</div>
-        <button className="h-10 rounded-md bg-teal-700 px-4 text-sm font-black text-white disabled:bg-slate-300" disabled={busy || defaultMargin === ""} type="submit">저장하고 판매가 반영</button>
+        <button className="min-h-11 rounded-md bg-teal-700 px-4 text-sm font-black text-white disabled:bg-slate-300" disabled={busy || defaultMargin === ""} type="submit">{deferFifty ? "설정 저장 · 판매가 반영 대기" : "저장하고 판매가 반영"}</button>
       </form> : null}
       {(showDefault || zeroMargin) && sample ? <p className="mt-2 text-sm text-slate-700">예시: 매입가 <strong>{formatWon(sample.cost)}</strong> → 판매가 <strong className="text-teal-800">{formatWon(sample.price)}</strong> (이익 {formatWon(sample.price - sample.cost)})</p> : null}
     </section>

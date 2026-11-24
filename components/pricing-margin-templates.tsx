@@ -2,6 +2,7 @@
 import { InfoTooltip } from "@/components/info-tooltip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { calculatePrice, PRICE_ROUNDING_UNITS } from "@/domains/pricing/price-rules";
 import type { PriceState } from "@/domains/pricing/price-rules";
 import { averageDeltaPercent, previewTemplate, suggestTemplateName, type MarginTemplate } from "@/domains/pricing/margin-template";
 import { useConfirm } from "./ui/confirm-dialog";
@@ -71,6 +72,7 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
   const shown = useMemo(() => (byStores ? [...templates].sort((a, b) => (b.storeCount ?? 0) - (a.storeCount ?? 0)) : templates), [templates, byStores]);
   const avg = useMemo(() => new Map(templates.map((tp) => [tp.id, averageDeltaPercent(asTemplate(tp), state.items)])), [templates, state.items]);
   const avgLabel = (id: string) => { const v = avg.get(id); return v === null || v === undefined ? "-" : `${v > 0 ? "+" : ""}${v}%`; };
+  const roundingSample = useMemo(() => { try { return draft ? calculatePrice(1833, draft.margin, draft.rounding) : null; } catch { return null; } }, [draft]);
   const preview = useMemo(() => (draft ? previewTemplate({ margin: draft.margin, rounding: draft.rounding, categories: draft.categories, items: [] }, state.items) : { changed: 0, average: null }), [draft, state.items]);
   const majors = useMemo(() => Array.from(new Set(state.items.map((i) => i.category.split(">")[0].trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ko")), [state.items]);
   const showPrices = (catalog: string) => {
@@ -119,7 +121,8 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
       <div className="grid gap-2 sm:grid-cols-3">
         <label className="text-sm font-bold">이름<input aria-label="카탈로그 이름" className={`${field} mt-1 w-full`} maxLength={60} onChange={(e) => setDraft({ ...draft, name: e.target.value })} required value={draft.name} /></label>
         <label className="text-sm font-bold">기본 마진(%)<input aria-label="카탈로그 기본 마진" className={`${field} mt-1 w-full text-right`} max="1000" min="0" onChange={(e) => setDraft({ ...draft, margin: Number(e.target.value) })} required step="0.01" type="number" value={draft.margin} /></label>
-        <label className="text-sm font-bold">끝자리 올림<select className={`${field} mt-1 w-full`} onChange={(e) => setDraft({ ...draft, rounding: Number(e.target.value) })} value={draft.rounding}>{[1, 10, 100].map((v) => <option key={v} value={v}>{v}원</option>)}</select></label>
+        <label className="text-sm font-bold">끝자리 올림<select className={`${field} mt-1 w-full`} onChange={(e) => setDraft({ ...draft, rounding: Number(e.target.value) })} value={draft.rounding}>{PRICE_ROUNDING_UNITS.map((v) => <option key={v} value={v}>{v}원 단위 올림</option>)}</select></label>
+        {roundingSample !== null && <p className="text-sm">예시: 매입가 1,833원 → {roundingSample.toLocaleString("ko-KR")}원</p>}
       </div>
       <div className="space-y-1" aria-label="분류별 마진">
         <p className="flex items-center gap-1 text-sm font-bold">대분류 마진 <InfoTooltip size="sm" text="가격은 이 순서로 정해집니다: 행사 → 매장 개별·견적 수락 가격 → 고정 가격·품목 마진 → 카탈로그 대분류 → 분류 → 기본 마진. 비워 두면 기본 마진을 따라갑니다." /></p>
