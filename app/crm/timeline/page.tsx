@@ -554,6 +554,7 @@ export default function CrmTimelinePage() {
   const [isBusinessStatusChecking, setIsBusinessStatusChecking] = useState(false);
   const [businessStatusMessage, setBusinessStatusMessage] = useState("");
   const [activationUrl, setActivationUrl] = useState("");
+  const [inviteStatus, setInviteStatus] = useState<{ openCount: number; lastOpenedAt: string | null; signedUp: boolean; expired: boolean } | null>(null);
   const [activationMessage, setActivationMessage] = useState("");
   const [isCreatingActivation, setIsCreatingActivation] = useState(false);
   const [isNoteSaving, setIsNoteSaving] = useState(false);
@@ -1146,6 +1147,21 @@ export default function CrmTimelinePage() {
     }
   }
 
+  // CX-142: 초대 링크 열람 현황(기능을 켠 회사만 응답한다. 꺼져 있으면 아무것도 보이지 않는다).
+  function refreshInviteStatus(customerId: string) {
+    fetchWithTimeout(`/api/store/accounts/provision?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" }, 12000)
+      .then(async (response) => setInviteStatus(response.ok ? await response.json() : null))
+      .catch(() => setInviteStatus(null));
+  }
+  async function shareActivationLink() {
+    if (!activationUrl) return;
+    const text = `${selectedCustomer.customerName || "매장"} 점주님, 카카오로 간단히 가입하고 주문하세요.`;
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") { await navigator.share({ title: "카카오 초대", text, url: activationUrl }); return; }
+    } catch { return; /* 공유창을 닫은 경우 */ }
+    await copyActivationLink();
+  }
+
   async function copyActivationLink(url = activationUrl) {
     if (!url) return;
     if (await copyText(url)) {
@@ -1177,6 +1193,7 @@ export default function CrmTimelinePage() {
       }
       setActivationUrl(payload.activationUrl);
       await copyActivationLink(payload.activationUrl);
+      refreshInviteStatus(selectedCustomer.id);
     } catch (error) {
       setActivationMessage(error instanceof Error ? error.message : "점주 개통 링크를 만들지 못했습니다.");
     } finally {
@@ -1867,7 +1884,13 @@ export default function CrmTimelinePage() {
                         <Copy className="h-4 w-4" />
                         링크 복사
                       </button>
+                      <button className="maju-button-secondary min-h-11 w-full shrink-0 sm:w-auto" onClick={() => void shareActivationLink()} type="button">카카오톡 공유</button>
                     </div>
+                  ) : null}
+                  {activationUrl && inviteStatus ? (
+                    <p className="mt-2 text-xs font-bold text-teal-900" role="status">
+                      {inviteStatus.signedUp ? "가입 완료" : inviteStatus.expired ? "초대 기간 만료" : `개통 시작 ${inviteStatus.openCount}회${inviteStatus.lastOpenedAt ? ` · 마지막 ${new Date(inviteStatus.lastOpenedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}` : " · 아직 시작 전"}`}
+                    </p>
                   ) : null}
                 </div>
               ) : null}

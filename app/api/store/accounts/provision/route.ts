@@ -4,6 +4,7 @@ import { prepareStoreOwnerActivationForCustomer } from "@/application/organizati
 import { getCustomerSession, storeMemberSessionEnabled } from "@/lib/auth";
 import { getStorePublicBaseUrl } from "@/lib/store/07-store-owner-provisioning";
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
+import { readInviteStatus } from "@/lib/store/07-store-signup-link";
 
 export const dynamic = "force-dynamic";
 
@@ -26,4 +27,16 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ message: "Store activation unavailable" }, { status: 503 });
   }
+}
+
+// CX-142: 초대 링크 열람 현황(몇 번·언제 열었고 가입했는지). 기능을 켠 회사의 대표·관리자만.
+export async function GET(request: NextRequest) {
+  const session = await getCustomerSession();
+  if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  const customerId = request.nextUrl.searchParams.get("customerId") || "";
+  if (!["owner", "manager"].includes(session.workspaceRole) || !/^[0-9a-f-]{36}$/i.test(customerId)) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+  try {
+    const status = await readInviteStatus(session.companyId, customerId);
+    return status ? NextResponse.json(status, { headers: { "Cache-Control": "private, no-store" } }) : NextResponse.json({ message: "Not found" }, { status: 404 });
+  } catch { return NextResponse.json({ message: "Unavailable" }, { status: 503 }); }
 }

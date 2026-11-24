@@ -1,3 +1,4 @@
+import { finalizeStoreSignup } from "@/lib/store/07-store-signup-link";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStoreMemberInvitationProof, getStoreOwnerActivationProof,
@@ -104,6 +105,7 @@ export async function GET(request: NextRequest) {
         return redirectStore(request.url, "business_status_verification_required");
       const activated = await activateStoreOwner({ authUserId, businessRegistrationNumber: activation.businessRegistrationNumber,
         termsAcceptedAt: proof.termsAcceptedAt, token: proof.token, verificationRequestId: randomUUID(), verifiedAt: new Date().toISOString() });
+      await finalizeStoreSignup({ companyId: activated.companyId, storeAccountId: activated.storeAccountId, route: "invite", token: proof.token });
       if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
       if (proof.returnTo) return NextResponse.redirect(new URL(proof.returnTo, request.url));
       return redirectStoreScope(request.url, activated.companyId, activated.storeAccountId);
