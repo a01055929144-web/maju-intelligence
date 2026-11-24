@@ -32,7 +32,7 @@ const nonce = "a".repeat(32);
 beforeEach(() => {
   vi.clearAllMocks(); vi.stubEnv("STORE_LINK_SECRET", "synthetic-store-link-secret-over-32-characters");
   mocks.session.mockResolvedValue({ authUserId: "verified-user" });
-  mocks.active.mockResolvedValue(true); mocks.allowed.mockReturnValue(true); mocks.feature.mockImplementation((feature: string) => feature !== "STORE_RECEIVED_DOCUMENTS_HOME");
+  mocks.active.mockResolvedValue(true); mocks.allowed.mockReturnValue(true); mocks.feature.mockImplementation((feature: string) => feature !== "STORE_RECEIVED_DOCUMENTS_HOME" && feature !== "STORE_RELATION_HOME");
   mocks.settlementAccount.mockResolvedValue(null);
   mocks.db.mockImplementation(async (path: string) => {
     if (path.startsWith("store_account_members?")) return [{ company_id: companyId, store_account_id: storeAccountId, role: "owner", store_accounts: { customer_id: customerId } }];

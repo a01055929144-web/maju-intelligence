@@ -11,6 +11,7 @@ import { isStoreAccountRole } from "../../domains/organization/store-cost-access
 import { getStoreMemberContext } from "./07-store-member-context";
 import { hasActiveStoreMembership } from "./08-store-cost-access";
 import { getStoreSettlementAccount, type StoreSettlementAccount } from "./07-store-settlement-account";
+import { readStoreRelationHome, relationHomeEnabled, type StoreRelation } from "./07-store-relation-home";
 
 type Membership = { company_id: string; store_account_id: string; role: string; store_accounts: { customer_id: string } | null };
 type StoreLink = { id: string; token_nonce: string; token_hash: string; document_version_id: string; expires_at: string; can_order: boolean };
@@ -28,6 +29,8 @@ export type StorePortalAccount = {
   canManageAddress: boolean;
   settlementAccount?: StoreSettlementAccount;
   documents: Array<{ title: string; industry?: string; kind: "sheet" | "quote"; href: string; canOrder: boolean; validUntil: string; itemCount?: number }>;
+  /** CX-141: 관계 기준 홈(플래그 켠 회사만). 확인 전이면 가격 없는 상품 목록만 담는다. */
+  relation?: StoreRelation;
 };
 
 export async function hasAllowedStorePortalMembership(authUserId: string, companyId?: string) {
@@ -54,7 +57,8 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
     isStoreMemberCompanyAllowlisted(row.company_id) && isFeatureEnabled("PRICING", row.company_id) &&
     isFeatureEnabled("STORE_ORDERING", row.company_id)).map(async row => {
     const company = encodeURIComponent(row.company_id), customer = encodeURIComponent(row.store_accounts!.customer_id);
-    const receivedHome = isFeatureEnabled("STORE_RECEIVED_DOCUMENTS_HOME", row.company_id);
+    const relationHome = relationHomeEnabled(row.company_id);
+    const receivedHome = isFeatureEnabled("STORE_RECEIVED_DOCUMENTS_HOME", row.company_id) || relationHome;
     const [customers, links, companies, catalogs] = await Promise.all([
       supabaseRequest<Array<{ customer_name: string }>>(
         `normalized_customers?company_id=eq.${company}&id=eq.${customer}&select=customer_name&limit=1`),
@@ -69,9 +73,6 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
         `&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=id,token_nonce,token_hash&order=issued_at.desc&limit=1`
       ) : [],
     ]);
-    const catalog = catalogs[0];
-    const catalogToken = catalog ? issueStoreLinkToken(catalog.id, catalog.token_nonce) : null;
-    const catalogHref = catalogToken && catalogToken.hash === catalog?.token_hash ? `/store?view=order#${catalogToken.token}` : undefined;
     const versions = links.length ? await supabaseRequest<DocumentVersion[]>(
       `pricing_document_versions?company_id=eq.${company}&id=in.(${links.map(link => encodeURIComponent(link.document_version_id)).join(",")})` +
       `&published_at=not.is.null&select=id,content&limit=20`
@@ -87,13 +88,25 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
         canOrder: link.can_order && content.showPrice && content.validUntil >= new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }),
         validUntil: content.validUntil, ...(receivedHome && Array.isArray(content.lines) ? { itemCount: content.lines.filter(line => line.visible).length } : {}) }];
     });
-    documents.push(...await readStorePortalSourceDocuments(row.company_id,row.store_account_id,row.store_accounts!.customer_id));
+    let relation: StoreRelation | undefined, relationCatalog: Awaited<ReturnType<typeof readStoreRelationHome>>["catalog"] = null;
+    if (relationHome) {
+      try {
+        const home = await readStoreRelationHome({ companyId: row.company_id, storeAccountId: row.store_account_id, customerId: row.store_accounts!.customer_id,
+          authUserId: session.authUserId, knownVersionIds: new Set(links.map(link => link.document_version_id)) });
+        relation = home.relation; relationCatalog = home.catalog;
+        const have = new Set(documents.map(document => document.href));
+        documents.push(...home.documents.filter(document => !have.has(document.href)));
+      } catch { relation = undefined; /* 관계 홈이 실패해도 기존 홈은 그대로 */ }
+    } else documents.push(...await readStorePortalSourceDocuments(row.company_id,row.store_account_id,row.store_accounts!.customer_id));
+    const catalog = catalogs[0] ?? relationCatalog ?? undefined;
+    const catalogToken = catalog ? issueStoreLinkToken(catalog.id, catalog.token_nonce) : null;
+    const catalogHref = catalogToken && catalogToken.hash === catalog?.token_hash ? `/store?view=order#${catalogToken.token}` : undefined;
     const canManage = row.role === "owner" || row.role === "manager";
     const settlementAccount = await getStoreSettlementAccount({ companyId: row.company_id, storeAccountId: row.store_account_id });
     const businessType = companies[0]?.business_type?.trim() || "";
     return { companyId: row.company_id, storeAccountId: row.store_account_id, ...(businessType ? { businessType } : {}),
       ...(receivedHome && companies[0]?.name ? { companyName: companies[0].name } : {}),
-      ...(catalogHref ? { catalogHref } : {}),
+      ...(catalogHref ? { catalogHref } : {}), ...(relation ? { relation } : {}),
       customerName: customers[0]?.customer_name || "이름 없는 매장", documents,
       ...(settlementAccount ? { settlementAccount } : {}),
       hasCostAccess: isFeatureEnabled("STORE_COSTS", row.company_id), canManageMembers: canManage,

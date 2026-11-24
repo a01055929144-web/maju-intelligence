@@ -11,7 +11,7 @@ type ChangeRow = { id: string; store_profile_id: string; actor_member_id: string
 export type AdminStoreDirectoryItem = {
   id: string; storeName: string; businessNumber: string | null; businessStatus: string; address: string | null;
   status: string; origin: string; duplicateSuspected: boolean;
-  connections: Array<{ id: string; companyName: string; customerName: string; status: string; reviewStatus: string | null }>;
+  connections: Array<{ id: string; companyId: string; companyName: string; customerName: string; status: string; reviewStatus: string | null }>;
   members: Array<{ id: string; name: string; phone: string | null; email: string | null; role: string; status: string }>;
   changes: Array<{ id: string; actorName: string; fields: string[]; createdAt: string }>;
 };
@@ -38,7 +38,7 @@ export async function getAdminStoreDirectory(): Promise<AdminStoreDirectoryItem[
     status: profile.status, origin: profile.origin,
     duplicateSuspected: duplicateIds.has(profile.id),
     connections: accounts.filter((row) => row.store_profile_id === profile.id).map((row) => ({
-      id: row.id, companyName: companyNames.get(row.company_id) || "알 수 없는 유통사",
+      id: row.id, companyId: row.company_id, companyName: companyNames.get(row.company_id) || "알 수 없는 유통사",
       customerName: customerNames.get(row.customer_id) || "연결 매출처 미확인", status: row.status,
       reviewStatus: row.customer_review_status,
     })),
@@ -58,8 +58,8 @@ const fixtureStores: AdminStoreDirectoryItem[] = [
     businessStatus: "active", address: "서울특별시 중구 합성로 10 1층", status: "active", origin: "direct",
     duplicateSuspected: true,
     connections: [
-      { id: "a1", companyName: "합성 유통사 A", customerName: "중앙식당 본점", status: "active", reviewStatus: null },
-      { id: "a2", companyName: "합성 유통사 B", customerName: "합성 중앙식당", status: "active", reviewStatus: "needs_review" },
+      { id: "a1", companyId: "c1", companyName: "합성 유통사 A", customerName: "중앙식당 본점", status: "active", reviewStatus: null },
+      { id: "a2", companyId: "c2", companyName: "합성 유통사 B", customerName: "합성 중앙식당", status: "active", reviewStatus: "needs_review" },
     ],
     members: [{ id: "m1", name: "합성 점주", phone: "010-0000-0000", email: "owner@example.test", role: "owner", status: "active" }],
     changes: [{ id: "e1", actorName: "합성 점주", fields: ["storeName", "baseAddress"], createdAt: "2026-11-17T00:00:00Z" }],
