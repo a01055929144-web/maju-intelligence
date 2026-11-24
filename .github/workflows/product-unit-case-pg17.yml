@@ -1,0 +1,29 @@
+name: Product unit case PG17
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/product-unit-case-pg17.yml'
+      - 'docs/sql-drafts/2026-11-24-product-unit-case-normalization*.sql'
+permissions:
+  contents: read
+jobs:
+  pg17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: product_unit_case_test
+    steps:
+      - uses: actions/checkout@v5
+      - run: createdb product_unit_case_test
+      - run: psql -X --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/2026-11-24-product-unit-case-normalization.pg17.test.sql
