@@ -161,6 +161,15 @@ end $t$;
 -- 8. down: 관리자 초대 기록이 남아 있으면 중단, 정리 후에는 원래 함수로 복귀(탈퇴한 거래처 재초대는 다시 거절)
 select public.admin_change_store_connection_v1('10000000-0000-4000-8000-000000000001', (select id from public.store_accounts where customer_id = '20000000-0000-4000-8000-000000000001'), repeat('d', 64), 'close');
 select public.admin_prepare_store_owner_activation_v1('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', repeat('d', 64), repeat('f', 64));
+-- 같은 매장에 사용 전 요청은 하나만(부분 고유 인덱스): 열린 요청이 있을 때 직접 하나 더 넣으면 거절
+do $u$ declare ok boolean := false; begin
+  begin insert into public.store_owner_activation_requests(company_id,customer_id,invite_token_hash,prepared_by_admin_key,store_account_id)
+    select company_id, customer_id, repeat('7', 64), repeat('d', 64), store_account_id from public.store_owner_activation_requests where invite_token_hash = repeat('f', 64);
+  exception when unique_violation then ok := true; end;
+  if not ok then raise exception 'second_open_request_allowed'; end if;
+  -- 재초대로 한 매장에 요청 행이 여러 개(사용 완료 포함) 남아 있다
+  if (select count(*) from public.store_owner_activation_requests where customer_id = '20000000-0000-4000-8000-000000000001') < 4 then raise exception 'request_history_missing'; end if;
+end $u$;
 \set ON_ERROR_STOP off
 \ir 2026-11-25-CX-144-u0-admin-store-connection.down.sql
 rollback;
@@ -169,6 +178,15 @@ do $b$ begin
   if to_regprocedure('public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid)') is null then raise exception 'down_ran_with_admin_invite_rows'; end if;
 end $b$;
 delete from public.store_owner_activation_requests where prepared_by_admin_key is not null;
+-- 같은 매장의 사용 완료 요청이 여러 행이면 되돌릴 수 없다 → 정리 전에는 중단, 가장 최근 1행만 남기면 통과
+\set ON_ERROR_STOP off
+\ir 2026-11-25-CX-144-u0-admin-store-connection.down.sql
+rollback;
+\set ON_ERROR_STOP on
+do $b2$ begin
+  if to_regprocedure('public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid)') is null then raise exception 'down_ran_with_reopened_request_rows'; end if;
+end $b2$;
+delete from public.store_owner_activation_requests where id in (select id from (select id, row_number() over (partition by company_id, store_account_id order by prepared_at desc, id) as rn from public.store_owner_activation_requests) x where rn > 1);
 \ir 2026-11-25-CX-144-u0-admin-store-connection.down.sql
 do $d$ declare ok boolean := false; begin
   if to_regprocedure('public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid)') is not null
@@ -178,4 +196,5 @@ do $d$ declare ok boolean := false; begin
   exception when others then ok := sqlerrm = 'store_account_exists'; end;
   if not ok then raise exception 'down_did_not_restore_original_prepare'; end if;
   if (select count(*) from public.store_accounts where customer_id = '20000000-0000-4000-8000-000000000001') <> 1 then raise exception 'down_touched_accounts'; end if;
+  if not exists (select 1 from pg_constraint where conname = 'store_owner_activation_requests_company_id_store_account_id_key') or exists (select 1 from pg_indexes where indexname = 'store_owner_activation_one_open_per_account') then raise exception 'down_did_not_restore_unique_rule'; end if;
 end $d$;

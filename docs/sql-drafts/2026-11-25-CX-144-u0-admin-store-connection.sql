@@ -30,6 +30,11 @@ alter table public.store_owner_activation_requests add constraint store_owner_ac
     and num_nonnulls(document_id,document_version_id,share_link_id)=3
     and num_nonnulls(store_name,representative_name,address,phone,business_registration_number) in (0,5)));
 
+-- 같은 매장 행을 다시 여는 재초대는 이전 요청 행(사용 완료·취소)이 남으므로, 매장당 고유 규칙을 "사용 전·취소 전인 요청만 하나"로 좁힌다.
+alter table public.store_owner_activation_requests drop constraint store_owner_activation_requests_company_id_store_account_id_key;
+create unique index store_owner_activation_one_open_per_account on public.store_owner_activation_requests(company_id,store_account_id)
+  where consumed_at is null and cancelled_at is null;
+
 create function public.prepare_store_owner_activation_core_v1(
   p_company_id uuid,p_customer_id uuid,p_prepared_by uuid,p_admin_key text,p_invite_token_hash text
 ) returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
