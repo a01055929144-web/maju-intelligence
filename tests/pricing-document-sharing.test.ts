@@ -583,6 +583,20 @@ it("CX-140: a second public prepare for the same document returns the existing l
   const a = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, idempotencyKey: "40000000-0000-4000-8000-00000000000a" });
   expect(a.shareLinkId).toBeTruthy(); expect(links.filter(l => l.lead_id === lead)).toHaveLength(1);
 });
+it("CX-140: reusing a public link extends its expiry with the flag, and a stale expired one asks for revocation without it", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const first = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  links[0].expires_at = "2026-01-01T00:00:00Z";
+  const again = { ...prepare, leadId: null, idempotencyKey: "40000000-0000-4000-8000-00000000000b" };
+  await expect(service.execute(scope, again)).rejects.toMatchObject({ status: 409 });
+  vi.stubEnv("FEATURE_COMPANY_LINK_UNIFY_COMPANY_IDS", company);
+  const reused = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, again);
+  expect(reused.shareLinkId).toBe(first.shareLinkId); expect(reused.expiresAt).toBe(publicDocumentLinkExpiry(content.validUntil));
+  expect(links).toHaveLength(1); expect(links[0].expires_at).toBe(publicDocumentLinkExpiry(content.validUntil));
+  links[0].revoked_at = new Date().toISOString();
+  const fresh = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...again, idempotencyKey: "40000000-0000-4000-8000-00000000000c" });
+  expect(fresh.shareLinkId).not.toBe(first.shareLinkId);
+});
 it("CX-140: with the flag a public link follows the latest version and ends by that version's date with contact guidance", async () => {
   vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true"); vi.stubEnv("FEATURE_COMPANY_LINK_UNIFY_COMPANY_IDS", company);
   inquiryBody = JSON.stringify({ publicContactEnabled: true, contactPhone: "02-1234-5678", contactLabel: "영업팀" });

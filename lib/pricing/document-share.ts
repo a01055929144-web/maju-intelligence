@@ -72,15 +72,26 @@ export async function limitDocumentShare(company: string, identity: string, acti
   if (result === "rate_limited") throw new DocumentSendError("요청이 많습니다. 잠시 후 다시 시도해 주세요.", 429);
   if (result !== "allowed") throw new DocumentSendError("요청을 확인하지 못했습니다. 다시 시도해 주세요.", 503);
 }
+/** 회수되지 않은 공개 링크(만료일은 보지 않는다 — 만료는 최신 게시본을 따라 연장되고, 새 링크는 회수한 뒤에만 만든다). */
 async function activePublicLink(company: string, documentId: string) {
-  const now = encodeURIComponent(new Date().toISOString());
   const rows = await supabaseRequest<ShareRow[]>(path("pricing_document_share_links", company,
-    `document_id=eq.${documentId}&lead_id=is.null&send_id=is.null&revoked_at=is.null&expires_at=gt.${now}&select=${shareFields}&order=created_at.asc&limit=1`));
+    `document_id=eq.${documentId}&lead_id=is.null&send_id=is.null&revoked_at=is.null&select=${shareFields}&order=created_at.asc&limit=1`));
   return rows[0] ?? null;
 }
-function reusedShare(row: ShareRow): PreparedDocumentShare {
+async function reusedShare(row: ShareRow, version: DocumentVersion): Promise<PreparedDocumentShare> {
+  let expiresAt = row.expires_at;
+  const wanted = publicDocumentLinkExpiry(version.content.validUntil);
+  if (isFeatureEnabled("COMPANY_LINK_UNIFY", row.company_id)) {
+    // 새 게시본의 기간에 맞춰 같은 링크의 만료일만 늘린다(줄이지는 않는다).
+    if (Date.parse(wanted) > Date.parse(expiresAt)) {
+      await supabaseRequest(path("pricing_document_share_links", row.company_id, `id=eq.${row.id}&revoked_at=is.null`),
+        { method: "PATCH", body: JSON.stringify({ expires_at: wanted }) });
+      expiresAt = wanted;
+    }
+  } else if (Date.parse(expiresAt) <= Date.now())
+    throw new DocumentSendError("기간이 지난 공개 링크가 있습니다. 링크 관리에서 회수한 뒤 새로 만들어 주세요.", 409);
   return { shareLinkId: row.id, sendId: null, documentId: row.document_id, documentVersionId: row.document_version_id,
-    publicUrl: publicUrl(row), expiresAt: row.expires_at, deliveryRecorded: false };
+    publicUrl: publicUrl(row), expiresAt, deliveryRecorded: false };
 }
 export async function prepareDocumentShare(scope: DocumentScope, input: PrepareDocumentShare): Promise<PreparedDocumentShare> {
   enabled(scope);
@@ -106,16 +117,16 @@ export async function prepareDocumentShare(scope: DocumentScope, input: PrepareD
   const expected = { company_id: scope.companyId, document_id: version.documentId, document_version_id: version.id,
     lead_id: input.leadId, idempotency_key: input.idempotencyKey, created_by_key: scope.actor, ttl_days: input.ttlDays };
   // CX-140: 문서당 활성 공개 링크 1개. 이미 있으면 새로 만들지 않고 가장 오래된(이미 퍼진) 링크를 돌려준다.
-  if (!existing && input.leadId === null) { const active = await activePublicLink(scope.companyId, version.documentId); if (active) return reusedShare(active); }
+  if (!existing && input.leadId === null) { const active = await activePublicLink(scope.companyId, version.documentId); if (active) return reusedShare(active, version); }
   if (!existing) try { await supabaseRequest("pricing_document_share_links?on_conflict=company_id,idempotency_key", {
     method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
     body: JSON.stringify({ ...expected, id, token_nonce: issued.nonce, token_hash: issued.hash,
       preview_id: previewId, preview_title: preview?.title || null, preview_description: preview?.description || null }),
   }); } catch (error) {
-    // 동시에 만들면 DB 트리거(share_public_link_exists)가 한쪽을 막는다 → 먼저 만들어진 링크를 돌려준다.
-    const active = input.leadId === null && error instanceof Error && /share_public_link_exists/.test(error.message) ? await activePublicLink(scope.companyId, version.documentId) : null;
+    // 동시에 만들면 DB 부분 unique 인덱스가 한쪽을 막는다 → 먼저 만들어진 링크를 돌려준다.
+    const active = input.leadId === null && error instanceof Error && /pricing_public_share_link_one_per_document_uq|duplicate key|23505/.test(error.message) ? await activePublicLink(scope.companyId, version.documentId) : null;
     if (!active) throw error;
-    return reusedShare(active);
+    return reusedShare(active, version);
   }
   const saved = existing || (await supabaseRequest<ShareRow[]>(keyPath))[0];
   if (!saved) throw new Error("Share preparation unconfirmed");
