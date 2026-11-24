@@ -1,4 +1,5 @@
 import { calculatePriceForBasis } from "../pricing/price-rules";
+import { lineAmounts } from "../pricing/vat-split";
 
 export const QUOTE_MARGIN_PRESETS = [10, 12, 15] as const;
 export type QuoteMarginPreset = (typeof QUOTE_MARGIN_PRESETS)[number];
@@ -68,17 +69,15 @@ export function calculateQuoteTotals(lines: QuoteLine[]) {
   );
 }
 
-export function calculateQuoteTaxLine(unitPrice: number, quantity: number, taxType: QuoteTaxType) {
+export function calculateQuoteTaxLine(unitPrice: number, quantity: number, taxType: QuoteTaxType, priceIncludesTax = false) {
   const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
-  const supplyAmount = Math.round(sanitizeMoney(unitPrice) * safeQuantity);
-  const taxAmount = taxType === "taxable" ? Math.round(supplyAmount * 0.1) : 0;
-  return { supplyAmount, taxAmount, totalAmount: supplyAmount + taxAmount };
+  return lineAmounts(Math.round(sanitizeMoney(unitPrice) * safeQuantity), taxType, priceIncludesTax);
 }
 
-export function calculateQuoteTaxTotals(lines: Array<{ quantity: number; taxType: QuoteTaxType; unitPrice: number }>) {
+export function calculateQuoteTaxTotals(lines: Array<{ priceIncludesTax?: boolean; quantity: number; taxType: QuoteTaxType; unitPrice: number }>) {
   return lines.reduce(
     (total, line) => {
-      const amounts = calculateQuoteTaxLine(line.unitPrice, line.quantity, line.taxType);
+      const amounts = calculateQuoteTaxLine(line.unitPrice, line.quantity, line.taxType, line.priceIncludesTax === true);
       if (line.taxType === "taxable") total.taxableSupplyAmount += amounts.supplyAmount;
       else total.exemptSupplyAmount += amounts.supplyAmount;
       total.taxAmount += amounts.taxAmount;

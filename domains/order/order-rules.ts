@@ -1,4 +1,6 @@
 /** Customer-facing order rules. Dates without a time are always KST calendar dates. */
+import { lineAmounts } from "../pricing/vat-split";
+
 export type MinimumOrderPolicy = "block" | "fee" | "notice";
 export type HolidayRule =
   | { kind: "weekly"; weekday: number }
@@ -110,14 +112,13 @@ export function summarizeOrder(lines: readonly OrderLineInput[], policy: Deliver
     if (!Number.isSafeInteger(line.unitPrice) || line.unitPrice < 0 || line.unitPrice > 1e12)
       throw new Error("단가를 확인해 주세요.");
     const gross = Math.round(line.quantity * line.unitPrice);
-    const supply = line.priceIncludesTax && line.taxType === "taxable"
-      ? Math.round(gross / 1.1) : gross;
-    if (!Number.isSafeInteger(supply) || !Number.isSafeInteger(gross))
+    const amounts = lineAmounts(gross, line.taxType, line.priceIncludesTax === true);
+    if (!Number.isSafeInteger(amounts.supplyAmount) || !Number.isSafeInteger(gross))
       throw new Error("금액이 너무 큽니다.");
     if (line.taxType === "taxable") {
-      taxableSupply += supply;
-      tax += line.priceIncludesTax ? gross - supply : Math.round(supply * 0.1);
-    } else exemptSupply += supply;
+      taxableSupply += amounts.supplyAmount;
+      tax += amounts.taxAmount;
+    } else exemptSupply += amounts.supplyAmount;
   }
   const knownSubtotal = taxableSupply + exemptSupply + tax;
   if (!Number.isSafeInteger(knownSubtotal)) throw new Error("주문 금액이 너무 큽니다.");

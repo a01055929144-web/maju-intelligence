@@ -16,6 +16,7 @@ export type BusinessDocumentLineInput = {
   taxType: ErpTaxType;
   quantity: number;
   unitPrice: number;
+  priceIncludesTax?: boolean;
   memo?: string;
 };
 export type SaveBusinessDocumentInput = {
@@ -44,7 +45,7 @@ type DocumentRow = {
 type LineRow = {
   id: string; document_id: string; sort_order: number; product_catalog_id: string | null; supplier_product_id: string | null;
   product_code_snapshot: string | null; product_name_snapshot: string; specification_snapshot: string | null;
-  unit_snapshot: string; tax_type_snapshot: ErpTaxType; quantity: number; unit_price: number;
+  unit_snapshot: string; tax_type_snapshot: ErpTaxType; quantity: number; unit_price: number; price_includes_tax_snapshot?: boolean;
   supply_amount: number; tax_amount: number; total_amount: number;
 };
 type SaveDocumentRpcLine = {
@@ -57,6 +58,7 @@ type SaveDocumentRpcLine = {
   tax_type: ErpTaxType;
   quantity: number;
   unit_price: number;
+  price_includes_tax?: boolean;
   memo: string | null;
 };
 
@@ -86,6 +88,7 @@ function mapLine(row: LineRow) {
     supplierProductId: row.supplier_product_id || undefined, productCode: row.product_code_snapshot || undefined,
     productName: row.product_name_snapshot, specification: row.specification_snapshot || undefined,
     unit: row.unit_snapshot, taxType: row.tax_type_snapshot, quantity: Number(row.quantity), unitPrice: Number(row.unit_price),
+    ...(row.price_includes_tax_snapshot ? { priceIncludesTax: true } : {}),
     supplyAmount: Number(row.supply_amount), taxAmount: Number(row.tax_amount), totalAmount: Number(row.total_amount),
   };
 }
@@ -156,6 +159,7 @@ export function buildBusinessDocumentLineRows(
     tax_type: line.taxType,
     quantity: line.quantity,
     unit_price: Math.round(line.unitPrice),
+    ...(line.priceIncludesTax === true ? { price_includes_tax: true } : {}),
     memo: line.memo?.trim() || null,
   }));
 }
@@ -180,7 +184,7 @@ export async function saveBusinessDocument(companyId: string, input: SaveBusines
   if (!documentNumber || shouldRenumber) {
     documentNumber = await supabaseRpc<string>("next_erp_number", { p_company_id: companyId, p_sequence_kind: input.documentType, p_business_date: input.documentDate });
   }
-  const totals = calculateErpTotals(input.lines.map((line) => ({ quantity: line.quantity, unitPrice: line.unitPrice, taxType: line.taxType })));
+  const totals = calculateErpTotals(input.lines.map((line) => ({ quantity: line.quantity, unitPrice: line.unitPrice, taxType: line.taxType, priceIncludesTax: line.priceIncludesTax })));
   const payload = {
     company_id: companyId, document_type: input.documentType, document_number: documentNumber, document_date: input.documentDate,
     customer_id: input.documentType.startsWith("sale") ? partner.id : null,
