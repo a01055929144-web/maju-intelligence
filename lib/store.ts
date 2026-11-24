@@ -5499,7 +5499,7 @@ export { deleteCustomerContact, listCustomerContacts, upsertCustomerContact } fr
 export type { CustomerContactInput, CustomerContactItem } from "./store/09-customer-contacts";
 export { getCustomerMessageLogs } from "./store/09-customer-message-logs";
 export type { CustomerMessageLogItem } from "./store/09-customer-message-logs";
-import { isMissingCustomerMessageLogsTableError, toCustomerMessageLogItem, type CustomerMessageLogItem, type CustomerMessageLogRow } from "./store/09-customer-message-logs";
+import { isMissingCustomerMessageLogsTableError, toCustomerMessageLogItem, type CustomerMessageLogRow } from "./store/09-customer-message-logs";
 import { listCustomerContacts } from "./store/09-customer-contacts";
 
 export async function getCustomerOperations(
