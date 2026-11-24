@@ -41,7 +41,7 @@ const KakaoAddressMap = dynamic(() => import("@/components/kakao-address-map").t
   ssr: false
 });
 
-export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey, structuredRecordsEnabled = false }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; initialMode?: MobileLeadType | "route"; kakaoMapAppKey?: string; structuredRecordsEnabled?: boolean }) {
+export function MobileSalesWorkspace({ actorName, companyName, fieldRecordsEnabled = false, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey, structuredRecordsEnabled = false }: { actorName: string; companyName: string; fieldRecordsEnabled?: boolean; holdModulesEnabled?: boolean; initialMode?: MobileLeadType | "route"; kakaoMapAppKey?: string; structuredRecordsEnabled?: boolean }) {
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
@@ -427,6 +427,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
 
           <div className="flex flex-1 flex-col gap-3 px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-3">
             <MobileLocationReporter autoStart />
+            {fieldRecordsEnabled ? <Link className="mobile-secondary-action order-0 grid min-h-11 place-items-center rounded-lg border text-sm font-bold" href="/mobile/field">현장 기록(사진·위치 남기기)</Link> : null}
             <section className="mobile-card order-1 rounded-xl border p-3" aria-label="오늘 할 일">
               <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">오늘 할 일</p><p className="mobile-muted text-xs">카드를 누르면 바로 실행할 매장만 모아봅니다.</p></div>{queuedActionCount ? <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">전송 대기 {queuedActionCount}</span> : null}</div>
               <div className="mt-3 grid grid-cols-2 gap-2">
