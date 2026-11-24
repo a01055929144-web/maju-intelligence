@@ -1,0 +1,36 @@
+name: S-3d preopening gate PG17
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/s3d-preopening-gate.yml"
+      - "docs/sql-drafts/20261117-S-3d-preopening-gate*.sql"
+
+permissions:
+  contents: read
+
+jobs:
+  pg17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: s3d_preopening_gate_test
+    steps:
+      - uses: actions/checkout@v5
+      - run: createdb s3d_preopening_gate_test
+      - run: psql -X --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261117-S-3d-preopening-gate.pg17.test.sql
