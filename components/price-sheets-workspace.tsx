@@ -156,7 +156,7 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
           <span className="mt-1 flex items-center gap-1"><input aria-label="기본 마진율" className={`${box} w-24 text-right text-lg font-black`} inputMode="decimal" max="1000" min="0" onChange={(e) => setDefaultMargin(e.target.value)} required step="0.01" type="number" value={defaultMargin} /><span className="text-lg font-black">%</span></span>
         </label>
         <label className="text-sm font-bold">끝자리 올림
-          <select className={`${box} mt-1 block min-h-11`} onChange={(e) => setDefaultRounding(e.target.value)} value={defaultRounding}>{PRICE_ROUNDING_UNITS.map((n) => <option key={n} value={n}>{n}원 단위 올림</option>)}</select>
+          <select aria-label="끝자리 올림" className={`${box} mt-1 block min-h-11`} onChange={(e) => setDefaultRounding(e.target.value)} value={defaultRounding}>{PRICE_ROUNDING_UNITS.map((n) => <option key={n} value={n}>{n}원 단위 올림</option>)}</select>
         </label>
         <div className="flex flex-wrap gap-1.5">{[5, 10, 15, 20, 25, 30].map((n) => <button className={`rounded-full px-3 py-1.5 text-sm font-bold ${Number(defaultMargin) === n ? "bg-teal-700 text-white" : "bg-slate-100"}`} key={n} onClick={() => setDefaultMargin(String(n))} type="button">{n}%</button>)}</div>
         <button className="min-h-11 rounded-md bg-teal-700 px-4 text-sm font-black text-white disabled:bg-slate-300" disabled={busy || defaultMargin === ""} type="submit">{deferFifty ? "설정 저장 · 판매가 반영 대기" : "저장하고 판매가 반영"}</button>
