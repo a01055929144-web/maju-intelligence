@@ -1,9 +1,8 @@
--- DOWN: CX-144 U0. 관리자 초대가 아직 사용 전이면 되돌리면 활성화가 깨지므로 중단한다. 다시 열린 매장 행·기록은 그대로 둔다(데이터 변경 없음).
+-- DOWN: CX-144 U0. 관리자 초대 기록(prepared_by_admin_key)이 하나라도 남아 있으면 원래 CHECK로 되돌릴 수 없으므로 중단한다(먼저 기록을 보관·정리). 다시 열린 매장 행·기록은 그대로 둔다(데이터 변경 없음).
 begin;
 do $$ begin
-  if exists(select 1 from public.store_owner_activation_requests where customer_id is not null and prepared_by_company_member_id is null
-    and public_idempotency_key is null and consumed_at is null and cancelled_at is null)
-    then raise exception 'cx144_u0_down_blocked_admin_invites_pending'; end if;
+  if exists(select 1 from public.store_owner_activation_requests where prepared_by_admin_key is not null)
+    then raise exception 'cx144_u0_down_blocked_admin_invites_exist'; end if;
 end $$;
 drop function public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid);
 drop function public.admin_prepare_store_owner_activation_v1(uuid,uuid,text,text);
@@ -79,7 +78,14 @@ begin
   update public.store_owner_activation_requests set consumed_at=clock_timestamp() where id=v_request.id;
   return jsonb_build_object('companyId',v_request.company_id,'storeAccountId',v_request.store_account_id,'ownerMemberId',v_owner->>'id');
 end $$;
-drop function public.prepare_store_owner_activation_core_v1(uuid,uuid,uuid,text);
+drop function public.prepare_store_owner_activation_core_v1(uuid,uuid,uuid,text,text);
+alter table public.store_owner_activation_requests drop constraint store_owner_activation_requests_prepared_ck;
+alter table public.store_owner_activation_requests drop column prepared_by_admin_key;
+alter table public.store_owner_activation_requests add constraint store_owner_activation_requests_check2 check(
+  (customer_id is not null and prepared_by_company_member_id is not null and public_idempotency_key is null)
+  or (prepared_by_company_member_id is null and public_idempotency_key is not null
+    and num_nonnulls(document_id,document_version_id,share_link_id)=3
+    and num_nonnulls(store_name,representative_name,address,phone,business_registration_number) in (0,5)));
 revoke all on function public.prepare_store_owner_activation_v1(uuid,uuid,uuid,text) from public,anon,authenticated,service_role;
 revoke all on function public.activate_store_owner_v1(text,uuid,text,timestamptz,text,text,timestamptz,text) from public,anon,authenticated,service_role;
 grant execute on function public.prepare_store_owner_activation_v1(uuid,uuid,uuid,text) to service_role;

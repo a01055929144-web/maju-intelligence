@@ -116,7 +116,7 @@ begin
   r := public.activate_store_owner_v1(repeat('b', 64), u2, '2026-11', clock_timestamp(), '1234567890', 'active', clock_timestamp(), 'verification-request-0002');
   if (r->>'storeAccountId')::uuid <> s1 or (select count(*) from public.store_accounts where customer_id = k1) <> 1 then raise exception 'add_owner_new_account'; end if;
   if (select count(*) from public.store_account_members where store_account_id = s1 and role = 'owner' and status = 'active') <> 1 then raise exception 'owner_count'; end if;
-  if not exists (select 1 from public.store_account_member_events where member_id = (r->>'ownerMemberId')::uuid and actor_user_key like 'maju-admin-invite:%') then raise exception 'admin_invite_event'; end if;
+  if not exists (select 1 from public.store_account_member_events where member_id = (r->>'ownerMemberId')::uuid and actor_user_key = 'maju-admin-invite:' || admin_key) then raise exception 'admin_invite_event'; end if;
 
   -- 4. 관리자: 매장 탈퇴 처리 = 상태 closed, 구성원 전원 제거, 매장 링크 회수, 주문 기록 유지
   insert into public.storefront_links(company_id, customer_id) values (c1, k1);
@@ -152,13 +152,13 @@ begin
   -- 7. 권한: service_role만
   if has_function_privilege('anon', 'public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid)', 'execute')
     or has_function_privilege('authenticated', 'public.admin_prepare_store_owner_activation_v1(uuid,uuid,text,text)', 'execute')
-    or has_function_privilege('anon', 'public.prepare_store_owner_activation_core_v1(uuid,uuid,uuid,text)', 'execute')
+    or has_function_privilege('anon', 'public.prepare_store_owner_activation_core_v1(uuid,uuid,uuid,text,text)', 'execute')
     or not has_function_privilege('service_role', 'public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid)', 'execute')
     or not has_function_privilege('service_role', 'public.activate_store_owner_v1(text,uuid,text,timestamptz,text,text,timestamptz,text)', 'execute')
     then raise exception 'privileges'; end if;
 end $t$;
 
--- 8. down: 관리자 초대가 사용 전이면 중단, 정리 후에는 원래 함수로 복귀(탈퇴한 거래처 재초대는 다시 거절)
+-- 8. down: 관리자 초대 기록이 남아 있으면 중단, 정리 후에는 원래 함수로 복귀(탈퇴한 거래처 재초대는 다시 거절)
 select public.admin_change_store_connection_v1('10000000-0000-4000-8000-000000000001', (select id from public.store_accounts where customer_id = '20000000-0000-4000-8000-000000000001'), repeat('d', 64), 'close');
 select public.admin_prepare_store_owner_activation_v1('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', repeat('d', 64), repeat('f', 64));
 \set ON_ERROR_STOP off
@@ -166,14 +166,14 @@ select public.admin_prepare_store_owner_activation_v1('10000000-0000-4000-8000-0
 rollback;
 \set ON_ERROR_STOP on
 do $b$ begin
-  if to_regprocedure('public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid)') is null then raise exception 'down_ran_with_pending_admin_invite'; end if;
+  if to_regprocedure('public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid)') is null then raise exception 'down_ran_with_admin_invite_rows'; end if;
 end $b$;
-update public.store_owner_activation_requests set cancelled_at = clock_timestamp() where invite_token_hash = repeat('f', 64);
+delete from public.store_owner_activation_requests where prepared_by_admin_key is not null;
 \ir 2026-11-25-CX-144-u0-admin-store-connection.down.sql
 do $d$ declare ok boolean := false; begin
   if to_regprocedure('public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid)') is not null
     or to_regprocedure('public.admin_prepare_store_owner_activation_v1(uuid,uuid,text,text)') is not null
-    or to_regprocedure('public.prepare_store_owner_activation_core_v1(uuid,uuid,uuid,text)') is not null then raise exception 'down_remains'; end if;
+    or to_regprocedure('public.prepare_store_owner_activation_core_v1(uuid,uuid,uuid,text,text)') is not null then raise exception 'down_remains'; end if;
   begin perform public.prepare_store_owner_activation_v1('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', repeat('9', 64));
   exception when others then ok := sqlerrm = 'store_account_exists'; end;
   if not ok then raise exception 'down_did_not_restore_original_prepare'; end if;

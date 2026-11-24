@@ -17,8 +17,21 @@ do $$ begin
   if to_regprocedure('public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid)') is not null then raise exception 'cx144_u0_already_applied'; end if;
 end $$;
 
+-- 관리자 초대는 회사 구성원이 아니므로 요청에 관리자 키를 남긴다. 기존 CHECK(거래처 요청은 반드시 회사 구성원이 준비)를 "회사 구성원 또는 관리자 키 중 정확히 하나"로 넓힌다.
+alter table public.store_owner_activation_requests add column prepared_by_admin_key text check(prepared_by_admin_key is null or prepared_by_admin_key ~ '^[0-9a-f]{64}$');
+do $$ declare c record; begin
+  for c in select conname from pg_constraint where conrelid='public.store_owner_activation_requests'::regclass and contype='c'
+    and pg_get_constraintdef(oid) like '%prepared_by_company_member_id IS NOT NULL%' and pg_get_constraintdef(oid) like '%public_idempotency_key IS NULL%'
+  loop execute format('alter table public.store_owner_activation_requests drop constraint %I',c.conname); end loop;
+end $$;
+alter table public.store_owner_activation_requests add constraint store_owner_activation_requests_prepared_ck check(
+  (customer_id is not null and public_idempotency_key is null and num_nonnulls(prepared_by_company_member_id,prepared_by_admin_key)=1)
+  or (prepared_by_company_member_id is null and prepared_by_admin_key is null and public_idempotency_key is not null
+    and num_nonnulls(document_id,document_version_id,share_link_id)=3
+    and num_nonnulls(store_name,representative_name,address,phone,business_registration_number) in (0,5)));
+
 create function public.prepare_store_owner_activation_core_v1(
-  p_company_id uuid,p_customer_id uuid,p_prepared_by uuid,p_invite_token_hash text
+  p_company_id uuid,p_customer_id uuid,p_prepared_by uuid,p_admin_key text,p_invite_token_hash text
 ) returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
 declare v_existing public.store_accounts%rowtype; v_request public.store_owner_activation_requests%rowtype; v_business_number text;
 begin
@@ -35,8 +48,8 @@ begin
     where company_id=p_company_id and customer_id=p_customer_id and consumed_at is null and cancelled_at is null and expires_at<=clock_timestamp();
   if exists(select 1 from public.store_owner_activation_requests where company_id=p_company_id and customer_id=p_customer_id
     and consumed_at is null and cancelled_at is null) then raise exception 'store_owner_activation_pending'; end if;
-  insert into public.store_owner_activation_requests(company_id,customer_id,invite_token_hash,prepared_by_company_member_id,store_account_id)
-    values(p_company_id,p_customer_id,p_invite_token_hash,p_prepared_by,coalesce(v_existing.id,gen_random_uuid())) returning * into v_request;
+  insert into public.store_owner_activation_requests(company_id,customer_id,invite_token_hash,prepared_by_company_member_id,prepared_by_admin_key,store_account_id)
+    values(p_company_id,p_customer_id,p_invite_token_hash,p_prepared_by,p_admin_key,coalesce(v_existing.id,gen_random_uuid())) returning * into v_request;
   return jsonb_build_object('customerId',v_request.customer_id,'storeAccountId',v_request.store_account_id,'expiresAt',v_request.expires_at);
 end $$;
 
@@ -47,7 +60,7 @@ begin
   perform 1 from public.company_members where company_id=p_company_id and id=p_actor_company_member_id
     and status='active' and coalesce(permission_role,role) in ('owner','manager') for share;
   if not found then raise exception 'store_owner_approval_forbidden'; end if;
-  return public.prepare_store_owner_activation_core_v1(p_company_id,p_customer_id,p_actor_company_member_id,p_invite_token_hash);
+  return public.prepare_store_owner_activation_core_v1(p_company_id,p_customer_id,p_actor_company_member_id,null,p_invite_token_hash);
 end $$;
 
 create function public.admin_prepare_store_owner_activation_v1(
@@ -55,8 +68,8 @@ create function public.admin_prepare_store_owner_activation_v1(
 ) returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
 begin
   if p_admin_key is null or p_admin_key !~ '^[0-9a-f]{64}$' then raise exception 'admin_key_invalid'; end if;
-  -- 회사 구성원이 아닌 MAJU 관리자가 만든 초대: prepared_by는 비워 두고 활성화 때 'maju-admin-invite:<요청 id>'로 기록된다.
-  return public.prepare_store_owner_activation_core_v1(p_company_id,p_customer_id,null,p_invite_token_hash);
+  -- 회사 구성원이 아닌 MAJU 관리자가 만든 초대: prepared_by_company_member_id는 비우고 관리자 키를 요청에 남기며, 활성화 이벤트는 'maju-admin-invite:<관리자 키>'로 기록된다.
+  return public.prepare_store_owner_activation_core_v1(p_company_id,p_customer_id,null,p_admin_key,p_invite_token_hash);
 end $$;
 
 create function public.admin_change_store_connection_v1(
@@ -150,7 +163,7 @@ begin
     insert into public.store_account_members(company_id,store_account_id,auth_user_id,role,status,joined_at)
       values(v_request.company_id,v_request.store_account_id,p_auth_user_id,'owner','active',clock_timestamp()) returning * into v_member;
     insert into public.store_account_member_events(company_id,store_account_id,member_id,event_type,actor_user_key)
-      values(v_request.company_id,v_request.store_account_id,v_member.id,'join',coalesce('public-owner-onboarding:'||v_request.share_link_id::text,'maju-admin-invite:'||v_request.id::text));
+      values(v_request.company_id,v_request.store_account_id,v_member.id,'join',coalesce('public-owner-onboarding:'||v_request.share_link_id::text,'maju-admin-invite:'||v_request.prepared_by_admin_key));
     v_owner:=jsonb_build_object('id',v_member.id,'role','owner','status','active');
   end if;
   update public.store_accounts set terms_accepted_by_member_id=(v_owner->>'id')::uuid
@@ -159,7 +172,7 @@ begin
   return jsonb_build_object('companyId',v_request.company_id,'storeAccountId',v_request.store_account_id,'ownerMemberId',v_owner->>'id');
 end $$;
 
-revoke all on function public.prepare_store_owner_activation_core_v1(uuid,uuid,uuid,text) from public,anon,authenticated,service_role;
+revoke all on function public.prepare_store_owner_activation_core_v1(uuid,uuid,uuid,text,text) from public,anon,authenticated,service_role;
 revoke all on function public.admin_prepare_store_owner_activation_v1(uuid,uuid,text,text) from public,anon,authenticated,service_role;
 revoke all on function public.admin_change_store_connection_v1(uuid,uuid,text,text,uuid) from public,anon,authenticated,service_role;
 revoke all on function public.prepare_store_owner_activation_v1(uuid,uuid,uuid,text) from public,anon,authenticated,service_role;
