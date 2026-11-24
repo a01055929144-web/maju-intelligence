@@ -11,6 +11,7 @@ import { isStoreAccountRole } from "../../domains/organization/store-cost-access
 import { getStoreMemberContext } from "./07-store-member-context";
 import { hasActiveStoreMembership } from "./08-store-cost-access";
 import { getStoreSettlementAccount, type StoreSettlementAccount } from "./07-store-settlement-account";
+import { storeConnectionEnabled } from "./07-store-connection";
 import { readStoreRelationHome, relationHomeEnabled, type StoreRelation } from "./07-store-relation-home";
 
 type Membership = { company_id: string; store_account_id: string; role: string; store_accounts: { customer_id: string } | null };
@@ -31,6 +32,8 @@ export type StorePortalAccount = {
   documents: Array<{ title: string; industry?: string; kind: "sheet" | "quote"; href: string; canOrder: boolean; validUntil: string; itemCount?: number }>;
   /** CX-141: 관계 기준 홈(플래그 켠 회사만). 확인 전이면 가격 없는 상품 목록만 담는다. */
   relation?: StoreRelation;
+  /** CX-144 U1: 매장 탈퇴(연결 관리) 사용 가능 여부. 꺼져 있으면 메뉴를 보이지 않는다. */
+  connectionEnabled?: boolean;
 };
 
 export async function hasAllowedStorePortalMembership(authUserId: string, companyId?: string) {
@@ -107,6 +110,7 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
     return { companyId: row.company_id, storeAccountId: row.store_account_id, ...(businessType ? { businessType } : {}),
       ...(receivedHome && companies[0]?.name ? { companyName: companies[0].name } : {}),
       ...(catalogHref ? { catalogHref } : {}), ...(relation ? { relation } : {}),
+      ...(storeConnectionEnabled(row.company_id) ? { connectionEnabled: true } : {}),
       customerName: customers[0]?.customer_name || "이름 없는 매장", documents,
       ...(settlementAccount ? { settlementAccount } : {}),
       hasCostAccess: isFeatureEnabled("STORE_COSTS", row.company_id), canManageMembers: canManage,

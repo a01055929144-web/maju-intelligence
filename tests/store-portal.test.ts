@@ -64,6 +64,14 @@ describe("store portal", () => {
     expect(mocks.db.mock.calls[2][0]).toContain(`customer_id=eq.${customerId}`);
   });
 
+  it("marks the account only when store connection management is enabled for its company (CX-144 U1)", async () => {
+    expect((await listStorePortalAccounts())![0].connectionEnabled).toBeUndefined();
+    vi.stubEnv("STORE_CONNECTION_MANAGEMENT_ENABLED", "true");
+    expect((await listStorePortalAccounts())![0].connectionEnabled).toBe(true);
+    mocks.allowed.mockReturnValue(false);
+    expect(await listStorePortalAccounts()).toEqual([]);
+  });
+
   it("omits disabled companies and links whose saved hash does not match", async () => {
     mocks.allowed.mockReturnValue(false);
     expect(await listStorePortalAccounts()).toEqual([]);

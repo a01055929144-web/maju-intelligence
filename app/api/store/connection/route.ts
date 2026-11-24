@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clearStoreSession } from "@/lib/auth";
 import { getStoreMemberContext } from "@/lib/store/07-store-member-context";
 import { saveStoreConnection, storeConnectionEnabled } from "@/lib/store/07-store-connection";
 import { changeStoreConnection } from "../../../../application/organization/change-store-connection";
@@ -33,6 +34,8 @@ export async function POST(request: NextRequest) {
     if (!member || !canChangeStoreConnection(member.role, body.action))
       return reply({ message: "연결을 변경할 권한이 없습니다. 점주는 매장 이용 종료를 선택해 주세요." }, 403);
     await changeStoreConnection({ ...member, action: body.action }, saveStoreConnection);
+    // CX-144 U1: 탈퇴·연결 해제가 끝나면 이 브라우저의 매장 로그인을 끝낸다(다음 화면은 카카오 로그인). 실패해도 탈퇴 결과는 그대로.
+    await clearStoreSession().catch(() => undefined);
     return reply({ completed: true, action: body.action });
   } catch { return reply({ message: "변경을 확인하지 못했습니다. 매장 화면을 다시 열어 현재 연결 상태를 확인해 주세요." }, 409); }
 }

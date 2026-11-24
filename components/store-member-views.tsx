@@ -103,6 +103,8 @@ export function StoreMemberViews({ account, deliveryPhotosEnabled = false, docum
             {account.canManageAddress && <div id="store-address-management" className="scroll-mt-24">
               <StoreAddressManagementPanel companyId={account.companyId} storeAccountId={account.storeAccountId} />
             </div>}
+            {account.connectionEnabled && <p className="pt-2"><Link className="inline-flex min-h-11 items-center text-sm font-bold text-rose-700 underline"
+              href={`/store/connection?${new URLSearchParams({ companyId: account.companyId, storeAccountId: account.storeAccountId })}`}>매장 탈퇴</Link></p>}
           </>}
         </section>
       )}
