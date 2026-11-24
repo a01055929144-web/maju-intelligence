@@ -71,6 +71,8 @@ insert into public.company_members values
 create table public.storefront_links(id uuid primary key default gen_random_uuid(),company_id uuid not null,customer_id uuid not null,revoked_at timestamptz,can_order boolean not null default true);
 create table public.store_orders(id uuid primary key default gen_random_uuid(),company_id uuid not null,customer_id uuid not null,store_account_id uuid);
 grant all on public.storefront_links,public.store_orders to service_role;
+-- 운영 store_accounts에는 updated_at이 있다(11/07 합성 표에는 없어서 추가)
+alter table public.store_accounts add column updated_at timestamptz not null default clock_timestamp();
 
 \ir 20261105-store-kakao-membership.sql
 \ir 20261107-store-owner-activation.sql
