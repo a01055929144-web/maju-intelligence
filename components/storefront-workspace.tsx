@@ -108,7 +108,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   const searchParams = useSearchParams();
   const viewParam = searchParams.get("view");
   // CX-149: ?received=1 이면 전체 상품 링크에서 "받은 단가표에 있는 품목"만 보여 준다(서버가 조회 단계에서 거른다).
-  const receivedOnly = searchParams.get("received") === "1";
+  const receivedParam = searchParams.get("received") === "1";
   useEffect(() => { setTabState(storeViewFrom(viewParam)); }, [viewParam]);
   const setTab = (next: StoreView) => {
     setTabState(next);
@@ -166,13 +166,20 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
     if (result) applyCatalog(result, true); else setMessage("전체 상품을 더 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
   }
   const [source, setSourceState] = useState<"doc" | "all">("doc");
-  useEffect(() => {
-    if (!token) return;
-    void fetchCatalogPage(token, 1, "", receivedOnly).then((page) => { if (page) applyCatalog(page, false); });
-    try { if (localStorage.getItem("maju:store:source") === "all") setSourceState("all"); } catch { /* 저장소 없음 */ }
-  }, [token, receivedOnly]);
-  const setSource = (next: "doc" | "all") => { setSourceState(next); try { localStorage.setItem("maju:store:source", next); } catch { /* 저장소 없음 */ } };
   const catalogMode = data?.store.source === "catalog";
+  // CX-145 P1-4: 전체 상품 링크의 주문 탭은 기본이 "받은 단가표"(서버가 received_document_products_v1로 거른 품목만).
+  const receivedOnly = receivedParam || (catalogMode && source === "doc");
+  const dataReady = Boolean(data);
+  useEffect(() => {
+    try { if (localStorage.getItem("maju:store:source") === "all") setSourceState("all"); } catch { /* 저장소 없음 */ }
+  }, []);
+  useEffect(() => {
+    if (!token || !dataReady) return;
+    const sequence = ++catalogSeq.current;
+    setCatalogQuery("");
+    void fetchCatalogPage(token, 1, "", receivedOnly).then((page) => { if (page && sequence === catalogSeq.current) applyCatalog(page, false); });
+  }, [token, receivedOnly, dataReady]);
+  const setSource = (next: "doc" | "all") => { setSourceState(next); try { localStorage.setItem("maju:store:source", next); } catch { /* 저장소 없음 */ } };
   const showCatalog = !catalogMode && Boolean(catalog) && source === "all";
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
   const [ascending, setAscending] = useState(true);
@@ -521,7 +528,8 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
     </section>}
     {tab === "order" && !showCatalog && <section className="grid gap-5 p-4 md:p-6 xl:grid-cols-[minmax(0,1fr)_17rem]">
       <div className="min-w-0 space-y-4">
-      {catalog && !catalogMode ? <SourceToggle onChange={setSource} source={source} /> : null}
+      {catalog && !(catalogMode && receivedParam) ? <SourceToggle onChange={setSource} source={source} /> : null}
+      {catalogMode && receivedOnly && catalog && !catalog.lines.length && !catalogQuery ? <p className="rounded border p-3 text-sm" role="status">받은 단가표에 올라온 품목이 아직 없습니다. 위에서 [전체 상품]을 눌러 고르세요.</p> : null}
       {pricesVisible && visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
       {!(mobileOrder && cartOpen) && cutoffNotice}
