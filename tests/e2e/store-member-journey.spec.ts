@@ -213,3 +213,40 @@ test("CX-145 mobile order tab orders from the catalog link without a document li
   await expect(page.getByRole("heading", { name: "주문 내역", exact: true })).toBeVisible();
   expect(saved).toHaveLength(1);
 });
+
+// CX-149: 매장 홈(모바일 390) = 받은 단가표 품목 목록 하나 + 담기. 하단 "MAJU 매장" 카드·문서 2열 화면 없이 주문 1건까지.
+test("CX-149 mobile home lists received-price-sheet items and orders one", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const eggId = "50000000-0000-4000-8000-000000000149";
+  const catalogBodies: Array<Record<string, unknown>> = [];
+  const saved: Array<Record<string, unknown>> = [];
+  const order = { id: "synthetic-order", deliveryDate: "2099-01-05", status: "submitted", knownTotal: 5500, requestMemo: "", marketPricePending: false,
+    submittedAt: "2026-11-26T00:00:00Z", revision: 1, authorLabel: "합성 점주 · 점주",
+    lines: [{ product_id: eggId, promotion_id: null, product_name: "합성 계란", quantity: 1, sales_unit: "판", specification: "", tax_type: "exempt", unit_price: 5500, total_amount: 5500 }] };
+  await page.route("**/api/storefront/catalog", route => {
+    const input = route.request().postDataJSON(); catalogBodies.push(input);
+    expect(input.token).toBe("synthetic-catalog");
+    return route.fulfill({ json: { page: 1, hasMore: false, marketPriceNotice: "", lines: [
+      { productId: eggId, name: "합성 계란", category: "농산", brand: "", spec: "", unit: "판", isMarket: false, taxType: "exempt", price: 5500, todayBasePrice: null, lastDispatch: null, badge: "행사", endsOn: "2099-01-05" }] } });
+  });
+  await page.route("**/api/storefront", route => {
+    const input = route.request().postDataJSON(); expect(input.token).toBe("synthetic-catalog");
+    if (route.request().method() === "PUT") { saved.push(input); expect(input.lines).toEqual([{ productId: eggId, promotionId: null, quantity: 1 }]); return route.fulfill({ json: { id: order.id } }); }
+    return route.fulfill({ json: { store: { source: "catalog", title: "전체 상품", companyName: "합성 유통", customerName: "합성 가 매장", deliveryAddress: "합성 주소", version: 0, validUntil: "2099-12-31", priceAvailable: true, canOrder: true,
+      deliveryEligibility: { eligible: true, reason: "eligible", weekdays: [0, 1, 2, 3, 4, 5, 6] }, nextDeliveryDate: "2099-01-05", selectedDeliveryDate: "2099-01-05", notice: "", marketPriceNotice: "",
+      policy: { weekdays: [0, 1, 2, 3, 4, 5, 6], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 }, lines: [] },
+      orders: saved.length ? [order] : [], preferences: [], historyPage: 1, historyHasMore: false } });
+  });
+  await page.goto("/store?fixture=cx149-received-home");
+  await expect(page).toHaveURL(/\/store\?view=order&received=1#synthetic-catalog$/);
+  await expect(page.getByRole("heading", { name: "견적서·단가표와 주문" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "문서 확인·주문" })).toHaveCount(0);
+  await expect(page.getByText("합성 계란").first()).toBeVisible();
+  await expect(page.getByText("행사 ~01/05").first()).toBeVisible();
+  expect(catalogBodies.length).toBeGreaterThan(0);
+  expect(catalogBodies.every(body => body.received === true)).toBe(true);
+  await page.getByRole("button", { name: "합성 계란 수량 늘리기" }).click();
+  await page.getByRole("button", { name: "후결제로 주문 신청", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "주문 내역", exact: true })).toBeVisible();
+  expect(saved).toHaveLength(1);
+});

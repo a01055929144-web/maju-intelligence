@@ -7,7 +7,7 @@ import { StoreMemberViews } from "@/components/store-member-views";
 import { STORE_VIEWS, storeViewFrom } from "@/lib/store-navigation";
 import { storeMemberSessionEnabled } from "@/lib/auth";
 import type { StoreKakaoLogin } from "@/components/store-kakao-entry";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { StorefrontWorkspace } from "@/components/storefront-workspace";
@@ -84,17 +84,18 @@ export default async function StorePage({ searchParams }: {
   // CX-11 직접 가입 화면 픽스처(CI 전용, 세션·DB 없음): guest=로그인 전, new=로그인했고 매장 없음(입력 폼), profile=가입 직후 홈.
   const directFixture = isCiLayoutFixturesEnabled() && /^store-direct-signup-(guest|new|profile|connected)$/.test(String(params.fixture)) ? String(params.fixture) : undefined;
   if (directFixture) { portalError = false; accounts = directFixture === "store-direct-signup-guest" ? null : directFixture === "store-direct-signup-connected"? [{ companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-0000000000c1", customerName: "합성 연결 유통 매장", hasCostAccess: false, canManageMembers: false, canManageAddress: false, documents: [] }] : []; }
-  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi" || params.fixture === "s6-history" || params.fixture === "s4-documents" || params.fixture === "cx63-price-search" || params.fixture === "cx145-catalog-only") ? params.fixture : null;
+  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi" || params.fixture === "s6-history" || params.fixture === "s4-documents" || params.fixture === "cx63-price-search" || params.fixture === "cx145-catalog-only" || params.fixture === "cx149-received-home") ? params.fixture : null;
   const legacyFixture = isCiLayoutFixturesEnabled() && params.fixture === "store-portal-source-document";
   const fixtureAccounts = fixture ? Array.from({ length: fixture === "s1-multi" ? 2 : 1 }, (_, index) => ({
-    companyId: "00000000-0000-4000-8000-000000000001",
+    // cx149-received-home만 별도 회사(플래그 allowlist 대상). 다른 fixture는 기존 회사 그대로.
+    companyId: fixture === "cx149-received-home" ? "00000000-0000-4000-8000-0000000000e1" : "00000000-0000-4000-8000-000000000001",
     storeAccountId: `20000000-0000-4000-8000-00000000000${index + 1}`,
-    ...(fixture === "s4-documents" || fixture === "cx145-catalog-only" ? { businessType: "농산", companyName: "합성 유통", catalogHref: "/store?view=order#synthetic-catalog" } : {}),
+    ...(fixture === "s4-documents" || fixture === "cx145-catalog-only" || fixture === "cx149-received-home" ? { businessType: "농산", companyName: "합성 유통", catalogHref: "/store?view=order#synthetic-catalog" } : {}),
     customerName: index === 0 ? "합성 가 매장" : "합성 나 매장",
     settlementAccount: { bank: "합성은행", number: "123-456-7890", holder: "합성 유통" },
     hasCostAccess: index === 0, canManageMembers: index === 0,
     canManageAddress: false,
-    documents: fixture === "cx145-catalog-only" ? [] : fixture === "cx63-price-search" ? [
+    documents: fixture === "cx145-catalog-only" || fixture === "cx149-received-home" ? [] : fixture === "cx63-price-search" ? [
       { title: "합성 받은 단가표", kind: "sheet" as const, href: "/store#synthetic-cx63-sheet", canOrder: true, validUntil: "2099-12-31" },
       { title: "합성 받은 견적서", kind: "quote" as const, href: "/pricing-document#synthetic-cx63-quote", canOrder: false, validUntil: "2099-12-31" },
     ] : fixture === "s4-documents" ? [
@@ -112,6 +113,10 @@ export default async function StorePage({ searchParams }: {
   const selected = memberAccounts.find(account => keyOf(account) === preferred) ??
     (memberAccounts.length === 1 ? memberAccounts[0] : undefined);
   const view = storeViewFrom(typeof params.view === "string" ? params.view : scoped && costAccess && "companyId" in costAccess ? "data" : undefined);
+  // CX-149: 플래그를 켠 회사의 매장 홈은 "받은 단가표 품목 목록 + 담기"로 바로 연다(하단 카드·문서 2열 화면 대신).
+  // 주문 화면(전체 상품 링크 토큰)은 해시에 있어 서버가 보지 못하므로 catalogHref로 이동한다. 가격은 주문 화면이 self_order_price_v2로만 받는다.
+  if (selected && view === "home" && !params.document && selected.catalogHref && isFeatureEnabled("STORE_RECEIVED_ORDER_HOME", selected.companyId))
+    redirect(selected.catalogHref.replace("view=order", "view=order&received=1"));
   const storeHref = (nextView: string, account?: typeof selected) => {
     const next = new URLSearchParams({ view: nextView });
     if (account && memberAccounts.length > 1) {

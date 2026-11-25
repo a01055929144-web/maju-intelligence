@@ -9,9 +9,9 @@ import { ErrorState } from "@/components/ui/state";
 export type CatalogPage = { lines: CatalogLine[]; page: number; hasMore: boolean; marketPriceNotice: string };
 const won = formatWon;
 
-export async function fetchCatalogPage(token: string, page: number, q: string): Promise<CatalogPage | null> {
+export async function fetchCatalogPage(token: string, page: number, q: string, received = false): Promise<CatalogPage | null> {
   try {
-    const response = await fetch("/api/storefront/catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, page, q }) });
+    const response = await fetch("/api/storefront/catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, page, q, ...(received ? { received: true } : {}) }) });
     return response.ok ? await response.json() as CatalogPage : null;
   } catch { return null; }
 }

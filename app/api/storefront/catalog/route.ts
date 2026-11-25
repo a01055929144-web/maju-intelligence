@@ -16,11 +16,11 @@ const sameOrigin = (request: NextRequest) => {
   try { return Boolean(origin) && new URL(origin!).host.toLowerCase() === (request.headers.get("host") || request.nextUrl.host).toLowerCase(); } catch { return false; }
 };
 
-/** body: { token, page?, q? } */
+/** body: { token, page?, q?, received? } — received=true면 받은 단가표에 있는 품목만(CX-149). */
 export async function POST(request: NextRequest) {
   if (!priceSheetsEnabled() || !storeOrderingEnabled()) return unavailable();
   if (!sameOrigin(request)) return NextResponse.json({ message: "같은 화면에서 다시 시도해 주세요." }, { status: 403, headers });
-  const body = await request.json().catch(() => null) as { token?: unknown; page?: unknown; q?: unknown } | null;
+  const body = await request.json().catch(() => null) as { token?: unknown; page?: unknown; q?: unknown; received?: unknown } | null;
   if (!body || typeof body.token !== "string" || body.token.length > 200) return unavailable();
   const page = body.page === undefined ? 1 : Number(body.page);
   const q = typeof body.q === "string" ? body.q.trim().slice(0, 60).replace(/[%*,()]/g, " ") : "";
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   try {
     const store = await readStorefront(body.token);
     if (!store || !isFeatureEnabled("STORE_CATALOG_LINK", store.companyId)) return unavailable();
-    return NextResponse.json(await readStorefrontCatalogPage(store, page, q), { headers });
+    return NextResponse.json(await readStorefrontCatalogPage(store, page, q, false, body.received === true), { headers });
   } catch (error) {
     console.error("storefront catalog failed", error);
     return NextResponse.json({ message: "전체 상품을 불러오지 못했습니다." }, { status: 500, headers });

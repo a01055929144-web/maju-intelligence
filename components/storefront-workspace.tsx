@@ -100,7 +100,10 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   }, [data?.orderCutoffGuidance]);
   const [tab, setTabState] = useState<StoreView>("home");
   // PC 사이드바(?view=)와 화면 탭을 맞춘다.
-  const viewParam = useSearchParams().get("view");
+  const searchParams = useSearchParams();
+  const viewParam = searchParams.get("view");
+  // CX-149: ?received=1 이면 전체 상품 링크에서 "받은 단가표에 있는 품목"만 보여 준다(서버가 조회 단계에서 거른다).
+  const receivedOnly = searchParams.get("received") === "1";
   useEffect(() => { setTabState(storeViewFrom(viewParam)); }, [viewParam]);
   const setTab = (next: StoreView) => {
     setTabState(next);
@@ -144,7 +147,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
     if (searchTimer.current) clearTimeout(searchTimer.current);
     const sequence = ++catalogSeq.current;
     searchTimer.current = setTimeout(() => {
-      void fetchCatalogPage(token, 1, value).then((result) => {
+      void fetchCatalogPage(token, 1, value, receivedOnly).then((result) => {
         if (sequence !== catalogSeq.current) return;
         if (result) applyCatalog(result, false); else setMessage("전체 상품을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
       });
@@ -153,16 +156,16 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   async function moreCatalog() {
     if (!catalog) return;
     const sequence = ++catalogSeq.current;
-    const result = await fetchCatalogPage(token, catalog.page + 1, catalogQuery);
+    const result = await fetchCatalogPage(token, catalog.page + 1, catalogQuery, receivedOnly);
     if (sequence !== catalogSeq.current) return;
     if (result) applyCatalog(result, true); else setMessage("전체 상품을 더 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
   }
   const [source, setSourceState] = useState<"doc" | "all">("doc");
   useEffect(() => {
     if (!token) return;
-    void fetchCatalogPage(token, 1, "").then((page) => { if (page) applyCatalog(page, false); });
+    void fetchCatalogPage(token, 1, "", receivedOnly).then((page) => { if (page) applyCatalog(page, false); });
     try { if (localStorage.getItem("maju:store:source") === "all") setSourceState("all"); } catch { /* 저장소 없음 */ }
-  }, [token]);
+  }, [token, receivedOnly]);
   const setSource = (next: "doc" | "all") => { setSourceState(next); try { localStorage.setItem("maju:store:source", next); } catch { /* 저장소 없음 */ } };
   const catalogMode = data?.store.source === "catalog";
   const showCatalog = !catalogMode && Boolean(catalog) && source === "all";
@@ -217,7 +220,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   const store = baseStore && catalogMode ? { ...baseStore, lines: Object.values(catalogAll).flatMap((line): Product[] =>
     // 가격이 없는 일반 품목은 주문할 수 없으니 올리지 않는다(시세 품목은 가격 미정으로 주문 가능).
     line.isMarket || line.price !== null ? [{ key: `${line.productId}:`, productId: line.productId, promotionId: null, name: line.name,
-      category: line.category, brand: line.brand, spec: line.spec, unit: line.unit, badge: "", taxType: line.taxType,
+      category: line.category, brand: line.brand, spec: line.spec, unit: line.unit, badge: line.badge ? `${line.badge}${line.endsOn ? ` ~${line.endsOn.slice(5).replace("-", "/")}` : ""}` : "", taxType: line.taxType,
       unitPrice: line.isMarket ? null : line.price, priceIncludesTax: line.priceIncludesTax === true, isMarketPrice: line.isMarket, remaining: null,
       maximumQuantity: null, recentDispatchPrice: line.lastDispatch?.price ?? null, recentDispatchDate: line.lastDispatch?.date ?? null }] : []) } : baseStore;
   const deliveryReady=Boolean(store&&(store.deliveryEligibility?.eligible??true)&&store.policy.weekdays.length>0);
