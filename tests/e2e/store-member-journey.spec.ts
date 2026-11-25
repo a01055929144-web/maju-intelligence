@@ -183,3 +183,33 @@ test("CX-47 mobile order shows the shared cart sheet and preserves quantity", as
   await open.click();
   await expect(sheet.getByText("합성 양파 · 1봉")).toBeVisible();
 });
+// CX-145: 받은 단가표(문서 링크)가 없어도 전체 상품(catalog) 링크로 모바일 주문 1건이 끝난다.
+test("CX-145 mobile order tab orders from the catalog link without a document link", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const productId = "50000000-0000-4000-8000-000000000145";
+  const saved: Array<Record<string, unknown>> = [];
+  const order = { id: "synthetic-order", deliveryDate: "2099-01-05", status: "submitted", knownTotal: 1200, requestMemo: "", marketPricePending: false,
+    submittedAt: "2026-11-25T00:00:00Z", revision: 1, authorLabel: "합성 점주 · 점주",
+    lines: [{ product_id: productId, promotion_id: null, product_name: "합성 양파", quantity: 1, sales_unit: "봉", specification: "1kg", tax_type: "exempt", unit_price: 1200, total_amount: 1200 }] };
+  await page.route("**/api/storefront", route => {
+    const input = route.request().postDataJSON(); expect(input.token).toBe("synthetic-catalog");
+    if (route.request().method() === "PUT") {
+      saved.push(input);
+      expect(input.lines).toEqual([{ productId, promotionId: null, quantity: 1 }]);
+      return route.fulfill({ json: { id: order.id } });
+    }
+    return route.fulfill({ json: { store: { title: "전체 상품", companyName: "합성 유통", customerName: "합성 가 매장", deliveryAddress: "합성 주소", version: 1, validUntil: "2099-12-31", priceAvailable: true, canOrder: true,
+      deliveryEligibility: { eligible: true, reason: "eligible", weekdays: [0, 1, 2, 3, 4, 5, 6] }, nextDeliveryDate: "2099-01-05", selectedDeliveryDate: "2099-01-05", notice: "", marketPriceNotice: "",
+      policy: { weekdays: [0, 1, 2, 3, 4, 5, 6], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 },
+      lines: [{ key: `${productId}:`, productId, promotionId: null, name: "합성 양파", category: "농산", brand: "", spec: "1kg", unit: "봉", badge: "", taxType: "exempt", unitPrice: 1200, priceIncludesTax: false, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null }] },
+      orders: saved.length ? [order] : [], preferences: [], historyPage: 1, historyHasMore: false } });
+  });
+  await page.goto("/store?fixture=cx145-catalog-only&view=order");
+  await expect(page.getByText("아직 주문 가능한 단가표가 없습니다.")).toHaveCount(0);
+  await page.getByRole("link", { name: "전체 상품으로 주문하기" }).click();
+  await expect(page).toHaveURL(/\/store\?view=order#synthetic-catalog$/);
+  await page.getByRole("button", { name: "합성 양파 수량 늘리기" }).click();
+  await page.getByRole("button", { name: "후결제로 주문 신청", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "주문 내역", exact: true })).toBeVisible();
+  expect(saved).toHaveLength(1);
+});
