@@ -16,7 +16,6 @@ import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
 import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry";
 import { Badge } from "./ui/badge";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
-import { BottomActionBar } from "./ui/mobile/bottom-action-bar";
 import { BottomSheet } from "./ui/mobile/bottom-sheet";
 import { MobileListRow } from "./ui/mobile/mobile-list-row";
 import { MoneyText } from "./ui/mobile/money-text";
@@ -446,7 +445,12 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   </Notice></section>;
   const cartContent = <>
       <p className="text-sm text-slate-600">{store.companyName}{!deliveryReady ? ` · ${blockGuide.headline}` : deliveryDate ? ` · 배송 ${deliveryDate}` : ""}</p>
-      {mobileOrder && cartOpen && cutoffNotice}
+      {cartOpen && cutoffNotice}
+      {deliveryReady && <section aria-label="배송일 달력" className="space-y-2">
+          <DateCalendar disabled={busy} label="배송일 달력" today={kstDateTime(new Date()).date} value={deliveryDate}
+            stateOf={dayStateFor}
+            onChange={day => { setDeliveryDate(day); retryKey.current = null; void load(day).catch(() => undefined); }} />
+      </section>}
       {pricesVisible && selected.some(line => promotionState(line)) && <Button variant="outline" className="min-h-[52px]" disabled={busy || loading}
         onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>행사 잔량 다시 확인</Button>}
       {selected.length ? <ul className="max-h-48 divide-y overflow-y-auto text-sm">{selected.map(line =>
@@ -486,7 +490,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit || promotionBlocked || productCutoffBlocked || (cutoff?.open === false && !confirmingAfterCutoff)} className="min-h-[48px] w-full"
         onClick={() => void submit()}>{busy ? "저장 중" : confirmingAfterCutoff || confirmingPromotion ? "이전 주문 결과 확인" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
   </>;
-  return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
+  return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900">
     <header className="sticky top-0 z-10 border-b bg-white p-4 md:px-6">
       {mobileOrder && <button className="min-h-11 text-sm font-medium underline" type="button"
         onClick={() => { setCartOpen(false); setTab("home"); }}>매장 홈으로</button>}
@@ -499,7 +503,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       {(["home", "order", "history", "data", "info"] as const).map((item, index) =>
         <button key={item} className={`min-h-14 ${tab === item ? "font-semibold text-blue-700" : "text-slate-600"}`}
           onClick={() => setTab(item)}>{["홈", "주문", "내역", "데이터", "내 정보"][index]}</button>)}</nav>}
-      {!(mobileOrder && cartOpen) && messagePanel}
+      {!cartOpen && messagePanel}
       {!loading && !loadError && data?.memberLogin && <section className="space-y-2 p-4" aria-label="주문 구성원 로그인">
         <StoreKakaoLoginPanel access={data.memberLogin} newWindow />
         <Button variant="outline" className="min-h-[44px]" disabled={busy} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>로그인 상태 다시 확인</Button>
@@ -526,13 +530,13 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       <SourceToggle onChange={setSource} source={source} />
       <StorefrontCatalogPanel initial={catalog} token={token} />
     </section>}
-    {tab === "order" && !showCatalog && <section className="grid gap-5 p-4 md:p-6 xl:grid-cols-[minmax(0,1fr)_17rem]">
+    {tab === "order" && !showCatalog && <section className="grid gap-5 p-4 md:p-6 grid-cols-1">
       <div className="min-w-0 space-y-4">
       {catalog && !(catalogMode && receivedParam) ? <SourceToggle onChange={setSource} source={source} /> : null}
       {catalogMode && receivedOnly && catalog && !catalog.lines.length && !catalogQuery ? <p className="rounded border p-3 text-sm" role="status">받은 단가표에 올라온 품목이 아직 없습니다. 위에서 [전체 상품]을 눌러 고르세요.</p> : null}
       {pricesVisible && visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
-      {!(mobileOrder && cartOpen) && cutoffNotice}
+      {!cartOpen && cutoffNotice}
       {!deliveryReady && <section className="space-y-2 rounded border p-3 text-sm" aria-label="배송 요일 설정 안내">
         <p className="font-semibold" data-testid="delivery-block-headline">{blockGuide.headline}</p>
         <p role="status">{deliveryEligibilityMessage(blockReason)}</p>
@@ -549,9 +553,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       {deliveryReady && <section aria-label="배송일 선택" className="space-y-2">
         <p className="text-sm font-semibold" data-testid="delivery-guide">{store.deliveryGuide ?? deliveryGuide(store.policy).text}</p>
         <p className="text-sm">배송 요청일: <strong data-testid="delivery-date">{deliveryDate ? `${monthDayLabel(deliveryDate)}(${weekdayLabel(deliveryDate)})` : "선택 안 함"}</strong></p>
-        <DateCalendar disabled={busy} label="배송일 달력" today={kstDateTime(new Date()).date} value={deliveryDate}
-          stateOf={dayStateFor}
-          onChange={day => { setDeliveryDate(day); retryKey.current = null; void load(day).catch(() => undefined); }} />
+        <Button variant="outline" className="min-h-11" onClick={() => setCartOpen(true)}>배송일 바꾸기</Button>
       </section>}
       <p className="text-sm text-slate-600">배송 권역·가능 요일·휴일·마감은 주문 제출 직전에 서버에서 다시 확인합니다.</p>
       {catalogMode ? <SearchInput aria-label="상품 검색" className="w-full max-sm:!h-11" onChange={searchCatalog}
@@ -629,17 +631,16 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       </li>)}</ul>}
       {catalogMode && catalog?.hasMore && <button className="min-h-[44px] w-full rounded border text-sm font-bold" disabled={busy} onClick={() => void moreCatalog()} type="button">상품 더 보기</button>}
       </div>
-      {mobileOrder ? <>
-        <div className="fixed inset-x-0 bottom-0 z-20">
-          <BottomActionBar onClick={() => setCartOpen(true)}>장바구니 확인 · {selected.length}개 품목</BottomActionBar>
+      {/* CX-145 P1-5: 담은 게 있으면 화면 아래 고정 바, 누르면 장바구니 시트(배송일 달력·요청 사항·주문 버튼·막힘 사유). 0개면 바 숨김. */}
+      {selected.length > 0 && !cartOpen && <div className={`fixed inset-x-0 z-20 border-t bg-white px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] ${mobileOrder ? "bottom-0" : "max-sm:bottom-14 sm:bottom-0"}`} data-testid="cart-bar">
+        <div className="mx-auto flex max-w-6xl items-center gap-3">
+          <p className="min-w-0 flex-1 text-sm font-semibold">담은 {selected.length}개 · 합계 {pricesVisible && summary ? `${won(summary.knownTotal)}${summary.marketCount > 0 ? " + 시세 품목" : ""}` : "가격 확인 중"}</p>
+          <Button className="min-h-12 shrink-0 px-6" onClick={() => setCartOpen(true)}>주문하기</Button>
         </div>
-        {cartOpen && <BottomSheet title="장바구니" onClose={() => setCartOpen(false)}>
-          <div className="space-y-3">{messagePanel}{cartContent}</div>
-        </BottomSheet>}
-      </> : <aside aria-label="장바구니" className="min-w-0 space-y-3 rounded-lg border bg-white p-3 xl:sticky xl:top-24 xl:self-start">
-        <h3 className="font-semibold">장바구니</h3>
-        {cartContent}
-      </aside>}
+      </div>}
+      {cartOpen && <BottomSheet title="장바구니" onClose={() => setCartOpen(false)}>
+        <div className="mx-auto max-w-2xl space-y-3">{messagePanel}{cartContent}</div>
+      </BottomSheet>}
     </section>}
     {tab === "history" && <section className="space-y-3 p-4 md:p-6"><h2 className="font-semibold">주문 내역</h2>
       {!store.priceAvailable ? <p className="text-sm text-slate-600">문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다. 담당자에게 새 링크를 요청해 주세요.</p> :
