@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { changeStoreConnection } from "../application/organization/change-store-connection";
-const mocks = vi.hoisted(() => ({ context: vi.fn(), enabled: vi.fn(), save: vi.fn() }));
+const mocks = vi.hoisted(() => ({ context: vi.fn(), enabled: vi.fn(), save: vi.fn(), clear: vi.fn() }));
+vi.mock("@/lib/auth", () => ({ clearStoreSession: mocks.clear }));
 vi.mock("@/lib/store/07-store-member-context", () => ({ getStoreMemberContext: mocks.context }));
 vi.mock("@/lib/store/07-store-connection", () => ({ saveStoreConnection: mocks.save, storeConnectionEnabled: mocks.enabled }));
 import { GET, POST } from "../app/api/store/connection/route";
@@ -12,7 +13,7 @@ const request = (body: unknown, origin = "https://test") => new NextRequest("htt
   method: "POST", headers: { origin, "Content-Type": "application/json" }, body: JSON.stringify(body)
 });
 describe("store connection boundaries", () => {
-  beforeEach(() => { vi.clearAllMocks(); mocks.enabled.mockReturnValue(true); mocks.context.mockResolvedValue(actor); });
+  beforeEach(() => { vi.clearAllMocks(); mocks.enabled.mockReturnValue(true); mocks.context.mockResolvedValue(actor); mocks.clear.mockResolvedValue(undefined); });
   it("does not read membership or write when OFF", async () => {
     mocks.enabled.mockReturnValue(false);
     expect((await POST(request({ companyId, storeAccountId, action: "close" }))).status).toBe(404);
@@ -35,6 +36,17 @@ describe("store connection boundaries", () => {
     mocks.context.mockResolvedValue({ ...actor, role });
     expect((await POST(request({ companyId, storeAccountId, action }))).status).toBe(status);
     expect(mocks.save).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
+  });
+  it("ends this browser's store login only after a completed leave or close, never on refusal or failure", async () => {
+    expect((await POST(request({ companyId, storeAccountId, action: "close" }))).status).toBe(200);
+    expect(mocks.clear).toHaveBeenCalledTimes(1);
+    mocks.clear.mockClear(); mocks.save.mockRejectedValueOnce(new Error("db"));
+    expect((await POST(request({ companyId, storeAccountId, action: "close" }))).status).toBe(409);
+    mocks.context.mockResolvedValue({ ...actor, role: "staff" });
+    expect((await POST(request({ companyId, storeAccountId, action: "close" }))).status).toBe(403);
+    expect(mocks.clear).not.toHaveBeenCalled();
+    mocks.clear.mockRejectedValueOnce(new Error("cookie")); mocks.context.mockResolvedValue({ ...actor, role: "staff" });
+    expect((await POST(request({ companyId, storeAccountId, action: "leave" }))).status).toBe(200);
   });
   it("blocks a revoked session and reports database failure without raw errors", async () => {
     mocks.context.mockResolvedValue(null);
