@@ -1,0 +1,31 @@
+name: CX-149 received products PG17
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cx149-received-document-products-pg17.yml'
+      - 'docs/sql-drafts/2026-11-26-CX-149-*.sql'
+      - 'docs/sql-drafts/2026-11-25-CX-148*.sql'
+      - 'docs/sql-drafts/2026-11-18-CX-120-*.sql'
+permissions:
+  contents: read
+jobs:
+  pg17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: cx149_test
+    steps:
+      - uses: actions/checkout@v5
+      - run: createdb cx149_test
+      - run: psql -X --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/2026-11-26-CX-149-received-document-products.pg17.test.sql

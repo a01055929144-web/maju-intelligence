@@ -57,3 +57,34 @@ describe("CX-148b: 화면 가격은 주문 저장과 같은 가격 함수(self_o
     await expect(readStorefrontCatalogPage({ companyId: company, customerId: customer, marketPriceNotice: "" }, 1, "", true)).rejects.toThrow("rpc failed");
   });
 });
+
+describe("CX-149: 받은 단가표 품목만(receivedOnly) — 상품 조회 단계에서 거르고 가격은 같은 함수", () => {
+  const store = { companyId: company, customerId: customer, marketPriceNotice: "" };
+  it("받은 품목 id만 product_catalog 조회에 넣고 행사 배지·기한을 싣는다(가격은 self_order_price_v2)", async () => {
+    db.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "rpc/received_document_products_v1") return [{ product_id: egg, badge: "행사", ends_on: "2026-11-30" }, { product_id: butter, badge: "", ends_on: null }];
+      if (path.startsWith("product_catalog?")) return [product(egg, "계란", "exempt"), product(butter, "버터", "taxable")];
+      if (path === "rpc/self_order_price_v2") return [priced[JSON.parse(String(init?.body)).p_product]];
+      return [];
+    });
+    const { lines } = await readStorefrontCatalogPage(store, 1, "", false, true);
+    const productQuery = String(db.mock.calls.find(call => String(call[0]).startsWith("product_catalog?"))![0]);
+    expect(productQuery).toContain(`id=in.(${egg},${butter})`);
+    expect(lines.find(line => line.productId === egg)).toMatchObject({ price: 5500, badge: "행사", endsOn: "2026-11-30" });
+    expect(lines.find(line => line.productId === butter)).not.toHaveProperty("badge");
+    expect(lines.find(line => line.productId === butter)?.price).toBe(7535);
+    const rpc = db.mock.calls.find(call => call[0] === "rpc/received_document_products_v1")!;
+    expect(JSON.parse(String(rpc[1].body))).toMatchObject({ p_company: company, p_customer: customer });
+  });
+  it("받은 단가표가 없으면 빈 목록이고 상품·가격 조회를 하지 않는다", async () => {
+    db.mockImplementation(async (path: string) => (path === "rpc/received_document_products_v1" ? [] : [product(egg, "계란", "exempt")]));
+    const page = await readStorefrontCatalogPage(store, 1, "", false, true);
+    expect(page).toMatchObject({ lines: [], hasMore: false, page: 1 });
+    expect(db.mock.calls.map(call => String(call[0]))).toEqual(["rpc/received_document_products_v1"]);
+  });
+  it("receivedOnly가 아니면 받은 품목 함수를 부르지 않는다(전체 상품 그대로)", async () => {
+    await readStorefrontCatalogPage(store, 1, "");
+    expect(db.mock.calls.some(call => call[0] === "rpc/received_document_products_v1")).toBe(false);
+    expect(String(db.mock.calls.find(call => String(call[0]).startsWith("product_catalog?"))![0])).not.toContain("id=in.");
+  });
+});
