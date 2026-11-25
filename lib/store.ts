@@ -4256,7 +4256,7 @@ export async function upsertCustomerMaster(
   input: CustomerMasterInput,
   companyId?: string,
   auditContext: CustomerMasterAuditContext = {},
-  options: { confirmDuplicate?: boolean; skipLeadCleanupForLeadId?: string } = {}
+  options: { confirmDuplicate?: boolean; createOnly?: boolean; skipLeadCleanupForLeadId?: string } = {}
 ) {
   const customerName = input.customerName.trim();
   if (!customerName) throw new Error("거래처명은 필수입니다.");
@@ -4379,6 +4379,11 @@ export async function upsertCustomerMaster(
       `normalized_customers?select=id,delivery_manager&company_id=eq.${encodeURIComponent(id)}&normalized_key=eq.${encodeURIComponent(normalizedKey)}&limit=1`
     ).catch(() => [])
   );
+  // CX-145: 신규 등록(createOnly)인데 사업자번호(또는 상호+주소)가 같은 거래처가 이미 있으면, 아래 업데이트가
+  // 입력하지 않은 칸(주소·연락처 등)을 빈 값으로 덮어쓰므로 저장하지 않고 "이미 등록된 거래처"로 돌려준다.
+  if (existingRows.length && options.createOnly) {
+    return { customer: fallbackItem, persisted: false, alreadyRegistered: true, existingCustomerId: existingRows[0].id };
+  }
   // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 위 normalized_key가 정확히 일치할 때는
   // 같은 거래처로 보고 그대로 업데이트하면 되지만, 키가 달라 "신규 등록"으로 처리될 상황에서도 상호명이
   // 이미 등록된 다른 거래처와 완전히 같다면(주소 표기가 살짝 달라 키만 갈린 경우 등) 사용자에게 먼저
