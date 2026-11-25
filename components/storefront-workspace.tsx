@@ -218,7 +218,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
     // 가격이 없는 일반 품목은 주문할 수 없으니 올리지 않는다(시세 품목은 가격 미정으로 주문 가능).
     line.isMarket || line.price !== null ? [{ key: `${line.productId}:`, productId: line.productId, promotionId: null, name: line.name,
       category: line.category, brand: line.brand, spec: line.spec, unit: line.unit, badge: "", taxType: line.taxType,
-      unitPrice: line.isMarket ? null : line.price, priceIncludesTax: false, isMarketPrice: line.isMarket, remaining: null,
+      unitPrice: line.isMarket ? null : line.price, priceIncludesTax: line.priceIncludesTax === true, isMarketPrice: line.isMarket, remaining: null,
       maximumQuantity: null, recentDispatchPrice: line.lastDispatch?.price ?? null, recentDispatchDate: line.lastDispatch?.date ?? null }] : []) } : baseStore;
   const deliveryReady=Boolean(store&&(store.deliveryEligibility?.eligible??true)&&store.policy.weekdays.length>0);
   const pricesReady = !loading && !loadError && Boolean(deliveryDate) && deliveryDate === store?.selectedDeliveryDate;

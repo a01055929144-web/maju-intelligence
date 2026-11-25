@@ -13,40 +13,36 @@ export async function readStorefrontCatalogPage(store: { companyId: string; cust
   const hasMore = products.length > PAGE;
   const shown = products.slice(0, PAGE);
   const ids = shown.map(p => p.id).join(",");
-  const [agreements, basePrices] = priceSearch && ids ? await Promise.all([
-    supabaseRequest<Array<{ product_catalog_id: string; sales_unit: string; unit_price: number }>>(
-      `customer_price_agreements?company_id=eq.${company}&customer_id=eq.${customer}&product_catalog_id=in.(${ids})&status=eq.active` +
-      `&effective_from=lte.${today}&or=(effective_until.is.null,effective_until.gte.${today})` +
-      "&select=product_catalog_id,sales_unit,unit_price&order=effective_from.desc,id.desc",
-    ),
-    supabaseRequest<Array<{ product_id: string; price: number }>>(
-      `pricing_p0_effective?company_id=eq.${company}&product_id=in.(${ids})&select=product_id,price`,
-    ),
-  ]) : [[], []];
-  const baseByProduct = new Map(basePrices.map(row => [row.product_id, row.price]));
+  const agreements = priceSearch && ids ? await supabaseRequest<Array<{ product_catalog_id: string; sales_unit: string; unit_price: number }>>(
+    `customer_price_agreements?company_id=eq.${company}&customer_id=eq.${customer}&product_catalog_id=in.(${ids})&status=eq.active` +
+    `&effective_from=lte.${today}&or=(effective_until.is.null,effective_until.gte.${today})` +
+    "&select=product_catalog_id,sales_unit,unit_price&order=effective_from.desc,id.desc",
+  ) : [];
   const prices = await Promise.all(shown.map(async p => {
     const contract = p.order_pricing_mode !== "market" && agreements.find(row => row.product_catalog_id === p.id && row.sales_unit === p.sales_unit);
-    if (contract) return priceOrNull(contract.unit_price);
+    if (contract) return { price: priceOrNull(contract.unit_price), includesTax: false };
     try {
-      const grade = await supabaseRequest<number | null>("rpc/margin_template_price_v1", {
-        method: "POST", body: JSON.stringify({ p_company: company, p_customer: customer, p_product: p.id }),
+      // CX-148b: 주문 저장과 같은 가격 함수(받은 단가표 → 카탈로그 → 기본가). 화면 가격과 주문 가격이 갈라지지 않게 여기서 따로 계산하지 않는다.
+      const priced = await supabaseRequest<Array<{ price: number | null; includes_tax: boolean | null }>>("rpc/self_order_price_v2", {
+        method: "POST", body: JSON.stringify({ p_company: company, p_customer: customer, p_product: p.id, p_date: today, p_include_promise: true }),
       });
-      return priceOrNull(grade) ?? priceOrNull(baseByProduct.get(p.id));
+      return { price: priceOrNull(priced[0]?.price), includesTax: priced[0]?.includes_tax === true };
     } catch (error) {
       if (priceSearch) throw error;
-      return null;
+      return { price: null, includesTax: false };
     }
   }));
-  const recentIds = shown.filter((p, index) => p.order_pricing_mode === "market" || (priceSearch && prices[index] === null)).map(p => p.id);
+  const recentIds = shown.filter((p, index) => p.order_pricing_mode === "market" || (priceSearch && prices[index].price === null)).map(p => p.id);
   const recent = recentIds.length ? await supabaseRequest<Recent[]>("rpc/store_recent_dispatch_prices", { method: "POST", body: JSON.stringify({ p_company: company, p_customer: customer, p_products: recentIds }) }) : [];
   const recentBy = new Map(recent.map((r) => [r.product_id, r]));
   const lines: CatalogLine[] = shown.map((p, index) => {
     const isMarket = p.order_pricing_mode === "market";
-    const price = prices[index];
+    const price = prices[index].price;
     const last = recentBy.get(p.id);
     return {
       productId: p.id, name: (p.sales_product_name || p.canonical_name || p.purchase_product_name || "").trim(), category: (p.category ?? "").split(">")[0].trim() || "미분류", brand: p.brand_name ?? "", spec: p.sales_spec ?? "", unit: p.sales_unit ?? "", isMarket, taxType: p.tax_type === "exempt" ? "exempt" as const : "taxable" as const,
       price: isMarket ? null : price,
+      ...(!isMarket && prices[index].includesTax && p.tax_type === "taxable" ? { priceIncludesTax: true } : {}),
       todayBasePrice: isMarket ? todayBaseOnly(p.purchase_price_date, today, price) : null,
       lastDispatch: last ? { price: last.unit_price, date: last.document_date } : null,
     };

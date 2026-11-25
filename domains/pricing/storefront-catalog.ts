@@ -11,6 +11,8 @@ export type CatalogLine = {
   taxType: "taxable" | "exempt";
   /** 일반 품목: 이 매장의 카탈로그 가격(서버 함수 결과). 시세 품목은 항상 null(가격 미정). */
   price: number | null;
+  /** CX-148b: 받은 단가표가 세금 포함 가격이면 true(과세 품목에 부가세를 또 얹지 않는다). */
+  priceIncludesTax?: boolean;
   /** 시세 품목: 오늘 날짜 매입가가 있을 때만 그 매장 카탈로그 가격. 없으면 null(표시 안 함). */
   todayBasePrice: number | null;
   /** 시세 품목: 이 매장의 최근 확정 주문 줄 단가와 날짜. 다른 매장 값은 절대 넣지 않는다. */
