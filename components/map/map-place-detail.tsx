@@ -67,6 +67,7 @@ import { AddressPicker } from "@/components/map/address-picker";
 import { addressLines, joinSavedAddress } from "@/domains/customer/address-line";
 import type { StopPhotoGroup } from "@/domains/delivery/stop-photo-groups";
 import { StopPhotoList } from "@/components/map/stop-photo-list";
+import { CustomerOwnerMobileCard } from "@/components/customer-owner-mobile-card";
 import { relationshipLabel, TERMINATED_HIDDEN_NOTICE } from "@/domains/customer/relationship-filter";
 import { StoreEdit, StoreHistoryItem, StoreAttachment, AttachmentFile, FuelPriceByType, resolveDisplayIndustry, permitLeadCompanyId, withPermitLeadCompanyQuery, normalizePhoneNumber } from "@/components/map/map-place-helpers";
 
@@ -1010,6 +1011,7 @@ export function StoreDetail({
                   <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
                   <EditRow label="연락처" onChange={(value) => setDraftPhone(formatPhoneNumber(value))} value={draftPhone} />
                   <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
+                  <div className="sm:col-span-2 lg:col-span-3"><CustomerOwnerMobileCard customerId={store.id} /></div>
                   <EditRow label="개업일" onChange={setDraftOpeningDate} type="date" value={draftOpeningDate} />
                   <EditRow label="생년월일" onChange={setDraftBirthDate} type="date" value={draftBirthDate} />
                   <div className="grid gap-1.5 text-sm sm:col-span-2 lg:col-span-3">
