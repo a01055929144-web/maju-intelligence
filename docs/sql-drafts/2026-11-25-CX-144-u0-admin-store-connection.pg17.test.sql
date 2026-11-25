@@ -90,6 +90,8 @@ select pg_get_constraintdef(oid) as prod_check2 from pg_constraint
   where conrelid='public.store_owner_activation_requests'::regclass and conname='store_owner_activation_requests_check2' \gset
 
 \ir 2026-11-25-CX-144-u0-admin-store-connection.sql
+-- 운영 후속(11/25 적용): 래퍼가 부르는 core 함수의 service_role 실행 권한
+\ir 2026-11-25-CX-144-u0-grant-fix.sql
 
 -- U0 이후에도 공개 링크 요청 분기가 운영과 같게 통과/거절된다(번호 없는 개업 준비 포함)
 do $p$ declare ok boolean; d uuid := '50000000-0000-4000-8000-000000000001'; v uuid := '60000000-0000-4000-8000-000000000001'; l uuid := '70000000-0000-4000-8000-000000000001';
@@ -192,6 +194,39 @@ begin
     or not has_function_privilege('service_role', 'public.activate_store_owner_v1(text,uuid,text,timestamptz,text,text,timestamptz,text)', 'execute')
     then raise exception 'privileges'; end if;
 end $t$;
+
+-- 7b. service_role로 래퍼 함수 호출(운영 서버와 같은 권한). 함수 소유자(superuser)로만 시험하면 11/25 "permission denied for core" 같은 누락을 못 잡는다.
+begin;
+insert into public.normalized_customers(id, company_id, customer_name, business_registration_number)
+  values ('20000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-000000000001', 'service_role 시험 거래처', '9234567890'),
+         ('20000000-0000-4000-8000-0000000000a2', '10000000-0000-4000-8000-000000000001', 'service_role 시험 거래처2', '9334567890');
+set local role service_role;
+do $r$
+declare c1 uuid := '10000000-0000-4000-8000-000000000001'; owner_member uuid := '40000000-0000-4000-8000-000000000001';
+  u1 uuid := '30000000-0000-4000-8000-000000000001'; admin_key text := repeat('d', 64); r jsonb; s uuid;
+begin
+  -- 점주(회사 구성원) 경로 래퍼 → core
+  r := public.prepare_store_owner_activation_v1(c1, '20000000-0000-4000-8000-0000000000a1', owner_member, repeat('8', 64));
+  if r->>'storeAccountId' is null then raise exception 'sr_prepare_failed'; end if;
+  -- 관리자 경로 래퍼 → core
+  r := public.admin_prepare_store_owner_activation_v1(c1, '20000000-0000-4000-8000-0000000000a2', admin_key, repeat('9', 64));
+  s := (r->>'storeAccountId')::uuid;
+  if s is null then raise exception 'sr_admin_prepare_failed'; end if;
+  -- 활성화 → 연결 해제(탈퇴) 처리
+  perform public.activate_store_owner_v1(repeat('9', 64), u1, '2026-11', clock_timestamp(), '9334567890', 'active', clock_timestamp(), 'verification-request-sr01');
+  r := public.admin_change_store_connection_v1(c1, s, admin_key, 'close');
+  if r is null then raise exception 'sr_change_failed'; end if;
+end $r$;
+rollback;
+-- anon·authenticated는 래퍼를 호출할 수 없다(실제 role로 확인)
+begin;
+set local role authenticated;
+do $r$ declare ok boolean := false; begin
+  begin perform public.admin_prepare_store_owner_activation_v1('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', repeat('d', 64), repeat('7', 64));
+  exception when insufficient_privilege then ok := true; end;
+  if not ok then raise exception 'authenticated_can_call_wrapper'; end if;
+end $r$;
+rollback;
 
 -- 8. down: 관리자 초대 기록이 남아 있으면 중단, 정리 후에는 원래 함수로 복귀(탈퇴한 거래처 재초대는 다시 거절)
 select public.admin_change_store_connection_v1('10000000-0000-4000-8000-000000000001', (select id from public.store_accounts where customer_id = '20000000-0000-4000-8000-000000000001'), repeat('d', 64), 'close');
