@@ -18,6 +18,7 @@ export function toPublicStorefront(store: Storefront) {
     priceAvailable: store.priceAvailable,
     canOrder: store.canOrder,
     ...(delivery?{deliveryEligibility:{eligible:delivery.eligible,reason:delivery.reason,territoryName:delivery.territoryName,weekdays:delivery.weekdays}}:{}),
+    ...(store.deliveryInfo?{deliveryInfo:store.deliveryInfo}:{}),
     nextDeliveryDate: store.nextDeliveryDate,
     selectedDeliveryDate: store.selectedDeliveryDate,
     deliveryDays: store.deliveryDays,

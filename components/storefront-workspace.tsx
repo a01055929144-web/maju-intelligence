@@ -13,6 +13,7 @@ import { StorefrontPromotionAvailability } from "./storefront-promotion-availabi
 import { StorefrontOrderDetail } from "./storefront-order-detail";
 import { Notice } from "./ui/notice";
 import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
+import { StoreDeliveryInfoSheet } from "./store-delivery-info-sheet";
 import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry";
 import { Badge } from "./ui/badge";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
@@ -46,6 +47,8 @@ type Store = { source?: "document" | "catalog"; title: string; companyName: stri
   deliveryDays?: Array<{ date: string; ok: boolean; reason?: "weekday" | "holiday" | "cutoff" | "range" }>;
   deliveryGuide?: string;
   companyPhone?: string | null;
+  /** CX-152: 점주가 넣어야 배송되는 배송 정보 중 빠진 항목(값 없음). */
+  deliveryInfo?:{missing:Array<{key:string;label:string}>};
   deliveryEligibility?:{eligible:boolean;reason:string;territoryName?:string;weekdays:number[]};
   notice: string; marketPriceNotice: string; policy: DeliveryPolicy; lines: Product[] };
 type Order = { id: string; deliveryDate: string | null; status: string; knownTotal: number;
@@ -62,6 +65,7 @@ type Response = { store: Store; orders: Order[]; preferences: Preference[];
   orderCutoffGuidance?: { serverNow: string };
   memberLogin?: StoreKakaoLogin;
   memberManagement?: { href: string } | { message: string };
+  deliveryEdit?: { companyId: string; storeAccountId: string };
   mobileCommon?: boolean;
   historyPage: number; historyHasMore: boolean; message?: string };
 const won = formatWon;
@@ -131,6 +135,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
     return () => media.removeEventListener("change", sync);
   }, []);
   const [cartOpen, setCartOpen] = useState(false);
+  const [deliverySheet, setDeliverySheet] = useState(false);
   const tableView = desktop && orderView === "table";
   // CC-36a: "받은 단가표 | 전체 상품"(전체 상품이 열려 있는 매장만). 마지막에 쓴 쪽을 기억한다.
   const [catalog, setCatalog] = useState<CatalogPage | null>(null);
@@ -238,6 +243,8 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   // CX-145 P1-3: 막힌 사유는 주소 확인 결과가 있으면 그 사유, 없으면 배송 요일 미설정. 사유별 제목과 다음 행동을 같은 곳에서 만든다.
   const blockReason = store?.deliveryEligibility && !store.deliveryEligibility.eligible ? store.deliveryEligibility.reason : "weekdays_unconfigured";
   const blockGuide = deliveryBlockGuide(blockReason);
+  const infoMissing = store?.deliveryInfo?.missing ?? [];
+  const memberScope = data?.deliveryEdit ?? null;
   const deliveryReady=Boolean(store&&(store.deliveryEligibility?.eligible??true)&&store.policy.weekdays.length>0);
   const pricesReady = !loading && !loadError && Boolean(deliveryDate) && deliveryDate === store?.selectedDeliveryDate;
   const pricesVisible = pricesReady && Boolean(store?.priceAvailable);
@@ -473,7 +480,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       {editing && selected.some(line => promotionState(line)) && <p>주문 수정은 기존 예약분을 포함해 서버에서 다시 확인합니다.</p>}
       {(() => {
         const dayState = deliveryReady && deliveryDate ? dayRule(deliveryDate) : null;
-        const why = busy ? "" : !deliveryReady ? `${blockGuide.headline} — ${blockGuide.action === "address" ? "내 정보에서 배송지를 입력해 주세요." : "고객사에 문의해 주세요."}`
+        const why = busy ? "" : infoMissing.length ? `배송 정보를 먼저 입력해 주세요 — 빠진 항목: ${infoMissing.map(item => item.label).join(", ")}` : !deliveryReady ? `${blockGuide.headline} — ${blockGuide.action === "address" ? "내 정보에서 배송지를 입력해 주세요." : "고객사에 문의해 주세요."}`
           : !deliveryDate ? "배송일을 골라 주세요."
           : dayState && !dayState.ok ? `선택한 배송일은 ${DELIVERY_REASON_LABEL[dayState.reason]}이라 주문할 수 없습니다. 다른 날을 골라 주세요.`
           : !pricesReady ? (loadError ? "배송일 가격을 확인하지 못해 주문할 수 없습니다. 위의 다시 불러오기를 눌러 주세요." : "선택한 배송일의 가격을 확인하는 중입니다.")
@@ -483,7 +490,8 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
           : promotionBlocked ? "행사 잔량이 부족합니다. 수량을 조정해 주세요." : productCutoffBlocked ? "마감이 지난 품목을 빼 주세요." : "";
         return why ? <p aria-live="polite" className="text-sm text-amber-800" data-testid="submit-disabled-reason">{why}</p> : null;
       })()}
-      <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit || promotionBlocked || productCutoffBlocked || (cutoff?.open === false && !confirmingAfterCutoff)} className="min-h-[48px] w-full"
+      {infoMissing.length > 0 && memberScope && <Button className="min-h-[48px] w-full" onClick={() => setDeliverySheet(true)} type="button">배송 정보 먼저 입력</Button>}
+      <Button disabled={infoMissing.length > 0 || !deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit || promotionBlocked || productCutoffBlocked || (cutoff?.open === false && !confirmingAfterCutoff)} className="min-h-[48px] w-full"
         onClick={() => void submit()}>{busy ? "저장 중" : confirmingAfterCutoff || confirmingPromotion ? "이전 주문 결과 확인" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
   </>;
   return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
@@ -504,6 +512,13 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         <StoreKakaoLoginPanel access={data.memberLogin} newWindow />
         <Button variant="outline" className="min-h-[44px]" disabled={busy} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>로그인 상태 다시 확인</Button>
       </section>}
+    {(tab === "home" || tab === "order") && infoMissing.length > 0 && <section aria-label="배송 정보 입력 안내" className="m-4 space-y-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm md:mx-6">
+      <p className="font-semibold" data-testid="delivery-info-card">배송 정보를 넣어야 배송됩니다</p>
+      <p>빠진 항목: {infoMissing.map(item => item.label).join(", ")}</p>
+      {memberScope ? <Button className="min-h-[44px]" onClick={() => setDeliverySheet(true)} type="button">배송 정보 입력</Button> : <p>점주 로그인 후 입력할 수 있습니다.</p>}
+    </section>}
+    {deliverySheet && memberScope && <StoreDeliveryInfoSheet companyId={memberScope.companyId} storeAccountId={memberScope.storeAccountId} onClose={() => setDeliverySheet(false)}
+      onSaved={() => { setDeliverySheet(false); void load(deliveryDate || undefined).catch(() => undefined); }} />}
     {tab === "home" && <section className="space-y-4 p-4 md:max-w-3xl md:p-6">
       <p>다음 배송일: <strong>{deliveryReady ? store.nextDeliveryDate || "배송 가능일 확인 필요" : "매장 주소·배송 권역 확인 필요"}</strong></p>
       {changedPrices.length > 0 && <div className="rounded border p-3">
@@ -538,7 +553,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         <p role="status">{deliveryEligibilityMessage(blockReason)}</p>
         <div className="flex flex-wrap gap-2">
           {blockGuide.action === "address"
-            ? <Button className="min-h-[44px]" onClick={() => setTab("info")} type="button">내 정보에서 배송지 입력</Button>
+            ? <Button className="min-h-[44px]" onClick={() => memberScope ? setDeliverySheet(true) : setTab("info")} type="button">{memberScope ? "배송 정보 입력" : "내 정보에서 배송지 입력"}</Button>
             : store.companyPhone ? <a className="maju-button-primary inline-flex min-h-[44px] items-center px-4" href={`tel:${store.companyPhone}`}>고객사에 전화하기</a>
               : <span className="inline-flex min-h-[44px] items-center">고객사 담당자에게 문의해 주세요.</span>}
           <Button variant="outline" className="min-h-[44px]" disabled={busy || loading} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>배송 설정 다시 확인</Button>

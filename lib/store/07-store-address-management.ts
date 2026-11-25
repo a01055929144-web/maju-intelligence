@@ -27,6 +27,23 @@ export function verifyStoreAddressSelection(token: string, scope: { companyId: s
   } catch { return null; }
 }
 
+/** 카카오 주소 검색 → 서명된 선택 증명과 함께 돌려준다(주소 저장은 이 증명이 있어야 한다). */
+export async function searchStoreAddresses(query: string, scope: { companyId: string; storeAccountId: string }): Promise<{ status: number; message?: string; results: Array<{ address: string; selectionProof: string }> }> {
+  if (query.length < 2) return { status: 400, message: "주소 검색어를 2글자 이상 입력하세요.", results: [] };
+  const key = process.env.KAKAO_REST_KEY;
+  if (!key) return { status: 503, message: "주소 검색이 아직 준비되지 않았습니다.", results: [] };
+  const response = await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(query)}&size=10`,
+    { headers: { Authorization: `KakaoAK ${key}` }, cache: "no-store" });
+  if (!response.ok) return { status: 503, message: "주소 검색에 실패했습니다.", results: [] };
+  const payload = await response.json() as { documents?: Array<{ address_name: string; road_address?: { address_name?: string } | null }> };
+  const results = (payload.documents || []).flatMap(item => {
+    const address = item.road_address?.address_name || item.address_name;
+    const selectionProof = createStoreAddressSelection({ address, companyId: scope.companyId, storeAccountId: scope.storeAccountId });
+    return address && selectionProof ? [{ address, selectionProof }] : [];
+  });
+  return { status: 200, results };
+}
+
 export function isStoreAddressCompanyEnabled(companyId: string) {
   return process.env.STORE_MEMBER_ADDRESS_ENABLED === "true" &&
     (process.env.FEATURE_STORE_MEMBER_ADDRESS_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
