@@ -84,17 +84,17 @@ export default async function StorePage({ searchParams }: {
   // CX-11 직접 가입 화면 픽스처(CI 전용, 세션·DB 없음): guest=로그인 전, new=로그인했고 매장 없음(입력 폼), profile=가입 직후 홈.
   const directFixture = isCiLayoutFixturesEnabled() && /^store-direct-signup-(guest|new|profile|connected)$/.test(String(params.fixture)) ? String(params.fixture) : undefined;
   if (directFixture) { portalError = false; accounts = directFixture === "store-direct-signup-guest" ? null : directFixture === "store-direct-signup-connected"? [{ companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-0000000000c1", customerName: "합성 연결 유통 매장", hasCostAccess: false, canManageMembers: false, canManageAddress: false, documents: [] }] : []; }
-  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi" || params.fixture === "s6-history" || params.fixture === "s4-documents" || params.fixture === "cx63-price-search") ? params.fixture : null;
+  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi" || params.fixture === "s6-history" || params.fixture === "s4-documents" || params.fixture === "cx63-price-search" || params.fixture === "cx145-catalog-only") ? params.fixture : null;
   const legacyFixture = isCiLayoutFixturesEnabled() && params.fixture === "store-portal-source-document";
   const fixtureAccounts = fixture ? Array.from({ length: fixture === "s1-multi" ? 2 : 1 }, (_, index) => ({
     companyId: "00000000-0000-4000-8000-000000000001",
     storeAccountId: `20000000-0000-4000-8000-00000000000${index + 1}`,
-    ...(fixture === "s4-documents" ? { businessType: "농산", companyName: "합성 유통", catalogHref: "/store?view=order#synthetic-catalog" } : {}),
+    ...(fixture === "s4-documents" || fixture === "cx145-catalog-only" ? { businessType: "농산", companyName: "합성 유통", catalogHref: "/store?view=order#synthetic-catalog" } : {}),
     customerName: index === 0 ? "합성 가 매장" : "합성 나 매장",
     settlementAccount: { bank: "합성은행", number: "123-456-7890", holder: "합성 유통" },
     hasCostAccess: index === 0, canManageMembers: index === 0,
     canManageAddress: false,
-    documents: fixture === "cx63-price-search" ? [
+    documents: fixture === "cx145-catalog-only" ? [] : fixture === "cx63-price-search" ? [
       { title: "합성 받은 단가표", kind: "sheet" as const, href: "/store#synthetic-cx63-sheet", canOrder: true, validUntil: "2099-12-31" },
       { title: "합성 받은 견적서", kind: "quote" as const, href: "/pricing-document#synthetic-cx63-quote", canOrder: false, validUntil: "2099-12-31" },
     ] : fixture === "s4-documents" ? [
