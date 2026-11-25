@@ -31,6 +31,7 @@ const publicRoutes = new Map([
   ["store/accounts/activate/route.ts", "default-OFF one-time owner token plus explicit terms acceptance; stores proof only in a signed HttpOnly cookie before Kakao OAuth"],
   ["store/members/accept/route.ts", "default-OFF same-origin one-time member invite token; stores proof only in a signed HttpOnly cookie before Kakao OAuth"],
   ["store/profile/route.ts", "default-OFF STORE_DIRECT_SIGNUP_ENABLED; signed Kakao store session cookie; same-origin POST creates only the caller's own profile; GET lists only the caller's own profiles"],
+  ["store/phone-link/route.ts", "default-OFF FEATURE_STORE_PHONE_LINK_COMPANY_IDS; signed Kakao store session cookie; same-origin POST; the phone is read server-side from the caller's own app_users row and re-matched in the DB function; request carries only customer ids and never a phone"],
   ["store/connect/route.ts", "default-OFF STORE_DIRECT_SIGNUP_ENABLED; signed Kakao store session cookie; same-origin POST; DB-backed failure throttle; connects only the caller's own owner profile and reveals nothing about which distributor a code belongs to"],
   ["storefront/route.ts", "feature-gated store link; signed bearer token maps to exactly one customer and published version"],
   ["storefront/catalog/route.ts", "default-OFF STORE_CATALOG_LINK read-only product list; same signed store link token resolves exactly one company and customer, same-origin POST, prices only from margin_template_price_v1, last dispatch price from this store only"]

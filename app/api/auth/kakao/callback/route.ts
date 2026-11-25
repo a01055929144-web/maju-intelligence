@@ -1,4 +1,6 @@
 import { finalizeStoreSignup } from "@/lib/store/07-store-signup-link";
+import { normalizeOwnerMobile } from "@/domains/store/owner-phone";
+import { listPhoneLinkCandidates, phoneHasCustomerMatch, phoneLinkCompanyIds, refreshAppUserPhone } from "@/lib/store/07-store-phone-link";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStoreMemberInvitationProof, getStoreOwnerActivationProof,
@@ -133,6 +135,21 @@ export async function GET(request: NextRequest) {
     if (storePortalMode) {
       const existingAuthUserId = await resolveStoreAuthUserId(String(kakaoUser.id));
       const isMember = existingAuthUserId ? await hasAllowedStorePortalMembership(existingAuthUserId) : false;
+      // CX-146: 카카오 번호 = 거래처 '점주 휴대폰'이면 확인 한 번으로 매장 연결(플래그 회사만). 실패해도 기존 로그인은 그대로.
+      const kakaoPhone = normalizeOwnerMobile(kakaoUser.kakao_account?.phone_number);
+      if (kakaoPhone) {
+        try {
+          const phoneUserId = existingAuthUserId ?? (phoneLinkCompanyIds().length && await phoneHasCustomerMatch(kakaoPhone)
+            ? await resolveOrCreateStoreKakaoUser({ avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
+              email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
+              name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname, phoneNumber: kakaoUser.kakao_account?.phone_number }) : null);
+          if (phoneUserId) {
+            await refreshAppUserPhone(phoneUserId, kakaoPhone);
+            if ((await listPhoneLinkCandidates(phoneUserId)).some(candidate => candidate.state === "linkable") && await setStoreSession(phoneUserId))
+              return NextResponse.redirect(new URL("/store/phone-link", request.url));
+          }
+        } catch { /* 번호 연결이 실패해도 기존 로그인 흐름을 막지 않는다 */ }
+      }
       // 직접 가입(STORE_DIRECT_SIGNUP_ENABLED, 기본 OFF): 아직 구성원이 아닌 카카오 사용자도 로그인시켜 /store에서 매장 정보를 입력하게 한다.
       // 세션만으로는 어떤 유통사 자료도 열리지 않는다(모든 조회가 구성원 확인을 따로 한다).
       const authUserId = isMember ? existingAuthUserId : storeDirectSignupEnabled()
