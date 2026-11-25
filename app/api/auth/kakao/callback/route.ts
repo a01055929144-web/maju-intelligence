@@ -41,6 +41,23 @@ type KakaoUserResponse = {
   };
 };
 
+/** CX-146: 카카오 번호가 거래처 '점주 휴대폰'과 같아 연결할 매장이 있으면 확인 화면으로 보낸다(플래그 회사만). 없거나 실패하면 null — 기존 로그인 흐름을 막지 않는다. */
+async function phoneLinkRedirect(requestUrl: string, kakaoUser: KakaoUserResponse, existingAuthUserId: string | null) {
+  const kakaoPhone = normalizeOwnerMobile(kakaoUser.kakao_account?.phone_number);
+  if (!kakaoPhone) return null;
+  try {
+    const phoneUserId = existingAuthUserId ?? (phoneLinkCompanyIds().length && await phoneHasCustomerMatch(kakaoPhone)
+      ? await resolveOrCreateStoreKakaoUser({ avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
+        email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
+        name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname, phoneNumber: kakaoUser.kakao_account?.phone_number }) : null);
+    if (!phoneUserId) return null;
+    await refreshAppUserPhone(phoneUserId, kakaoPhone);
+    if ((await listPhoneLinkCandidates(phoneUserId)).some(candidate => candidate.state === "linkable") && await setStoreSession(phoneUserId))
+      return NextResponse.redirect(new URL("/store/phone-link", requestUrl));
+  } catch { /* 번호 연결이 실패해도 기존 로그인 흐름을 막지 않는다 */ }
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code") || "";
   const rawState = request.nextUrl.searchParams.get("state") || "";
@@ -80,8 +97,22 @@ export async function GET(request: NextRequest) {
     if (storeOwnerMode) {
       const proof = await getStoreOwnerActivationProof({ consume: true });
       const activation = proof ? await getPreparedStoreOwnerActivation(proof.token) : null;
-      if (!proof || !activation || !storeOwnerMatch || activation.companyId !== storeOwnerMatch[1] || activation.storeAccountId !== storeOwnerMatch[2])
-        return redirectStore(request.url, "store_activation_required");
+      const proofMatches = Boolean(proof && activation && storeOwnerMatch && !(activation.companyId !== storeOwnerMatch[1] || activation.storeAccountId !== storeOwnerMatch[2]));
+      // CX-145 P1-2: 이미 가입한 점주가 단가표 공개 화면의 "이 단가로 주문 시작"으로 들어오면 개통 화면 대신 자기 매장으로 보낸다.
+      // 건너뛰는 경우는 ① 개통 증명이 없거나 안 맞을 때 ② 증명이 단가표 공개 신규 가입(publicOnboarding)일 때뿐이다.
+      // 거래처 초대(증명이 맞고 publicOnboarding이 아님)는 기존 점주(다른 매장 점주 포함)도 아래 개통까지 그대로 진행한다.
+      const skipActivation = !proofMatches || Boolean(activation?.publicOnboarding);
+      const existingOwnerId = skipActivation ? await resolveStoreAuthUserId(String(kakaoUser.id)) : null;
+      if (existingOwnerId && await hasAllowedStorePortalMembership(existingOwnerId)) {
+        if (!(await setStoreSession(existingOwnerId))) return redirectStore(request.url, "store_login_unavailable");
+        return NextResponse.redirect(new URL(proofMatches && proof?.returnTo ? proof.returnTo.replace("/pricing-document#", "/pricing-document?continueOrder=1#") : "/store", request.url));
+      }
+      if (skipActivation) {
+        const phoneRedirect = await phoneLinkRedirect(request.url, kakaoUser, existingOwnerId);
+        if (phoneRedirect) return phoneRedirect;
+        if (!proofMatches) return NextResponse.redirect(new URL("/store", request.url)); // 개통 증명 없이 열림: 오류 대신 "카카오로 로그인" 화면
+      }
+      if (!proof || !activation) return NextResponse.redirect(new URL("/store", request.url));
       const authUserId = await resolveOrCreateStoreKakaoUser({
         avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
         email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
@@ -136,20 +167,8 @@ export async function GET(request: NextRequest) {
       const existingAuthUserId = await resolveStoreAuthUserId(String(kakaoUser.id));
       const isMember = existingAuthUserId ? await hasAllowedStorePortalMembership(existingAuthUserId) : false;
       // CX-146: 카카오 번호 = 거래처 '점주 휴대폰'이면 확인 한 번으로 매장 연결(플래그 회사만). 실패해도 기존 로그인은 그대로.
-      const kakaoPhone = normalizeOwnerMobile(kakaoUser.kakao_account?.phone_number);
-      if (kakaoPhone) {
-        try {
-          const phoneUserId = existingAuthUserId ?? (phoneLinkCompanyIds().length && await phoneHasCustomerMatch(kakaoPhone)
-            ? await resolveOrCreateStoreKakaoUser({ avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
-              email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
-              name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname, phoneNumber: kakaoUser.kakao_account?.phone_number }) : null);
-          if (phoneUserId) {
-            await refreshAppUserPhone(phoneUserId, kakaoPhone);
-            if ((await listPhoneLinkCandidates(phoneUserId)).some(candidate => candidate.state === "linkable") && await setStoreSession(phoneUserId))
-              return NextResponse.redirect(new URL("/store/phone-link", request.url));
-          }
-        } catch { /* 번호 연결이 실패해도 기존 로그인 흐름을 막지 않는다 */ }
-      }
+      const portalPhoneRedirect = await phoneLinkRedirect(request.url, kakaoUser, existingAuthUserId);
+      if (portalPhoneRedirect) return portalPhoneRedirect;
       // 직접 가입(STORE_DIRECT_SIGNUP_ENABLED, 기본 OFF): 아직 구성원이 아닌 카카오 사용자도 로그인시켜 /store에서 매장 정보를 입력하게 한다.
       // 세션만으로는 어떤 유통사 자료도 열리지 않는다(모든 조회가 구성원 확인을 따로 한다).
       const authUserId = isMember ? existingAuthUserId : storeDirectSignupEnabled()
