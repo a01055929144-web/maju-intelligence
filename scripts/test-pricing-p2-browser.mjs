@@ -225,8 +225,8 @@ try {
       randomUUID(),
     ]);
   // CX-145 P1-1: storefront.ts가 회사 기본 배송 요일(company_profiles.delivery_weekdays)을 읽는다. 시험 DB에는 표가 없어 최소 열만 만든다.
-  await pool.query("create table if not exists company_profiles(company_id uuid primary key references companies(id), delivery_weekdays smallint[] not null default '{}')");
-  await pool.query("insert into company_profiles(company_id,delivery_weekdays) values($1,array[1,2,3,4,5,6]::smallint[]) on conflict (company_id) do update set delivery_weekdays=excluded.delivery_weekdays", [ids.company]);
+  await pool.query("create table if not exists company_profiles(company_id uuid primary key references companies(id), delivery_weekdays smallint[] not null default '{}', main_phone text)");
+  await pool.query("insert into company_profiles(company_id,delivery_weekdays,main_phone) values($1,array[1,2,3,4,5,6]::smallint[],'02-123-4567') on conflict (company_id) do update set delivery_weekdays=excluded.delivery_weekdays, main_phone=excluded.main_phone", [ids.company]);
   await pool.query("grant select on company_profiles to service_role");
   // Dependency tables mirror the existing service role read privileges, locally only.
   await pool.query(
@@ -628,6 +628,8 @@ try {
   if (fallback.store.customerName !== "합성 매장 C(권역 없음)") throw new Error("Fallback store fixture mismatch");
   if (JSON.stringify(fallback.store.policy.weekdays) !== JSON.stringify([1, 2, 3, 4, 5, 6]))
     throw new Error("Company default delivery weekdays were not used: " + JSON.stringify(fallback.store.policy.weekdays));
+  // CX-145 P1-3: 막힘 사유 화면의 '전화' 안내는 회사 대표번호(company_profiles.main_phone)에서 온다.
+  if (fallback.store.companyPhone !== "021234567") throw new Error("Blocked-reason company phone missing: " + fallback.store.companyPhone);
   if (!fallback.store.nextDeliveryDate || !fallback.store.canOrder) throw new Error("No deliverable day for a store without territory rules");
   if (!Array.isArray(fallback.store.deliveryDays) || fallback.store.deliveryDays.length !== 15) throw new Error("deliveryDays missing");
   const sunday = fallback.store.deliveryDays.find((item) => new Date(item.date + "T00:00:00Z").getUTCDay() === 0);

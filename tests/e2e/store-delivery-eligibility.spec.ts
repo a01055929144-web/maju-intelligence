@@ -1,3 +1,4 @@
+import { deliveryBlockGuide } from "../../domains/order/delivery-eligibility";
 import {expect,test} from "@playwright/test";
 import {deliveryEligibilityMessage} from "../../domains/order/delivery-eligibility";
 for(const width of [1440,390])test(`server delivery eligibility blocks and recovers at ${width}px`,async({page},info)=>{
@@ -22,6 +23,10 @@ for(const width of [1440,390])test(`server delivery eligibility blocks and recov
   for(const blocked of ["outside_area","address_unknown","territory_unconfigured","ambiguous_area","weekdays_unconfigured","territory_link_required"]){
     reason=blocked;await retry.click();
     await expect(page.getByRole("region",{name:"배송 요일 설정 안내"})).toContainText(deliveryEligibilityMessage(blocked));
+    await expect(page.getByTestId("delivery-block-headline")).toHaveText(deliveryBlockGuide(blocked).headline);
+    await expect(page.getByTestId("submit-disabled-reason")).not.toContainText("배송 요일이 설정되지 않아");
+    if (deliveryBlockGuide(blocked).action === "address") await expect(page.getByRole("button",{name:"내 정보에서 배송지 입력"})).toBeVisible();
+    else await expect(page.getByRole("region",{name:"배송 요일 설정 안내"}).getByText(/고객사/).first()).toBeVisible();
     await expect(submit).toBeDisabled();await expect(page.getByRole("region",{name:"배송일 선택"})).toHaveCount(0);expect(attempts).toBe(0);
   }
   expect((await retry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
