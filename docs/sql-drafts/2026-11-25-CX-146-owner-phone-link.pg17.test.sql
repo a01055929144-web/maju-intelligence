@@ -1,7 +1,7 @@
 -- CX-146 PG17: 운영과 같은 열·제약을 가진 합성 표 위에서 CX-122 → CX-142 → CX-146 초안 순서로 적용하고, service_role로 함수를 호출해 증명
 \set ON_ERROR_STOP on
 do $$ begin if current_setting('server_version_num')::int not between 170000 and 179999 then raise exception 'PostgreSQL 17 required'; end if; end $$;
-create role service_role nologin; create role anon nologin; create role authenticated nologin;
+create role service_role nologin bypassrls; create role anon nologin; create role authenticated nologin;
 create table public.companies(id uuid primary key);
 create table public.company_members(id uuid primary key, company_id uuid not null references public.companies(id), status text not null default 'active',
   role text not null default 'owner', permission_role text, unique(company_id, id));
