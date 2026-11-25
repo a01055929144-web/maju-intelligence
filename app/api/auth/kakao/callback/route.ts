@@ -98,16 +98,21 @@ export async function GET(request: NextRequest) {
       const proof = await getStoreOwnerActivationProof({ consume: true });
       const activation = proof ? await getPreparedStoreOwnerActivation(proof.token) : null;
       const proofMatches = Boolean(proof && activation && storeOwnerMatch && !(activation.companyId !== storeOwnerMatch[1] || activation.storeAccountId !== storeOwnerMatch[2]));
-      // CX-150: 이미 가입한 점주가 단가표의 "이 단가로 주문 시작"으로 들어와도 개통 화면이 아니라 자기 매장으로 보낸다.
-      // 순서: 연결된 매장이 있으면 그 매장 → 번호로 찾은 후보가 있으면 확인 화면 → 그 밖에는 기존 신규 개통(개통 증명이 없으면 로그인 안내).
-      const existingOwnerId = await resolveStoreAuthUserId(String(kakaoUser.id));
+      // CX-145 P1-2: 이미 가입한 점주가 단가표 공개 화면의 "이 단가로 주문 시작"으로 들어오면 개통 화면 대신 자기 매장으로 보낸다.
+      // 건너뛰는 경우는 ① 개통 증명이 없거나 안 맞을 때 ② 증명이 단가표 공개 신규 가입(publicOnboarding)일 때뿐이다.
+      // 거래처 초대(증명이 맞고 publicOnboarding이 아님)는 기존 점주(다른 매장 점주 포함)도 아래 개통까지 그대로 진행한다.
+      const skipActivation = !proofMatches || Boolean(activation?.publicOnboarding);
+      const existingOwnerId = skipActivation ? await resolveStoreAuthUserId(String(kakaoUser.id)) : null;
       if (existingOwnerId && await hasAllowedStorePortalMembership(existingOwnerId)) {
         if (!(await setStoreSession(existingOwnerId))) return redirectStore(request.url, "store_login_unavailable");
         return NextResponse.redirect(new URL(proofMatches && proof?.returnTo ? proof.returnTo.replace("/pricing-document#", "/pricing-document?continueOrder=1#") : "/store", request.url));
       }
-      const phoneRedirect = await phoneLinkRedirect(request.url, kakaoUser, existingOwnerId);
-      if (phoneRedirect) return phoneRedirect;
-      if (!proof || !activation || !proofMatches) return NextResponse.redirect(new URL("/store", request.url)); // 개통 증명 없이 열림: 오류 대신 "카카오로 로그인" 화면
+      if (skipActivation) {
+        const phoneRedirect = await phoneLinkRedirect(request.url, kakaoUser, existingOwnerId);
+        if (phoneRedirect) return phoneRedirect;
+        if (!proofMatches) return NextResponse.redirect(new URL("/store", request.url)); // 개통 증명 없이 열림: 오류 대신 "카카오로 로그인" 화면
+      }
+      if (!proof || !activation) return NextResponse.redirect(new URL("/store", request.url));
       const authUserId = await resolveOrCreateStoreKakaoUser({
         avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
         email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),

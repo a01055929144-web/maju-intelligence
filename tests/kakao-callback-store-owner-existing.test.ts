@@ -37,7 +37,7 @@ beforeEach(() => {
   m.phoneCompanies.mockReturnValue([]); m.phoneMatch.mockResolvedValue(false); m.proof.mockResolvedValue(null); m.prepared.mockResolvedValue(null);
 });
 
-describe("CX-150 단가표 '이 단가로 주문 시작' 카카오 로그인", () => {
+describe("CX-145 P1-2 단가표 '이 단가로 주문 시작' 카카오 로그인", () => {
   it("이미 가입한 점주는 개통 증명이 없어도(오류 없이) 자기 매장으로 간다", async () => {
     m.existing.mockResolvedValue(owner); m.member.mockResolvedValue(true);
     const response = await call();
@@ -46,11 +46,24 @@ describe("CX-150 단가표 '이 단가로 주문 시작' 카카오 로그인", (
     expect(m.createUser).not.toHaveBeenCalled(); expect(m.activate).not.toHaveBeenCalled();
   });
 
-  it("이미 가입한 점주가 증명과 함께 오면 단가표의 주문 계속 화면으로 간다", async () => {
+  it("이미 가입한 점주 + 단가표 공개 신규 가입 증명 → 단가표의 주문 계속 화면(자기 매장)", async () => {
     m.existing.mockResolvedValue(owner); m.member.mockResolvedValue(true);
     m.proof.mockResolvedValue({ token: "t".repeat(43), stage: "kakao", returnTo: "/pricing-document#doc-token" });
-    m.prepared.mockResolvedValue({ companyId: company, storeAccountId: storeAccount });
+    m.prepared.mockResolvedValue({ companyId: company, storeAccountId: storeAccount, publicOnboarding: true });
     expect(location(await call())).toBe("https://store.example.test/pricing-document?continueOrder=1#doc-token");
+  });
+
+  it("[회귀 방지] 기존 점주 + 다른 매장 거래처 초대(증명이 맞고 publicOnboarding 아님) → 건너뛰지 않고 새 매장 개통까지 진행", async () => {
+    m.existing.mockResolvedValue(owner); m.member.mockResolvedValue(true); m.createUser.mockResolvedValue(owner);
+    m.proof.mockResolvedValue({ token: "t".repeat(43), stage: "kakao", termsAcceptedAt: "2026-11-26T00:00:00Z" });
+    m.prepared.mockResolvedValue({ companyId: company, storeAccountId: storeAccount, publicOnboarding: false, businessRegistrationNumber: "1234567890", profileRequired: false });
+    m.business.mockResolvedValue({ failedNumbers: new Set(), results: new Map([["1234567890", { label: "정상" }]]) });
+    m.activate.mockResolvedValue({ companyId: company, storeAccountId: storeAccount });
+    const response = await call();
+    expect(m.activate).toHaveBeenCalledOnce();
+    expect(m.activate).toHaveBeenCalledWith(expect.objectContaining({ authUserId: owner, token: "t".repeat(43) }));
+    expect(location(response)).toContain(`companyId=${company}`);
+    expect(location(response)).not.toBe("https://store.example.test/store");
   });
 
   it("가입 전이지만 점주 휴대폰 후보가 있으면 확인 화면으로 간다(번호 원문은 넘기지 않는다)", async () => {
