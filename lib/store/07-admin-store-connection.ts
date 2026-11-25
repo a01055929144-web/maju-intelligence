@@ -44,3 +44,26 @@ export async function adminInviteOwner(input: { companyId: string; customerId: s
     p_company_id: input.companyId, p_customer_id: input.customerId, p_admin_key: input.adminKey, p_invite_token_hash: hashToken(token) }) });
   return { activationUrl: `${origin}/store/activate#${token}`, expiresAt: prepared.expiresAt };
 }
+
+export type KakaoUserHit = { id: string; name: string; phoneMasked: string; lastLoginAt: string | null };
+const maskPhone = (phone: string | null) => { const d = (phone || "").replace(/\D/g, ""); return d.length >= 8 ? `${d.slice(0, 3)}-****-${d.slice(-4)}` : "번호 없음"; };
+
+/** CX-144 U0b: 이미 카카오로 로그인한 사용자만(새 계정 생성 금지). 이름 일부 + 전화 뒤 4자리로 찾는다. 결과의 전화는 가려서 보낸다. */
+export async function searchKakaoUsers(query: string): Promise<KakaoUserHit[]> {
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  const digits = tokens.find(token => /^\d{4}$/.test(token));
+  const name = tokens.filter(token => token !== digits).join(" ").replace(/[*%,()]/g, " ").trim();
+  if (!digits && name.length < 2) return [];
+  const filters = [`kakao_user_id=not.is.null`, `status=eq.active`];
+  if (name) filters.push(`name=ilike.*${q(name)}*`);
+  if (digits) filters.push(`phone=like.*${digits}`);
+  const rows = await supabaseRequest<Array<{ id: string; name: string | null; phone: string | null; last_login_at: string | null }>>(
+    `app_users?${filters.join("&")}&select=id,name,phone,last_login_at&order=last_login_at.desc.nullslast&limit=20`);
+  return rows.map(row => ({ id: row.id, name: row.name || "이름 없음", phoneMasked: maskPhone(row.phone), lastLoginAt: row.last_login_at }));
+}
+
+export async function adminLinkMember(input: { companyId: string; storeAccountId: string; userId: string; role: "owner" | "manager" | "staff"; reason: string; replaceOwner: boolean; adminKey: string }) {
+  return supabaseRequest("rpc/admin_link_store_member_v1", { method: "POST", body: JSON.stringify({
+    p_company_id: input.companyId, p_store_account_id: input.storeAccountId, p_admin_key: input.adminKey, p_auth_user_id: input.userId,
+    p_role: input.role, p_reason: input.reason, p_replace_owner: input.replaceOwner }) });
+}

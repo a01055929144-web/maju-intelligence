@@ -66,3 +66,44 @@ describe("CX-144 U0 admin store connections", () => {
     expect((await POST(post({ action: "add_owner", companyId: c1, storeAccountId: a1 }))).status).toBe(409);
   });
 });
+
+describe("CX-144 U0b force link", () => {
+  const u1 = "50000000-0000-4000-8000-000000000001";
+  it("searches only kakao-logged-in active users, by name and/or last 4 digits, and masks phone numbers", async () => {
+    mocks.db.mockImplementation(async () => [{ id: u1, name: "홍길동", phone: "01012341234", last_login_at: "2026-11-24T00:00:00Z" }]);
+    const body = await (await GET(get(`companyId=${c1}&q=${encodeURIComponent("홍길동 1234")}`))).json();
+    expect(body.users).toEqual([{ id: u1, name: "홍길동", phoneMasked: "010-****-1234", lastLoginAt: "2026-11-24T00:00:00Z" }]);
+    const path = String(mocks.db.mock.calls[0][0]);
+    expect(path).toContain("kakao_user_id=not.is.null"); expect(path).toContain("status=eq.active");
+    expect(path).toContain(`name=ilike.*${encodeURIComponent("홍길동")}*`); expect(path).toContain("phone=like.*1234");
+    expect(JSON.stringify(body)).not.toContain("01012341234");
+    mocks.db.mockClear();
+    expect((await (await GET(get(`companyId=${c1}&q=${encodeURIComponent("홍")}`))).json()).users).toEqual([]);
+    expect(mocks.db).not.toHaveBeenCalled();
+    mocks.feature.mockReturnValue(false);
+    expect((await GET(get(`companyId=${c1}&q=abcd`))).status).toBe(404);
+  });
+  it("requires a reason and passes the admin key, role and replace flag only when explicit", async () => {
+    const base = { action: "link_member", companyId: c1, storeAccountId: a1, userId: u1, role: "owner" };
+    expect((await POST(post({ ...base, reason: " " }))).status).toBe(400);
+    expect((await POST(post({ ...base, reason: "x" }))).status).toBe(400);
+    expect((await POST(post({ ...base, role: "admin", reason: "권한 상승 시도" }))).status).toBe(400);
+    expect((await POST(post({ ...base, userId: "nope", reason: "잘못된 사용자" }))).status).toBe(400);
+    expect(mocks.db).not.toHaveBeenCalled();
+    expect((await POST(post({ ...base, reason: "점주 요청 확인 후 연결" }))).status).toBe(200);
+    expect(rpcBody()).toEqual({ p_company_id: c1, p_store_account_id: a1, p_admin_key: adminKey, p_auth_user_id: u1, p_role: "owner", p_reason: "점주 요청 확인 후 연결", p_replace_owner: false });
+    mocks.db.mockClear();
+    await POST(post({ ...base, reason: "점주 교체 요청", replaceOwner: true }));
+    expect(rpcBody().p_replace_owner).toBe(true);
+  });
+  it("is admin-only and maps refusals (existing owner, non-kakao user, duplicate) to clear messages", async () => {
+    mocks.admin.mockResolvedValue(null);
+    expect((await GET(get(`companyId=${c1}&q=홍길동`))).status).toBe(401);
+    expect((await POST(post({ action: "link_member", companyId: c1, storeAccountId: a1, userId: u1, role: "staff", reason: "시험 연결" }))).status).toBe(401);
+    mocks.admin.mockResolvedValue({ email: "ops@example.test", name: "운영" });
+    for (const [error, status] of [["active_store_owner_exists", 409], ["store_link_user_unavailable", 409], ["active_store_member_exists", 409], ["store_connection_unavailable", 409]] as const) {
+      mocks.db.mockRejectedValueOnce(new Error(error));
+      expect((await POST(post({ action: "link_member", companyId: c1, storeAccountId: a1, userId: u1, role: "owner", reason: "시험 연결" }))).status).toBe(status);
+    }
+  });
+});
