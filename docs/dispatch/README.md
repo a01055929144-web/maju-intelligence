@@ -45,6 +45,7 @@ CI 전체 초록 → Ready for review → 병합 (병합은 작성자가 함)
 
 ## "다음 진행해"를 받았을 때 (Claude Code · Codex 총괄방 공통)
 
+> 11/26 R19부터: 대기열·작업방 분배는 [R19 Codex](2026-11-26-R19-codex.md), 현황판은 [board/2026-11-26-R19.md](board/2026-11-26-R19.md), Claude 한도 시 인계는 [handoff](../handoff/2026-11-26-claude-to-codex-takeover.md).
 > 11/16 R3부터: 대기열은 [R3 Claude Code](2026-11-16-R3-claude-code.md) · [R3 Codex](2026-11-16-R3-codex.md). 규칙(받으면 할 일·멈출 때·보고)은 아래 R2 문서 그대로.
 > 11/15 R2부터: Claude Code는 [R2 Claude Code 지시서](2026-11-15-R2-claude-code.md) 1~5절(대기열·멈출 때·보고), Codex 총괄방은 [R2 Codex 지시서](2026-11-15-R2-codex.md) 0-2절을 따른다. "이어서 작업해"도 같은 뜻.
 
