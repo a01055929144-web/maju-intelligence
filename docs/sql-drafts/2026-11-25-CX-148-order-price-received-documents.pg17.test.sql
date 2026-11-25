@@ -135,7 +135,7 @@ end $t$;
 
 -- 9. 단가표 가격 = 주문 가격 비교 행렬. 단가표 화면 규칙(documentDisplayPrice: 과세 + 세금포함 표시 → round(price*1.1))과 같은 값을 주문 함수가 돌려준다.
 reset role;
-create temp table parity(n int, price bigint, tax text, incl boolean) on commit drop;
+create temp table parity(n int, price bigint, tax text, incl boolean);
 insert into parity values (1, 6845, 'taxable', false), (2, 6850, 'taxable', true), (3, 6223, 'taxable', true), (4, 5500, 'exempt', true),
   (5, 6500, 'exempt', false), (6, 4545, 'taxable', true), (7, 9999, 'taxable', true), (8, 5, 'taxable', true);
 do $$ declare m record; got record; want bigint; begin
