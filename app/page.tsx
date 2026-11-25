@@ -296,11 +296,28 @@ export default function Home() {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...buildManualCustomerPayload(nextRow), confirmDuplicate })
+        body: JSON.stringify({ ...buildManualCustomerPayload(nextRow), confirmDuplicate, createOnly: true })
       },
       15000
     ).catch(() => null);
     const payload = response ? await response.json().catch(() => null) : null;
+
+    if (response?.ok && payload?.alreadyRegistered) {
+      // 같은 사업자번호의 거래처가 이미 있다: 덮어쓰지 않고 기존 거래처로 안내한다.
+      setDuplicateNotice(null);
+      const existingId = String(payload.existingCustomerId || "");
+      setLastManualCustomerHref(existingId ? customerHistoryHref(existingId) : "/crm/timeline");
+      setLastManualCustomer(existingId ? { id: existingId, name: String(nextRow.customerName || nextRow.name || "거래처") } : null);
+      setManualSaveMessage("이미 등록된 거래처입니다. 기존 거래처 정보는 바꾸지 않았습니다. 거래처 관리에서 확인해 주세요.");
+      setRegistrationStatus({
+        actionLabel: "이미 등록됨",
+        description: "같은 사업자번호의 거래처가 이미 있어 저장하지 않았습니다.",
+        nextAction: "내용을 고치려면 기존 거래처 상세에서 수정하세요.",
+        status: "warning",
+        title: "이미 등록된 거래처입니다."
+      });
+      return;
+    }
 
     if (response?.ok && payload?.possibleDuplicate) {
       // 2026-08-27 피드백("중복값 입력되지 않게 만들어줘") 대응: 상호명이 같은 거래처가 이미 있으면

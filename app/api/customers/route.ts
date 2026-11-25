@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
         companyId?: string;
         validateBusinessNumber?: boolean;
         confirmDuplicate?: boolean;
+        createOnly?: boolean;
       })
     | null;
   const scope = await timing.measure("auth", () => getRequestAuthScope(request, body?.companyId));
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
       actorRole: scope.role,
       requestMethod: request.method
     },
-    { confirmDuplicate: body.confirmDuplicate }
+    { confirmDuplicate: body.confirmDuplicate, createOnly: body.createOnly === true }
   ));
   return timedJson(timing, result);
 }
