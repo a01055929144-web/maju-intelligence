@@ -113,13 +113,13 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   await expect(page.getByRole("button", { name: "저장 중", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "합성 품목 수량 늘리기", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "합성 품목 수량 줄이기", exact: true })).toBeDisabled();
-  await expect(page.getByLabel("배송일", { exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "다음 달", exact: true })).toBeDisabled();
   await expect(page.getByLabel("요청 사항", { exact: true })).toBeDisabled();
   await expect.poll(() => saved.size).toBe(1);
   releaseOrderResponse();
   await expect(page.getByRole("status").filter({ hasText: "합성 주문 저장 후 응답 유실" })).toBeVisible();
   await expect(page.getByRole("button", { name: "합성 품목 수량 늘리기", exact: true })).toBeEnabled();
-  await expect(page.getByLabel("배송일", { exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "다음 달", exact: true })).toBeEnabled();
   await expect(page.getByLabel("요청 사항", { exact: true })).toBeEnabled();
   expect(saved.size).toBe(1);
   await page.getByRole("button", { name: "후결제로 주문 신청", exact: true }).click();

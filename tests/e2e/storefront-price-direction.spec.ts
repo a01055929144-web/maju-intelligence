@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { pickDeliveryDay } from "./delivery-day";
 import { storeTab } from "./store-tab";
 const company = "00000000-0000-4000-8000-000000000001";
 
@@ -24,7 +25,7 @@ for (const width of [1440, 390]) test(`CX-116 shows and enforces product cutoffs
   await page.getByRole("button", { name: "합성 마감 품목 수량 늘리기" }).click();
   await expect(page.getByLabel("합성 마감 품목 수량", { exact: true })).toHaveText("1");
   passed = true;
-  await page.getByLabel("배송일").fill("2099-01-02");
+  await pickDeliveryDay(page, "2099-01-02");
   await expect(page.getByText("마감 지남 — 다음 배송일로").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "합성 마감 품목 수량 늘리기" })).toBeDisabled();
   if (width === 390) await page.getByRole("button", { name: /장바구니 확인/ }).click();
@@ -250,7 +251,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByLabel("합성 채소 수량", { exact: true })).toHaveText("1");
     const submit = page.getByRole("button", { name: "후결제로 주문 신청", exact: true });
     await expect(submit).toBeEnabled();
-    await page.getByLabel("배송일", { exact: true }).fill(secondDay);
+    await pickDeliveryDay(page, secondDay);
     await expect.poll(() => Boolean(releaseDate)).toBe(true);
     await expect(submit).toBeDisabled(); await expect(page.getByLabel("정렬", { exact: true })).toBeDisabled();
     await expect(page.getByText("확정된 품목 합계", { exact: false })).toHaveCount(0);
@@ -408,9 +409,8 @@ for (const width of [1440, 390]) test(`store order waits for delivery date price
   if (width === 1440) await page.getByRole("button", { name: "격자형", exact: true }).click();
   await page.getByRole("button", { name: "합성 주문 품목 수량 늘리기" }).click();
   const submit = page.getByRole("button", { name: "후결제로 주문 신청", exact: true });
-  const day = page.getByLabel("배송일", { exact: true });
   await expect(submit).toBeEnabled();
-  await day.fill(secondDay);
+  await pickDeliveryDay(page, secondDay);
   await expect(page.getByText("합성 배송일 조회 실패")).toBeVisible();
   await expect(submit).toBeDisabled();
   await expect(page.getByText("확정된 품목 합계", { exact: false })).toHaveCount(0);
@@ -418,16 +418,17 @@ for (const width of [1440, 390]) test(`store order waits for delivery date price
   await expect.poll(() => oldRequested).toBe(true);
   await expect(submit).toBeDisabled();
   await page.screenshot({ path: info.outputPath(`store-order-price-loading-${width}.png`), fullPage: true });
-  await day.fill(thirdDay);
+  await pickDeliveryDay(page, thirdDay);
   await expect(submit).toBeEnabled();
   const oldResponse = page.waitForResponse(response => response.url().endsWith("/api/storefront") && response.request().postDataJSON().deliveryDate === secondDay);
   releaseOld!();
   await oldResponse;
-  await expect(day).toHaveValue(thirdDay);
+  await expect(page.getByTestId("delivery-date")).toContainText("1/7");
   await expect(page.getByText("확정된 품목 합계 2,000원", { exact: true })).toBeVisible();
-  await day.fill("");
-  await expect(submit).toBeDisabled();
-  await day.fill(thirdDay);
+  await expect(page.locator('[data-day="2099-01-06"]')).toBeEnabled();
+  await pickDeliveryDay(page, secondDay);
+  await expect(page.getByTestId("delivery-date")).toContainText("1/6");
+  await pickDeliveryDay(page, thirdDay);
   await expect(submit).toBeEnabled();
   await submit.click();
   await expect(page.getByRole("status")).toContainText("합성 주문 응답 실패");
@@ -517,7 +518,7 @@ for (const width of [1440, 390]) test(`CX-74 server-clock cutoff closes without 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
   await page.screenshot({ path: info.outputPath(`cx74-cutoff-closed-${width}.png`), fullPage: true });
   serverNow = '2026-11-18T13:01:00Z';
-  await page.getByLabel('배송일', { exact: true }).fill(nextDay);
+  await pickDeliveryDay(page, nextDay);
   await expect(banner).toContainText('2026-11-19 22:00');
   await expect(page.getByLabel('Synthetic product 수량', { exact: true })).toHaveText('1');
   if (width === 390) await page.getByRole('button', { name: '장바구니 확인 · 1개 품목', exact: true }).click();

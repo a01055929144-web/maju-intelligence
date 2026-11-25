@@ -22,14 +22,14 @@ for(const width of [1440,390])test(`server delivery eligibility blocks and recov
   for(const blocked of ["outside_area","address_unknown","territory_unconfigured","ambiguous_area","weekdays_unconfigured","territory_link_required"]){
     reason=blocked;await retry.click();
     await expect(page.getByRole("region",{name:"배송 요일 설정 안내"})).toContainText(deliveryEligibilityMessage(blocked));
-    await expect(submit).toBeDisabled();await expect(page.getByLabel("배송일",{exact:true})).toBeDisabled();expect(attempts).toBe(0);
+    await expect(submit).toBeDisabled();await expect(page.getByRole("region",{name:"배송일 선택"})).toHaveCount(0);expect(attempts).toBe(0);
   }
   expect((await retry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+3)).toBe(false);
   await page.screenshot({path:info.outputPath(`delivery-block-${width}.png`),fullPage:true});
   reason="eligible";await retry.click();
   await expect(page.getByText("배송 가능 요일: 월·수요일",{exact:true})).toBeVisible();
-  await expect(page.getByLabel("배송일",{exact:true})).toBeEnabled();
+  await expect(page.getByRole("region",{name:"배송일 선택"})).toBeVisible();
   await expect(page.getByLabel("합성 품목 수량",{exact:true})).toHaveText("1");
   await page.screenshot({path:info.outputPath(`delivery-ready-${width}.png`),fullPage:true});
 });

@@ -86,6 +86,45 @@ export function canOrderForDelivery(day: string, policy: DeliveryPolicy, now = n
   return current.date < cutoffDay || (current.date === cutoffDay && current.time < policy.cutoffTime);
 }
 
+/** 점주가 고를 수 있는 가장 먼 날(오늘부터). */
+export const ORDER_HORIZON_DAYS = 14;
+export type DeliveryDayReason = "weekday" | "holiday" | "cutoff" | "range";
+export type DeliveryDayState = { ok: true } | { ok: false; reason: DeliveryDayReason };
+export const DELIVERY_REASON_LABEL: Record<DeliveryDayReason, string> = { weekday: "배송 없음", holiday: "휴무", cutoff: "마감", range: "14일 밖" };
+
+/** 한 날짜를 배송일로 고를 수 있는지와 못 고르는 이유. 달력(화면)과 주문 제출(서버)이 같은 함수를 쓴다. */
+export function deliveryDayState(day: string, policy: DeliveryPolicy, now = new Date(), horizon = ORDER_HORIZON_DAYS): DeliveryDayState {
+  const date = parseDay(day);
+  const today = kstDateTime(now).date;
+  if (day < today) return { ok: false, reason: "cutoff" };
+  if (day > addDays(today, horizon)) return { ok: false, reason: "range" };
+  if (!policy.weekdays.includes(date.getUTCDay())) return { ok: false, reason: "weekday" };
+  if (isHoliday(day, policy.holidays)) return { ok: false, reason: "holiday" };
+  return canOrderForDelivery(day, policy, now) ? { ok: true } : { ok: false, reason: "cutoff" };
+}
+
+const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
+export const monthDayLabel = (day: string) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`;
+export const weekdayLabel = (day: string) => WEEKDAY_KO[parseDay(day).getUTCDay()];
+function clockLabel(time: string) {
+  const [h, m] = time.split(":").map(Number);
+  const part = h >= 18 ? "밤" : h >= 12 ? "오후" : "오전";
+  return `${part} ${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")}`;
+}
+
+/** "오늘 밤 11:59까지 주문하면 내일(11/26 목) 배송" / 마감 후 "지금 주문하면 11/27(금) 배송". 서버 기준 한국 시간. */
+export function deliveryGuide(policy: DeliveryPolicy, now = new Date()) {
+  if (!policy.weekdays.length) return { next: null as string | null, text: "배송 요일이 설정되지 않았습니다." };
+  const today = kstDateTime(now).date;
+  const next = nextDeliveryDate(policy, now);
+  if (!next) return { next: null as string | null, text: "지금은 주문할 수 있는 배송일이 없습니다." };
+  const offset = Math.round((parseDay(next).getTime() - parseDay(today).getTime()) / 86400000);
+  const target = offset === 1 ? `내일(${monthDayLabel(next)} ${weekdayLabel(next)})` : `${monthDayLabel(next)}(${weekdayLabel(next)})`;
+  const cutoffDay = addDays(next, -policy.cutoffDaysBefore);
+  if (cutoffDay === today) return { next, text: `오늘 ${clockLabel(policy.cutoffTime)}까지 주문하면 ${target} 배송` };
+  return { next, text: `지금 주문하면 ${target} 배송` };
+}
+
 export function nextDeliveryDate(policy: DeliveryPolicy, now = new Date()) {
   const today = kstDateTime(now).date;
   for (let offset = 0; offset < 32; offset += 1) {

@@ -33,9 +33,11 @@ function fixture(path: string, documentVersionId: string | null) {
   if (path.startsWith("rpc/place_store_")) return { id: "order", revision: 1 };
   return [];
 }
+// CX-145 P1-1: 서버가 배송일 규칙(오늘부터 14일 이내·요일·마감)을 다시 확인하므로, 이 연결 시험은 규칙 안의 날짜(모레, KST)로 주문한다.
+const orderDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(Date.now() + 2 * 86400000));
 const put = () => new NextRequest("https://store.example.test/api/storefront", {
   method: "PUT", headers: { origin: "https://store.example.test" },
-  body: JSON.stringify({ token: "signed", deliveryDate: "2099-01-01", memo: "", idempotencyKey: idem, lines: [{ productId: product, quantity: 2, unitPrice: 1 }] }),
+  body: JSON.stringify({ token: "signed", deliveryDate: orderDay, memo: "", idempotencyKey: idem, lines: [{ productId: product, quantity: 2, unitPrice: 1 }] }),
 });
 
 beforeEach(() => {

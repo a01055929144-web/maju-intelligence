@@ -8,6 +8,9 @@ import { splitCategory } from "../../domains/pricing/product-category";
 import { getStoreDeliveryEligibility,storeAddressVerificationEnabled } from "./store-delivery-eligibility";
 import {
   canOrderForDelivery,
+  ORDER_HORIZON_DAYS,
+  deliveryDayState,
+  deliveryGuide,
   kstDateTime,
   nextDeliveryDate,
   type DeliveryPolicy,
@@ -189,6 +192,7 @@ export async function readStorefront(
     customerRules,
     holidays,
     productCutoffs,
+    companyProfiles,
   ] = await Promise.all([
     productIds.length
       ? supabaseRequest<ProductMode[]>(
@@ -242,6 +246,8 @@ export async function readStorefront(
       ),
     ),
     readStoreProductCutoffs(company, productIds),
+    // CX-145 P1-1: 거래처·권역에 배송 요일 규칙이 없으면 회사 기본 배송 요일(회사 정보)을 쓴다. 없으면 이전처럼 빈 배열.
+    supabaseRequest<Array<{ delivery_weekdays: number[] | null }>>(path("company_profiles", company, "&select=delivery_weekdays&limit=1")).catch(() => []),
   ]);
   const marketIds = new Set(
     productModes
@@ -268,7 +274,7 @@ export async function readStorefront(
   const territory = territoryRules[0] ?? {};
   const store = customerRules[0] ?? {};
   const policy: DeliveryPolicy = {
-    weekdays: deliveryEligibility ? deliveryEligibility.eligible ? deliveryEligibility.weekdays : [] : store.delivery_weekdays ?? territory.delivery_weekdays ?? [],
+    weekdays: deliveryEligibility ? deliveryEligibility.eligible ? deliveryEligibility.weekdays : [] : store.delivery_weekdays ?? territory.delivery_weekdays ?? companyProfiles[0]?.delivery_weekdays ?? [],
     cutoffDaysBefore:
       store.cutoff_days_before ??
       territory.cutoff_days_before ??
@@ -338,6 +344,15 @@ export async function readStorefront(
     canOrder: canOrder && deliveryAllowed,
     ...(deliveryEligibility?{deliveryEligibility}:{}),
     nextDeliveryDate: deliveryDate,
+    // CX-145 P1-1: 달력이 고를 수 있는 마지막 날(서버 시계 기준). 화면은 자기 시계로 범위를 정하지 않는다.
+    deliveryDays: policy.weekdays.length
+      ? Array.from({ length: ORDER_HORIZON_DAYS + 1 }, (_, offset) => {
+          const date = new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86400000).toISOString().slice(0, 10);
+          const state = deliveryDayState(date, policy);
+          return state.ok ? { date, ok: true as const } : { date, ok: false as const, reason: state.reason };
+        })
+      : [],
+    deliveryGuide: deliveryGuide(policy).text,
     selectedDeliveryDate: priceDate,
     notice: settings.notice,
     marketPriceNotice: settings.market_price_notice,
