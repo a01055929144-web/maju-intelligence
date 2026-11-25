@@ -22,6 +22,7 @@ export function toPublicStorefront(store: Storefront) {
     selectedDeliveryDate: store.selectedDeliveryDate,
     deliveryDays: store.deliveryDays,
     deliveryGuide: store.deliveryGuide,
+    companyPhone: store.companyPhone,
     notice: store.notice,
     marketPriceNotice: store.marketPriceNotice,
     policy: {

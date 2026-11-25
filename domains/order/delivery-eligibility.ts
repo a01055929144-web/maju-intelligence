@@ -41,3 +41,13 @@ export function deliveryEligibilityMessage(reason:string) {
     default:return "배송 가능 여부를 확인하지 못했습니다. 다시 확인하거나 담당자에게 문의해 주세요.";
   }
 }
+
+/** CX-145 P1-3: 주문이 막힌 사유별 한 줄 제목과 다음 행동(점주가 직접 고칠 수 있으면 address, 아니면 고객사 전화). */
+export function deliveryBlockGuide(reason: string): { headline: string; action: "address" | "call" } {
+  switch (reason) {
+    case "address_unknown": return { headline: "배송지 주소가 없습니다", action: "address" };
+    case "outside_area": return { headline: "이 주소는 아직 배송 지역이 아닙니다", action: "call" };
+    case "ambiguous_area": return { headline: "배송 지역 확인이 필요합니다", action: "call" };
+    default: return { headline: "고객사 설정이 필요합니다", action: "call" }; // territory_link_required · weekdays_unconfigured · territory_unconfigured · verification_unavailable
+  }
+}

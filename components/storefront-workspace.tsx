@@ -25,7 +25,7 @@ import { SearchInput } from "./ui/search-input";
 import { EmptyState, LoadingState } from "./ui/state";
 import { publicSalesPriceDirection, type SalesPriceDirection } from "@/domains/pricing/storefront-price-direction";
 import { DELIVERY_CONFIRMATION_NOTICE } from "../domains/order/delivery-confirmation";
-import { deliveryEligibilityMessage } from "../domains/order/delivery-eligibility";
+import { deliveryBlockGuide, deliveryEligibilityMessage } from "../domains/order/delivery-eligibility";
 import { storeOrderStatusLabel } from "../domains/order/store-order-status";
 import { fetchCatalogPage, SourceToggle, StorefrontCatalogPanel, type CatalogPage } from "./storefront-catalog-panel";
 import type { CatalogLine } from "@/domains/pricing/storefront-catalog";
@@ -45,6 +45,7 @@ type Store = { source?: "document" | "catalog"; title: string; companyName: stri
   selectedDeliveryDate: string;
   deliveryDays?: Array<{ date: string; ok: boolean; reason?: "weekday" | "holiday" | "cutoff" | "range" }>;
   deliveryGuide?: string;
+  companyPhone?: string | null;
   deliveryEligibility?:{eligible:boolean;reason:string;territoryName?:string;weekdays:number[]};
   notice: string; marketPriceNotice: string; policy: DeliveryPolicy; lines: Product[] };
 type Order = { id: string; deliveryDate: string | null; status: string; knownTotal: number;
@@ -227,6 +228,9 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       category: line.category, brand: line.brand, spec: line.spec, unit: line.unit, badge: line.badge ? `${line.badge}${line.endsOn ? ` ~${line.endsOn.slice(5).replace("-", "/")}` : ""}` : "", taxType: line.taxType,
       unitPrice: line.isMarket ? null : line.price, priceIncludesTax: line.priceIncludesTax === true, isMarketPrice: line.isMarket, remaining: null,
       maximumQuantity: null, recentDispatchPrice: line.lastDispatch?.price ?? null, recentDispatchDate: line.lastDispatch?.date ?? null }] : []) } : baseStore;
+  // CX-145 P1-3: 막힌 사유는 주소 확인 결과가 있으면 그 사유, 없으면 배송 요일 미설정. 사유별 제목과 다음 행동을 같은 곳에서 만든다.
+  const blockReason = store?.deliveryEligibility && !store.deliveryEligibility.eligible ? store.deliveryEligibility.reason : "weekdays_unconfigured";
+  const blockGuide = deliveryBlockGuide(blockReason);
   const deliveryReady=Boolean(store&&(store.deliveryEligibility?.eligible??true)&&store.policy.weekdays.length>0);
   const pricesReady = !loading && !loadError && Boolean(deliveryDate) && deliveryDate === store?.selectedDeliveryDate;
   const pricesVisible = pricesReady && Boolean(store?.priceAvailable);
@@ -434,7 +438,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
     <span className="block">{confirmingAfterCutoff ? "새 주문은 마감됐습니다. 이미 보낸 주문의 결과를 확인해 주세요." : cutoff.message}</span>
   </Notice></section>;
   const cartContent = <>
-      <p className="text-sm text-slate-600">{store.companyName}{deliveryDate ? ` · 배송 ${deliveryDate}` : ""}</p>
+      <p className="text-sm text-slate-600">{store.companyName}{!deliveryReady ? ` · ${blockGuide.headline}` : deliveryDate ? ` · 배송 ${deliveryDate}` : ""}</p>
       {mobileOrder && cartOpen && cutoffNotice}
       {pricesVisible && selected.some(line => promotionState(line)) && <Button variant="outline" className="min-h-[52px]" disabled={busy || loading}
         onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>행사 잔량 다시 확인</Button>}
@@ -462,7 +466,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       {editing && selected.some(line => promotionState(line)) && <p>주문 수정은 기존 예약분을 포함해 서버에서 다시 확인합니다.</p>}
       {(() => {
         const dayState = deliveryReady && deliveryDate ? dayRule(deliveryDate) : null;
-        const why = busy ? "" : !deliveryReady ? "배송 요일이 설정되지 않아 주문할 수 없습니다. 거래처 담당자에게 문의해 주세요."
+        const why = busy ? "" : !deliveryReady ? `${blockGuide.headline} — ${blockGuide.action === "address" ? "내 정보에서 배송지를 입력해 주세요." : "고객사에 문의해 주세요."}`
           : !deliveryDate ? "배송일을 골라 주세요."
           : dayState && !dayState.ok ? `선택한 배송일은 ${DELIVERY_REASON_LABEL[dayState.reason]}이라 주문할 수 없습니다. 다른 날을 골라 주세요.`
           : !pricesReady ? (loadError ? "배송일 가격을 확인하지 못해 주문할 수 없습니다. 위의 다시 불러오기를 눌러 주세요." : "선택한 배송일의 가격을 확인하는 중입니다.")
@@ -522,8 +526,15 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
       {!(mobileOrder && cartOpen) && cutoffNotice}
       {!deliveryReady && <section className="space-y-2 rounded border p-3 text-sm" aria-label="배송 요일 설정 안내">
-        <p role="status">{deliveryEligibilityMessage(store.deliveryEligibility&&!store.deliveryEligibility.eligible?store.deliveryEligibility.reason:"weekdays_unconfigured")}</p>
-        <Button variant="outline" className="min-h-[44px]" disabled={busy || loading} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>배송 설정 다시 확인</Button>
+        <p className="font-semibold" data-testid="delivery-block-headline">{blockGuide.headline}</p>
+        <p role="status">{deliveryEligibilityMessage(blockReason)}</p>
+        <div className="flex flex-wrap gap-2">
+          {blockGuide.action === "address"
+            ? <Button className="min-h-[44px]" onClick={() => setTab("info")} type="button">내 정보에서 배송지 입력</Button>
+            : store.companyPhone ? <a className="maju-button-primary inline-flex min-h-[44px] items-center px-4" href={`tel:${store.companyPhone}`}>고객사에 전화하기</a>
+              : <span className="inline-flex min-h-[44px] items-center">고객사 담당자에게 문의해 주세요.</span>}
+          <Button variant="outline" className="min-h-[44px]" disabled={busy || loading} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>배송 설정 다시 확인</Button>
+        </div>
       </section>}
       {!pricesReady ? retryLoad : null}
       {deliveryReady && <p aria-live="polite">배송 가능 요일: {store.policy.weekdays.map(day=>["일","월","화","수","목","금","토"][day]).join("·")}요일</p>}

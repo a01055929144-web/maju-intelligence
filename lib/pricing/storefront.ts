@@ -247,7 +247,7 @@ export async function readStorefront(
     ),
     readStoreProductCutoffs(company, productIds),
     // CX-145 P1-1: 거래처·권역에 배송 요일 규칙이 없으면 회사 기본 배송 요일(회사 정보)을 쓴다. 없으면 이전처럼 빈 배열.
-    supabaseRequest<Array<{ delivery_weekdays: number[] | null }>>(path("company_profiles", company, "&select=delivery_weekdays&limit=1")).catch(() => []),
+    supabaseRequest<Array<{ delivery_weekdays: number[] | null; main_phone?: string | null }>>(path("company_profiles", company, "&select=delivery_weekdays,main_phone&limit=1")).catch(() => []),
   ]);
   const marketIds = new Set(
     productModes
@@ -353,6 +353,7 @@ export async function readStorefront(
         })
       : [],
     deliveryGuide: deliveryGuide(policy).text,
+    companyPhone: companyProfiles[0]?.main_phone?.replace(/[^0-9+]/g, "").slice(0, 20) || null,
     selectedDeliveryDate: priceDate,
     notice: settings.notice,
     marketPriceNotice: settings.market_price_notice,
