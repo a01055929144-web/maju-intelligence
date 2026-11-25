@@ -31,6 +31,7 @@ const ids = Object.fromEntries(
     "company",
     "customer",
     "otherCustomer",
+    "fallbackCustomer",
     "territory",
     "plain",
     "promoProduct",
@@ -42,6 +43,7 @@ const ids = Object.fromEntries(
     "link",
     "otherLink",
     "expiredLink",
+    "fallbackLink",
   ].map((k) => [k, randomUUID()]),
 );
 const secret = randomBytes(32).toString("hex"),
@@ -67,7 +69,7 @@ const tokenFor = (id) => {
   };
 };
 const tokens = Object.fromEntries(
-  ["link", "otherLink", "expiredLink"].map((k) => [k, tokenFor(ids[k])]),
+  ["link", "otherLink", "expiredLink", "fallbackLink"].map((k) => [k, tokenFor(ids[k])]),
 );
 const artifacts = resolve(readonlySmoke ? "test-results/readonly-pg17" : "../outputs/pricing-p2-browser");
 await mkdir(artifacts, { recursive: true });
@@ -90,6 +92,7 @@ const tables = new Set([
   "store_order_territory_rules",
   "store_order_customer_rules",
   "store_order_holidays",
+  "company_profiles",
   "customer_price_agreements",
   "store_orders",
   "store_order_lines",
@@ -117,6 +120,11 @@ try {
     await pool.query(
       "insert into normalized_customers(id,company_id,customer_name,address,delivery_territory_id) values($1,$2,$3,'합성 배송지',$4)",
       [id, ids.company, name, ids.territory],
+    );
+  if (!readonlySmoke)
+    await pool.query(
+      "insert into normalized_customers(id,company_id,customer_name,address,delivery_territory_id) values($1,$2,'합성 매장 C(권역 없음)','합성 배송지',null)",
+      [ids.fallbackCustomer, ids.company],
     );
   for (const [id, name, mode] of [
     [ids.plain, "공개 기본 상품", "fixed"],
@@ -177,7 +185,8 @@ try {
     ["link", ids.customer, ids.version],
     ["otherLink", ids.otherCustomer, ids.version],
     ["expiredLink", ids.customer, ids.expiredVersion],
-  ].slice(0, readonlySmoke ? 1 : 3)) {
+    ["fallbackLink", ids.fallbackCustomer, ids.version],
+  ].slice(0, readonlySmoke ? 1 : 4)) {
     if (readonlySmoke) {
       await pool.query("insert into storefront_links(id,company_id,customer_id,document_version_id,token_nonce,token_hash,expires_at,can_order) values($1,$2,$3,$4,$5,$6,$7,false)",[ids[key],ids.company,customerId,versionId,tokens[key].nonce,tokens[key].hash,new Date(Date.now()+86400000).toISOString()]);
       continue;
@@ -215,6 +224,10 @@ try {
       JSON.stringify([{ productId: ids.plain, quantity: 1 }]),
       randomUUID(),
     ]);
+  // CX-145 P1-1: storefront.ts가 회사 기본 배송 요일(company_profiles.delivery_weekdays)을 읽는다. 시험 DB에는 표가 없어 최소 열만 만든다.
+  await pool.query("create table if not exists company_profiles(company_id uuid primary key references companies(id), delivery_weekdays smallint[] not null default '{}')");
+  await pool.query("insert into company_profiles(company_id,delivery_weekdays) values($1,array[1,2,3,4,5,6]::smallint[]) on conflict (company_id) do update set delivery_weekdays=excluded.delivery_weekdays", [ids.company]);
+  await pool.query("grant select on company_profiles to service_role");
   // Dependency tables mirror the existing service role read privileges, locally only.
   await pool.query(
     "grant select on normalized_customers,delivery_territories,customer_price_agreements,business_documents,business_document_lines to service_role",
@@ -609,6 +622,18 @@ try {
   ).json();
   if (other.orders.length || other.store.customerName !== "합성 매장 B")
     throw new Error("Cross-store history leak");
+  const fallback = await (
+    await context.request.post(base + "/api/storefront", { headers: { origin: base }, data: { token: tokens.fallbackLink.token } })
+  ).json();
+  if (fallback.store.customerName !== "합성 매장 C(권역 없음)") throw new Error("Fallback store fixture mismatch");
+  if (JSON.stringify(fallback.store.policy.weekdays) !== JSON.stringify([1, 2, 3, 4, 5, 6]))
+    throw new Error("Company default delivery weekdays were not used: " + JSON.stringify(fallback.store.policy.weekdays));
+  if (!fallback.store.nextDeliveryDate || !fallback.store.canOrder) throw new Error("No deliverable day for a store without territory rules");
+  if (!Array.isArray(fallback.store.deliveryDays) || fallback.store.deliveryDays.length !== 15) throw new Error("deliveryDays missing");
+  const sunday = fallback.store.deliveryDays.find((item) => new Date(item.date + "T00:00:00Z").getUTCDay() === 0);
+  if (!sunday || sunday.ok || sunday.reason !== "weekday") throw new Error("Sunday must be a no-delivery day");
+  if (!fallback.store.deliveryDays.some((item) => item.ok && new Date(item.date + "T00:00:00Z").getUTCDay() === 1))
+    throw new Error("Monday must be selectable");
   const cross = await context.request.put(base + "/api/storefront", {
     headers: { origin: base },
     data: {
