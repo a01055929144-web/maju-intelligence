@@ -178,7 +178,7 @@ for (const width of [1440, 390]) {
     await page.screenshot({ path: info.outputPath(`store-access-guidance-${width}.png`), fullPage: true });
     await storeTab(page, "주문").click();
     await expect(page.getByRole("heading", { name: "주문하기", exact: true })).toBeVisible();
-    await expect(page.getByLabel("배송일", { exact: true })).toHaveValue("2099-01-05");
+    await expect(page.getByTestId("delivery-date")).toContainText("1/5");
     await expect(guidance).toHaveCount(0);
     await page.screenshot({ path: info.outputPath(`store-access-order-${width}.png`), fullPage: true });
   });

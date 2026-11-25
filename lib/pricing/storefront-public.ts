@@ -20,6 +20,8 @@ export function toPublicStorefront(store: Storefront) {
     ...(delivery?{deliveryEligibility:{eligible:delivery.eligible,reason:delivery.reason,territoryName:delivery.territoryName,weekdays:delivery.weekdays}}:{}),
     nextDeliveryDate: store.nextDeliveryDate,
     selectedDeliveryDate: store.selectedDeliveryDate,
+    deliveryDays: store.deliveryDays,
+    deliveryGuide: store.deliveryGuide,
     notice: store.notice,
     marketPriceNotice: store.marketPriceNotice,
     policy: {

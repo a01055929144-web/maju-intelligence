@@ -20,6 +20,7 @@ import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-fea
 import { supabaseRequest } from "@/lib/store";
 import { getStoreDeliveryEligibility,storeAddressVerificationEnabled } from "../../../lib/pricing/store-delivery-eligibility";
 import { deliveryEligibilityMessage } from "../../../domains/order/delivery-eligibility";
+import { DELIVERY_REASON_LABEL, deliveryDayState } from "../../../domains/order/order-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -393,6 +394,10 @@ export async function PUT(request: NextRequest) {
     // Caller address, territory IDs and snapshots never grant eligibility.
     const eligibility=storeAddressVerificationEnabled(store.companyId)?await getStoreDeliveryEligibility(store.companyId,store.customerId):null;
     if(eligibility&&!eligibility.eligible)return NextResponse.json({message:deliveryEligibilityMessage(eligibility.reason)},{status:422,headers:{"Cache-Control":"no-store"}});
+    // CX-145 P1-1: 화면 달력과 같은 규칙(배송 요일·휴무·마감·14일 이내)을 서버가 다시 확인한다. 화면만 막아서는 안 된다.
+    // 배송 요일 규칙이 아직 없는 매장은 기존처럼 주문 함수(RPC)가 판단한다.
+    const dayState = store.policy?.weekdays?.length ? deliveryDayState(String(body.deliveryDate), store.policy) : { ok: true as const };
+    if (!dayState.ok) return NextResponse.json({ message: `선택한 배송일(${String(body.deliveryDate)})에는 주문할 수 없습니다. (${DELIVERY_REASON_LABEL[dayState.reason]}) 다른 배송일을 골라 주세요.` }, { status: 422, headers: { "Cache-Control": "no-store" } });
     const catalog = store.source === "catalog";
     // 전체 상품 주문에는 배송지 스냅샷 경로가 아직 없다 — 켜진 회사는 조용히 빠뜨리지 않고 거부한다.
     if (catalog && storeOrderDeliverySnapshotEnabled(store.companyId))

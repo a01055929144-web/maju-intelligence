@@ -5,7 +5,8 @@ import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } fr
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { storeViewFrom, type StoreView } from "@/lib/store-navigation";
-import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/domains/order/order-rules";
+import { canOrderForDelivery, DELIVERY_REASON_LABEL, deliveryDayState, deliveryGuide, kstDateTime, monthDayLabel, summarizeOrder, weekdayLabel, type DeliveryPolicy } from "@/domains/order/order-rules";
+import { DateCalendar } from "./ui/date-calendar";
 import { orderCutoffGuidance } from "@/domains/order/order-cutoff-guidance";
 import type { PromotionAvailability } from "@/domains/order/promotion-availability";
 import { StorefrontPromotionAvailability } from "./storefront-promotion-availability";
@@ -32,6 +33,7 @@ import type { CatalogLine } from "@/domains/pricing/storefront-catalog";
 type Product = { key: string; productId: string; promotionId: string | null;
   name: string; category: string; brand: string; spec: string; unit: string;
   salesPriceDirection?: SalesPriceDirection;
+  endsOn?: string | null;
   badge: string; taxType: "taxable" | "exempt"; unitPrice: number | null;
   priceIncludesTax: boolean; isMarketPrice: boolean; remaining: number | null;
   maximumQuantity: number | null;
@@ -41,6 +43,8 @@ type Store = { source?: "document" | "catalog"; title: string; companyName: stri
   deliveryAddress: string | null; version: number; validUntil: string;
   priceAvailable: boolean; canOrder: boolean; nextDeliveryDate: string | null;
   selectedDeliveryDate: string;
+  deliveryDays?: Array<{ date: string; ok: boolean; reason?: "weekday" | "holiday" | "cutoff" | "range" }>;
+  deliveryGuide?: string;
   deliveryEligibility?:{eligible:boolean;reason:string;territoryName?:string;weekdays:number[]};
   notice: string; marketPriceNotice: string; policy: DeliveryPolicy; lines: Product[] };
 type Order = { id: string; deliveryDate: string | null; status: string; knownTotal: number;
@@ -262,8 +266,17 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       productId: line.productId, quantity: cart[line.key],
       unitPrice: line.unitPrice, taxType: line.taxType,
       priceIncludesTax: line.priceIncludesTax,
-    })), store.policy);
+    })), store.policy.weekdays.length ? store.policy : { ...store.policy, weekdays: [0, 1, 2, 3, 4, 5, 6] });
   } catch { /* The server returns a field-level order error on submission. */ }
+  // CX-145 P1-1: 날짜 상태는 서버가 준 deliveryDays를 쓴다. 서버가 안 준 경우(예전 응답·시험 데이터)만 같은 도메인 함수로 계산한다.
+  const dayRule = (day: string): { ok: true } | { ok: false; reason: "weekday" | "holiday" | "cutoff" | "range" } => {
+    if (store?.deliveryDays?.length) {
+      const found = store.deliveryDays.find(item => item.date === day);
+      return !found ? { ok: false, reason: "range" } : found.ok ? { ok: true } : { ok: false, reason: found.reason ?? "cutoff" };
+    }
+    return store && store.policy.weekdays.length ? deliveryDayState(day, store.policy, new Date(0), 1e6) : { ok: false, reason: "weekday" };
+  };
+  const dayStateFor = (day: string) => { const state = dayRule(day); return state.ok ? state : { ok: false as const, reason: DELIVERY_REASON_LABEL[state.reason] }; };
   const promotionState = (line: Product): PromotionAvailability | null => data?.promotionAvailability && line.promotionId
     ? data.promotionAvailability[line.promotionId] ?? { state: "unavailable" } : null;
   const maxQuantity = (line: Product) => {
@@ -428,6 +441,8 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       {selected.length ? <ul className="max-h-48 divide-y overflow-y-auto text-sm">{selected.map(line =>
         <li className="flex justify-between gap-2 py-2" key={line.key}>
           <div className="min-w-0 break-words"><span>{line.name} · {cart[line.key]}{line.unit}</span>
+            {pricesVisible && line.unitPrice !== null && !line.isMarketPrice && <span className="block text-xs text-slate-600" data-testid="cart-line-amount">{won(line.unitPrice)} × {cart[line.key]} = {won(line.unitPrice * cart[line.key])}</span>}
+            {line.endsOn && deliveryDate && line.endsOn < deliveryDate && <span className="block text-xs text-amber-800">행사는 {monthDayLabel(line.endsOn)}까지라 이 배송일에는 행사가가 적용되지 않을 수 있습니다.</span>}
             {line.productCutoff && <span className="block text-xs text-amber-800">{productCutoffLabel(line)}</span>}{promotionInfo(line)}</div>
           <button aria-label={`${line.name} 장바구니에서 빼기`} className="min-h-11 shrink-0 px-1 underline" disabled={busy} onClick={() => setQuantity(line, 0)} type="button">빼기</button>
         </li>)}</ul> : <p className="text-sm text-slate-500">담은 품목이 없습니다.</p>}
@@ -435,7 +450,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         onClick={() => fromOrder(data.orders[0], false)}>최근 주문 다시 담기</Button>}
       <label className="block text-sm">요청 사항<textarea disabled={busy} className="mt-1 w-full rounded border p-2 text-base md:text-sm" maxLength={500}
         value={memo} onChange={(event) => { setMemo(event.target.value); retryKey.current = null; }} /></label>
-      {pricesVisible && summary && <div className="rounded bg-slate-50 p-3 text-sm">
+      {pricesVisible && summary && <div className="rounded bg-slate-50 p-3 text-sm" data-testid="cart-summary">
         <p>과세 공급가액 {won(summary.taxableSupply)} · 면세 공급가액 {won(summary.exemptSupply)}</p>
         <p>부가세 {won(summary.tax)} · 배송비 {won(summary.deliveryFee)}</p>
         <p className="font-semibold">확정된 품목 합계 {mobileOrder ? <MoneyText value={summary.knownTotal} /> : won(summary.knownTotal)}</p>
@@ -445,6 +460,18 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       {promotionBlocked && <p role="status">행사 잔량을 다시 확인하고 담은 수량을 조정해 주세요. 담은 수량은 유지됩니다.</p>}
       {productCutoffBlocked && <p role="status">마감 지남 — 품목을 빼거나 다음 배송일로 바꿔 주세요.</p>}
       {editing && selected.some(line => promotionState(line)) && <p>주문 수정은 기존 예약분을 포함해 서버에서 다시 확인합니다.</p>}
+      {(() => {
+        const dayState = deliveryReady && deliveryDate ? dayRule(deliveryDate) : null;
+        const why = busy ? "" : !deliveryReady ? "배송 요일이 설정되지 않아 주문할 수 없습니다. 거래처 담당자에게 문의해 주세요."
+          : !deliveryDate ? "배송일을 골라 주세요."
+          : dayState && !dayState.ok ? `선택한 배송일은 ${DELIVERY_REASON_LABEL[dayState.reason]}이라 주문할 수 없습니다. 다른 날을 골라 주세요.`
+          : !pricesReady ? (loadError ? "배송일 가격을 확인하지 못해 주문할 수 없습니다. 위의 다시 불러오기를 눌러 주세요." : "선택한 배송일의 가격을 확인하는 중입니다.")
+          : !store.canOrder ? "지금은 주문할 수 없습니다. 배송일이나 단가표 유효기간을 확인해 주세요."
+          : !selected.length ? "품목을 담아 주세요."
+          : !summary?.canSubmit ? (summary?.belowMinimum ? `최소 주문금액 ${won(store.policy.minimumAmount)} 이상 담아 주세요.` : "주문 금액을 확인해 주세요.")
+          : promotionBlocked ? "행사 잔량이 부족합니다. 수량을 조정해 주세요." : productCutoffBlocked ? "마감이 지난 품목을 빼 주세요." : "";
+        return why ? <p aria-live="polite" className="text-sm text-amber-800" data-testid="submit-disabled-reason">{why}</p> : null;
+      })()}
       <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit || promotionBlocked || productCutoffBlocked || (cutoff?.open === false && !confirmingAfterCutoff)} className="min-h-[48px] w-full"
         onClick={() => void submit()}>{busy ? "저장 중" : confirmingAfterCutoff || confirmingPromotion ? "이전 주문 결과 확인" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
   </>;
@@ -500,12 +527,13 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       </section>}
       {!pricesReady ? retryLoad : null}
       {deliveryReady && <p aria-live="polite">배송 가능 요일: {store.policy.weekdays.map(day=>["일","월","화","수","목","금","토"][day]).join("·")}요일</p>}
-      <label className="block text-sm">배송일
-        <input disabled={busy||!deliveryReady} className="mt-1 min-h-[44px] w-full rounded border p-2" type="date" value={deliveryDate}
-          min={store.nextDeliveryDate || undefined}
-          onChange={(event) => { const day = event.target.value; setDeliveryDate(day); retryKey.current = null;
-            if (day) void load(day).catch(() => undefined);
-            else { ++loadSequence.current; setLoading(false); setLoadError("배송일을 선택해 주세요."); } }} /></label>
+      {deliveryReady && <section aria-label="배송일 선택" className="space-y-2">
+        <p className="text-sm font-semibold" data-testid="delivery-guide">{store.deliveryGuide ?? deliveryGuide(store.policy).text}</p>
+        <p className="text-sm">배송 요청일: <strong data-testid="delivery-date">{deliveryDate ? `${monthDayLabel(deliveryDate)}(${weekdayLabel(deliveryDate)})` : "선택 안 함"}</strong></p>
+        <DateCalendar disabled={busy} label="배송일 달력" today={kstDateTime(new Date()).date} value={deliveryDate}
+          stateOf={dayStateFor}
+          onChange={day => { setDeliveryDate(day); retryKey.current = null; void load(day).catch(() => undefined); }} />
+      </section>}
       <p className="text-sm text-slate-600">배송 권역·가능 요일·휴일·마감은 주문 제출 직전에 서버에서 다시 확인합니다.</p>
       {catalogMode ? <SearchInput aria-label="상품 검색" className="w-full max-sm:!h-11" onChange={searchCatalog}
         placeholder="상품 이름 검색" value={catalogQuery} /> : <>
@@ -601,7 +629,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         <th scope="col" className="p-3 text-left">주문일 · 배송일</th><th scope="col" className="p-3 text-left">상태</th>
         <th scope="col" className="p-3 text-left">품목</th><th scope="col" className="p-3 text-left">합계</th><th scope="col" className="p-3 text-left">동작</th>
       </tr></thead><tbody>{data?.orders.map((order) => <Fragment key={order.id}><tr data-store-order-id={order.id} className="block border-b py-2 md:table-row">
-        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">주문일 · 배송일</span><span>{kstDay(order.submittedAt)} · {order.deliveryDate || DELIVERY_CONFIRMATION_NOTICE}{order.authorLabel && <span className="block break-words">작성자: {order.authorLabel}</span>}</span></td>
+        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">주문일 · 배송 요청일</span><span>{kstDay(order.submittedAt)} · {order.deliveryDate || DELIVERY_CONFIRMATION_NOTICE}{order.authorLabel && <span className="block break-words">작성자: {order.authorLabel}</span>}</span></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">상태</span><span>{order.deliveryDate === null ? order.status === "cancelled" ? "취소됨" : "접수됨 · 배송일 확인 대기" : storeOrderStatusLabel(order.status)}</span></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">품목</span><ul className="min-w-0 break-words">{order.lines.map((line, index) => <li key={index}>{line.product_name} {line.quantity}{line.sales_unit || "개"}{line.specification ? ` · ${line.specification}` : ""}{line.tax_type ? ` · ${line.tax_type === "exempt" ? "면세" : "과세"}` : ""} · {line.unit_price === null ? "단가 미정" : won(line.unit_price)}</li>)}</ul></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">합계</span><span>{won(order.knownTotal)}{order.marketPricePending ? " + 시세 품목 가격 미정" : ""}</span></td>
