@@ -56,3 +56,24 @@ for (const width of [1440, 390]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
   });
 }
+
+// CX-145 C1·C2: /crm/timeline 기본 화면이 매입처와 같은 틀이고, 상호를 누르면 그 매장 상세(주문 가능 여부 카드 포함)로 바로 간다.
+for (const width of [1440, 390]) test(`매출처 기본 화면: 상호 클릭 → 상세·주문 가능 여부 (${width}px)`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  const id2 = "10000000-0000-4000-8000-000000000002";
+  await page.route(/\/api\/customers\/[^/]+\/order-status/, (route) => route.fulfill({ json: { orderable: false, headline: "상세 주소 없음", message: "점주가 배송 정보를 넣어야 배송됩니다." } }));
+  const base = { address: "서울 가짜구 가짜로 1", deliveryKm: 3, grade: "B", industry: "한식", lastOrderDays: 2, memoCount: 1, visitCount: 3, monthlyRevenue: 120, region: "서울", phone: "01000000000" };
+  await page.route(/\/api\/customers(\?|$)/, (route) => route.fulfill({ json: { source: "supabase", truncated: false, customers: [
+    { ...base, id: "10000000-0000-4000-8000-000000000001", customerName: "합성거래처 01" }, { ...base, id: id2, customerName: "합성거래처 02" }
+  ] } }));
+  await page.goto("/crm/timeline");
+  await expect(page.getByRole("toolbar", { name: "매출처 작업" })).toBeVisible();
+  const list = page.getByRole("region", { name: "매출처 목록" });
+  const detail = page.getByRole("region", { name: "매출처 상세" });
+  await list.getByRole("button", { name: /^합성거래처 02/ }).first().click();
+  await expect(detail).toContainText("합성거래처 02");
+  await expect(detail.getByTestId("order-status-headline")).toContainText("상세 주소 없음");
+  await expect(detail.getByTestId("order-status-headline")).toBeInViewport(); // 좁은 화면에서도 누르면 상세로 내려간다
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+});
