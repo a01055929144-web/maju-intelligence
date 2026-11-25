@@ -105,6 +105,20 @@ describe("customer import history status", () => {
     });
   });
 
+  it("CX-145: a new registration that matches an existing customer is reported, not overwritten", async () => {
+    existingCustomer = true;
+    const result = await upsertCustomerMaster({ customerName: "테스트 거래처", businessNumber: "1234567890" }, "company-1", {}, { createOnly: true });
+    expect(result).toMatchObject({ persisted: false, alreadyRegistered: true, existingCustomerId: "customer-1" });
+    expect(calls.some(call => call.path.startsWith("normalized_customers") && ["POST", "PATCH"].includes(call.method))).toBe(false);
+    expect(importStatuses()).toEqual([]);
+  });
+
+  it("CX-145: an edit (without createOnly) still updates the existing customer", async () => {
+    existingCustomer = true;
+    const result = await upsertCustomerMaster({ customerName: "테스트 거래처", address: "서울" }, "company-1");
+    expect(result.persisted).toBe(true);
+  });
+
   it("moves a failed manual update from processing to failed", async () => {
     existingCustomer = true;
     failNormalizedSave = true;

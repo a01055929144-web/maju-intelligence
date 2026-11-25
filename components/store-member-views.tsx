@@ -52,10 +52,14 @@ export function StoreMemberViews({ account, deliveryPhotosEnabled = false, docum
           {view === "home" && (documentView ?? home)}
           {view === "order" && (
             <Card>
-              <CardHeader><CardTitle>주문 가능한 문서</CardTitle></CardHeader>
+              <CardHeader><CardTitle>주문하기</CardTitle></CardHeader>
               <CardContent>
-                {orderDocuments.length ? (
-                  <ul className="space-y-2">{orderDocuments.map(document => <li key={document.href}><Link className={linkClass} href={document.href.replace("/store#", "/store?view=order#")}>{document.title} · 주문하기</Link></li>)}</ul>
+                {/* CX-145: 받은 단가표가 없어도 전체 상품(catalog) 링크가 있으면 주문할 수 있다. */}
+                {orderDocuments.length || account.catalogHref ? (
+                  <ul className="space-y-2">
+                    {account.catalogHref ? <li>{/* 해시 토큰은 마운트 때만 읽으므로 전체 이동 */}<a className="maju-button-primary flex min-h-11 items-center px-3 text-sm" href={account.catalogHref}>전체 상품으로 주문하기</a></li> : null}
+                    {orderDocuments.map(document => <li key={document.href}><Link className={linkClass} href={document.href.replace("/store#", "/store?view=order#")}>{document.title} · 주문하기</Link></li>)}
+                  </ul>
                 ) : <EmptyState bare message="아직 주문 가능한 단가표가 없습니다." description="담당자에게 단가표나 주문 링크를 요청해 주세요." />}
               </CardContent>
             </Card>
@@ -66,7 +70,7 @@ export function StoreMemberViews({ account, deliveryPhotosEnabled = false, docum
               <CardContent>
                 {!historyDetails ? <StoreSettlementAccountCard account={account.settlementAccount} compact /> : null}
                 {historyError ? <ErrorState bare message="주문 내역을 불러오지 못했습니다." /> : orders.length ? historyDetails ? (
-                  <StoreOrderHistory companyId={account.companyId} deliveryPhotosEnabled={deliveryPhotosEnabled} orders={orders} reorderHref={orderDocuments[0]?.href.replace("/store#", "/store?view=history#")} settlementAccount={account.settlementAccount} storeAccountId={account.storeAccountId} />
+                  <StoreOrderHistory companyId={account.companyId} deliveryPhotosEnabled={deliveryPhotosEnabled} orders={orders} reorderHref={orderDocuments[0]?.href.replace("/store#", "/store?view=history#") ?? account.catalogHref?.replace("view=order", "view=history")} settlementAccount={account.settlementAccount} storeAccountId={account.storeAccountId} />
                 ) : (
                   <ul className="divide-y">
                     {orders.map(order => (
