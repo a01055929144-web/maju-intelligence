@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FileSpreadsheet, FilePlus2, Plus } from "lucide-react";
 import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
 import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-toolbar";
@@ -45,10 +45,12 @@ export function PartnerDirectory<Row extends PartnerRow>({ companyId = "", extra
   const selected = rows.find((row) => row.id === currentId) ?? rows[0];
   const [tab, setTab] = useState<string>("info");
   const selectedKey = selected?.id;
+  const detailRef = useRef<HTMLElement>(null);
   useEffect(() => { setTab("info"); }, [selectedKey]);
 
   const columns = useMemo<CommonTableColumn<Row>[]>(() => {
-    const choose = (id: string) => { setInnerId(id); onSelect?.(id); };
+    // 목록 아래에 상세가 놓이는 좁은 화면(xl 미만)에서는 상호를 누르면 상세로 바로 내려간다.
+    const choose = (id: string) => { setInnerId(id); onSelect?.(id); if (window.matchMedia("(max-width: 1279px)").matches) requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: "start" })); };
     return [
       { key: "displayName", label: "표시 상호", value: (row) => row.displayName, searchable: true, sortable: true, priority: 1,
         render: (row) => <button aria-pressed={row.id === selectedKey} className={`text-left font-bold underline-offset-2 hover:underline ${row.id === selectedKey ? "text-teal-800" : "text-slate-900"}`} onClick={() => choose(row.id)} type="button">{row.displayName}</button> },
@@ -91,7 +93,7 @@ export function PartnerDirectory<Row extends PartnerRow>({ companyId = "", extra
             <CommonDataTable columns={columns} emptyMessage={`등록된 ${labels.name}가 없습니다.`} filename={`${labels.name}.csv`} rowKey={(row) => row.id} rows={[...rows]} selectable={false} settingsKey={`partners:${partnerType}`} />
           </div>
         </section>
-        <section aria-label={`${labels.name} 상세`} className="maju-section-card min-w-0">
+        <section aria-label={`${labels.name} 상세`} className="maju-section-card min-w-0 scroll-mt-4" ref={detailRef}>
           {selected ? (
             <>
               <div className="border-b border-slate-200/80 px-4 py-3">

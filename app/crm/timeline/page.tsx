@@ -562,9 +562,10 @@ export default function CrmTimelinePage() {
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
   const [attachmentMessage, setAttachmentMessage] = useState("");
   const [workspaceSection] = useState<"partners" | "list" | "ledger" | "history" | "products" | "transactions">(() => {
-    if (typeof window === "undefined") return "list";
+    // CX-145 C1: 기본 화면은 매입처와 같은 공용 거래처 틀(partners). 예전 목록·원장·기록 화면은 section=list 등으로 그대로 열린다.
+    if (typeof window === "undefined") return "partners";
     const requested = new URLSearchParams(window.location.search).get("section");
-    return requested === "partners" || requested === "ledger" || requested === "history" || requested === "products" || requested === "transactions" ? requested : "list";
+    return requested === "list" || requested === "ledger" || requested === "history" || requested === "products" || requested === "transactions" ? requested : "partners";
   });
   // CC-73: 주소의 section을 처음 그릴 때 읽기 때문에 서버가 그린 모양과 달라지는 새 섹션(partners)은 브라우저가 붙은 뒤에만 그린다(하이드레이션 불일치 방지).
   const [clientReady, setClientReady] = useState(false);

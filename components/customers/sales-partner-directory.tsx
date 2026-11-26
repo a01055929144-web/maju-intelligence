@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import type { CommonTableColumn } from "@/components/common-data-table";
+import { CustomerOrderStatusCard } from "@/components/customer-order-status-card";
 import { SalesPartnerPanel } from "@/components/customers/sales-partner-panels";
 import { PartnerDirectory } from "@/components/partners/partner-directory";
 import type { PartnerRow } from "@/domains/partner/directory";
@@ -56,6 +57,7 @@ export function SalesPartnerDirectory({ companyId = "", customers, query }: { co
           <dt className="font-bold text-slate-500">업종</dt><dd>{row.source.industry || "-"}</dd>
         </dl>
         <Link className="maju-button-secondary inline-flex min-h-11 px-3 text-xs sm:min-h-9" href={query("/crm/timeline?section=ledger", row.id)}>원장에서 수정</Link>
+        <CustomerOrderStatusCard customerId={row.id} />
       </div>
     ),
     items: (row: Row) => <SalesPartnerPanel companyId={companyId} customerId={row.id} customerName={row.displayName} view="products" />,
