@@ -6,7 +6,7 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ErrorState, LoadingState } from "./ui/state";
 import { Notice } from "./ui/notice";
-import { AddressPicker } from "./map/address-picker";
+import { StoreDeliveryInfoSheet } from "./store-delivery-info-sheet";
 
 type Information = { businessRegistrationNumber: string; canEdit: boolean; phone: string; representativeName: string; storeName: string;
   businessIdentityEnabled?: boolean; businessName?: string; subBusinessNumber?: string; businessEntityType?: string;
@@ -29,6 +29,7 @@ export function StoreInformationPanel({ canManageAddress, canManageMembers, comp
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [step, setStep] = useState(1);
+  const [sheet, setSheet] = useState(false);
   const [attachments, setAttachments] = useState<Partial<Record<keyof typeof attachmentLabels, string>>>({});
   const query = new URLSearchParams({ companyId, storeAccountId }).toString();
   async function load() {
@@ -75,6 +76,7 @@ export function StoreInformationPanel({ canManageAddress, canManageMembers, comp
   const field = "mt-1 min-h-[44px] w-full rounded border px-3 disabled:bg-slate-50";
   const mobileStep = (value: number) => !editing || step === value ? "" : "max-md:hidden";
   return <div className="space-y-4">
+    {sheet && <StoreDeliveryInfoSheet companyId={companyId} storeAccountId={storeAccountId} onClose={() => setSheet(false)} onSaved={() => { setSheet(false); void load().then(() => setSaved(true)); }} />}
     {editing && information.deliverySettingsEnabled ? <div aria-label="매장 정보 입력 단계" className="grid grid-cols-3 gap-2 md:hidden">
       {["사업자 정보", "배송 정보", "보관 정보"].map((label, index) => <Button key={label} onClick={() => setStep(index + 1)} type="button" variant={step === index + 1 ? "default" : "outline"}>{index + 1}. {label}</Button>)}
     </div> : null}
@@ -99,8 +101,10 @@ export function StoreInformationPanel({ canManageAddress, canManageMembers, comp
     </CardContent></Card>
     {information.profileSettingsEnabled ? <Card className={mobileStep(2)}><CardHeader><CardTitle>배송 정보</CardTitle></CardHeader><CardContent className="space-y-3">
         <label className="block text-sm font-medium">매장 주소</label>
-        {editing ? <AddressPicker onPick={picked => setDraft({ ...draft, baseAddress: picked.address })} value={draft.baseAddress} /> : <input className={field} disabled value={draft.baseAddress} />}
-        <label className="block text-sm font-medium">상세 주소<input className={field} disabled={!editing} maxLength={300} onChange={event => setDraft({ ...draft, addressDetail: event.target.value })} value={draft.addressDetail} /></label>
+        {/* CX-152: 주소·상세 주소는 배송 정보 입력 시트 한 곳에서만 바꾼다(주문 판정이 보는 저장 위치와 같은 경로). */}
+        <input className={field} disabled value={draft.baseAddress} />
+        <label className="block text-sm font-medium">상세 주소<input className={field} disabled value={draft.addressDetail} /></label>
+        {information.canEdit && <Button onClick={() => setSheet(true)} type="button" variant="outline">배송 정보 입력·수정</Button>}
         <label className="block text-sm font-medium">출입 방법<input className={field} disabled={!editing} maxLength={500} onChange={event => setDraft({ ...draft, accessNote: event.target.value })} value={draft.accessNote} /></label>
         <label className="block text-sm font-medium">받는 분 연락처<input className={field} disabled={!editing} inputMode="tel" maxLength={30} onChange={event => setDraft({ ...draft, deliveryContactPhone: event.target.value })} value={draft.deliveryContactPhone} /></label>
         <label className="block text-sm font-medium">받을 수 있는 시간<input className={field} disabled={!editing} maxLength={100} onChange={event => setDraft({ ...draft, preferredDeliveryTime: event.target.value })} value={draft.preferredDeliveryTime} /></label>

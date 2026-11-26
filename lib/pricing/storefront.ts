@@ -19,6 +19,7 @@ import {
 import { FIXED_PROMOTION_PRICE_CONTRACT, documentDisplayPrice, parseDisplay, type DocumentContent } from "../../domains/pricing/document";
 import { effectiveCutoff, type CutoffRule } from "@/domains/order/effective-cutoff";
 import { readStoreProductCutoffs } from "./store-product-cutoff";
+import { readCustomerDeliveryInfo } from "./store-delivery-info-read";
 
 type Link = {
   id: string;
@@ -156,6 +157,8 @@ export async function readStorefront(
   if (!version || !customer) return null;
   const verificationEnabled=storeAddressVerificationEnabled(company);
   const deliveryEligibility=verificationEnabled?await getStoreDeliveryEligibility(company,customer.id):undefined;
+  // CX-152: 점주가 넣어야 배송되는 배송 정보 중 빠진 항목(값은 담지 않는다; 주소 확인 켠 회사만). 읽기 실패는 안내만 못 띄울 뿐 주문 판정에는 영향 없음.
+  const deliveryInfo=verificationEnabled?await readCustomerDeliveryInfo(company,customer.id).then(info=>({missing:info.missing}),()=>undefined):undefined; // 주소 확인이 꺼진 회사는 원래 조회 그대로
   const deliveryTerritoryId=verificationEnabled?deliveryEligibility?.territoryId:customer.delivery_territory_id;
   const settings: Settings = settingsRows[0] ?? {
     cutoff_days_before: 1,
@@ -343,6 +346,7 @@ export async function readStorefront(
     priceAvailable,
     canOrder: canOrder && deliveryAllowed,
     ...(deliveryEligibility?{deliveryEligibility}:{}),
+    ...(deliveryInfo?{deliveryInfo}:{}),
     nextDeliveryDate: deliveryDate,
     // CX-145 P1-1: 달력이 고를 수 있는 마지막 날(서버 시계 기준). 화면은 자기 시계로 범위를 정하지 않는다.
     deliveryDays: policy.weekdays.length
