@@ -12,11 +12,15 @@ test("CX-153 mobile order moves through cart, confirmation, and receipt", async 
       lines: [{ key: "product:", productId: "product", promotionId: null, name: "합성 양파", category: "농산", brand: "", spec: "10kg", unit: "망", badge: "", taxType: "exempt", unitPrice: 12000, priceIncludesTax: false, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null }],
     },
     deliveryEdit: { companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-000000000001" },
-    orders: [], preferences: [], historyPage: 1, historyHasMore: false,
+    orders: [] as Array<{ id: string; deliveryDate: string; status: string; knownTotal: number; requestMemo: string; marketPricePending: boolean; submittedAt: string; revision: number; lines: unknown[] }>, preferences: [], historyPage: 1, historyHasMore: false,
   };
   let submitted = 0;
   await page.route("**/api/storefront", route => {
-    if (route.request().method() === "PUT") { submitted++; return route.fulfill({ json: { result: { id: "CX153-ORDER-1" } } }); }
+    if (route.request().method() === "PUT") {
+      submitted++;
+      payload.orders = [{ id: "CX153-ORDER-1", deliveryDate: "2099-01-05", status: "submitted", knownTotal: 12000, requestMemo: "", marketPricePending: false, submittedAt: "2099-01-01T00:00:00Z", revision: 1, lines: [] }];
+      return route.fulfill({ json: { result: { id: "CX153-ORDER-1" } } });
+    }
     return route.fulfill({ json: payload });
   });
 
@@ -35,6 +39,9 @@ test("CX-153 mobile order moves through cart, confirmation, and receipt", async 
   await page.getByRole("button", { name: "주문 접수" }).click();
   await expect(page.getByRole("region", { name: "접수 완료" })).toContainText("CX153-ORDER-1");
   await expect(page.getByRole("region", { name: "접수 완료" })).toContainText("12,000원");
+  await page.getByRole("button", { name: "배송 현황 보기" }).click();
+  await expect(page.getByRole("region", { name: "배송 확인" })).toContainText("CX153-ORDER-1");
+  await expect(page.getByRole("listitem", { current: "step" })).toHaveText("접수됨");
   expect(submitted).toBe(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
 });
