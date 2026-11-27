@@ -268,6 +268,22 @@ for (const width of [1440, 390]) test(`new-product price choice stays visible th
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+for (const width of [1440, 390]) test(`purchase price jumps stay held until confirmed at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const { dateWrites } = await purchaseUpload(page, { historyOnlyDefault: true });
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-20,800\n");
+  await page.getByRole("button", { name: /^② 열 정렬/ }).click();
+  const jump = page.getByRole("region", { name: "급변 매입가 확인", exact: true });
+  await expect(jump).toContainText("100원 → 800원 (8.0배)");
+  await page.getByRole("button", { name: /^③ 저장/ }).click();
+  await expect(page.getByRole("region", { name: "저장 전 적용일 확인" })).toContainText("현재 가격 변경 0건");
+  await jump.getByRole("button", { name: "맞음", exact: true }).click();
+  await expect(jump).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "저장 전 적용일 확인" })).toContainText("현재 가격 변경 1건");
+  expect(dateWrites).toHaveLength(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 for (const width of [1440, 390]) test(`ERP 353-row headers preserve dates and suppliers before current-price choice at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   await purchaseUpload(page, { count: 349, historyOnlyDefault: true });

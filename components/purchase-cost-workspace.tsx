@@ -35,6 +35,12 @@ const missingFields = (row: NewRow) => [!row.unit.trim() ? "단위" : "", !row.n
 type LinkInput = { productId: string; rawName: string; spec: string; unit: string; cost: number; supplierName: string };
 type Candidate = { purchaseDate?: string; cost: number; rawCost?: number; vatIncluded?: boolean; taxType?: "taxable" | "exempt"; quantity?: number; supplierProductId?: string; method: "직접" | "엑셀" | "매입처"; source: string; reviewOnly?: boolean; fileNote?: string; link?: LinkInput; updateFields?: { name: string; spec: string; unit: string } };
 const money = formatWon;
+const purchasePriceMultipliers = [4, 6, 8, 10, 12, 20, 24, 30];
+function purchasePriceJump(previous: number, next: number) {
+  if (previous <= 0 || next <= 0) return false;
+  const ratio = Math.max(previous, next) / Math.min(previous, next);
+  return Math.abs(next / previous - 1) > 0.3 || purchasePriceMultipliers.some(value => Math.abs(ratio - value) / value <= 0.05);
+}
 
 type UndatedTarget = { productId: string; name: string; previous: number; cost: number; date: string };
 type PurchaseSaveResult = { currentCount: number; historyOnlyCount: number };
@@ -81,6 +87,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [dateBatch, setDateBatch] = useState<PurchaseDateBatch | null>(null);
   const [dateSelectedRows, setDateSelectedRows] = useState<number[]>([]);
   const [dateHeldRows, setDateHeldRows] = useState<number[]>([]);
+  const [priceJumpHeldRows, setPriceJumpHeldRows] = useState<number[]>([]);
   const [datePartial, setDatePartial] = useState("");
   const [dateUndatedPrices, setDateUndatedPrices] = useState<Record<string, number>>({});
   const [replaceUndatedCurrent, setReplaceUndatedCurrent] = useState(false);
@@ -368,7 +375,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const futurePriceHoldRows = importedLines.filter(line => dateSelectedRows.includes(line.rowNumber) && line.purchaseDate! > today);
   const futurePriceHoldProducts = new Set(futurePriceHoldRows.map(line => line.productId || JSON.stringify([line.code, line.rawName, line.spec, line.unit, line.supplier])));
   const futurePriceHoldCatalogIds = new Set(futurePriceHoldRows.flatMap(line => line.productId ? [line.productId] : []));
-  const effectivePriceChangeCount = selected.filter(id => !futurePriceHoldCatalogIds.has(id) && candidates[id]
+  const priceJumpHeldProducts = new Set(importedLines.filter(line => priceJumpHeldRows.includes(line.rowNumber)).flatMap(line => line.productId ? [line.productId] : []));
+  const effectivePriceChangeCount = selected.filter(id => !futurePriceHoldCatalogIds.has(id) && !priceJumpHeldProducts.has(id) && candidates[id]
     && candidates[id].cost !== unique.find(product => product.id === id)?.cost && !historicalPrice(id)).length;
   const zeroSelectedRows = importedLines.filter(line => dateSelectedRows.includes(line.rowNumber) && line.cost <= 0);
   const invalidSelectedPrices = selected.filter(id => candidates[id] && candidates[id].cost <= 0);
@@ -389,9 +397,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     if (historyOnlyDefaultEnabled) setReplaceUndatedCurrent(updateCurrentPrices && undatedTargets.length > 0);
   }, [historyOnlyDefaultEnabled, updateCurrentPrices, undatedTargets.length]);
   useEffect(() => { if (alignResult) alignCardRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }, [alignResult]);
-  const reviewKey = useMemo(() => JSON.stringify({ receiptDate, importedLines, candidates, selected, unmatched, newSupplier, replaceUndatedCurrent, undatedTargets, updateCurrentPrices, excludedImportRows,
+  const reviewKey = useMemo(() => JSON.stringify({ receiptDate, importedLines, candidates, selected, unmatched, newSupplier, replaceUndatedCurrent, undatedTargets, updateCurrentPrices, excludedImportRows, priceJumpHeldRows,
     currentPrices: unique.map(product => [product.id, product.cost, product.priceDate]) }),
-  [receiptDate, importedLines, candidates, selected, unmatched, newSupplier, unique, replaceUndatedCurrent, undatedTargets, updateCurrentPrices, excludedImportRows]);
+  [receiptDate, importedLines, candidates, selected, unmatched, newSupplier, unique, replaceUndatedCurrent, undatedTargets, updateCurrentPrices, excludedImportRows, priceJumpHeldRows]);
   function changeReceiptDate(value: string) {
     setReceiptDate(value); setConfirmedReview(""); setReplaceUndatedCurrent(false);
     if (!fileHasDates) {
@@ -521,7 +529,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         const held = new Map<string, number>();
         for (const line of matchedLines) held.set(`${line.productId}|${line.purchaseDate}`, held.get(`${line.productId}|${line.purchaseDate}`) ?? line.rowNumber);
         const touched = new Set(matchedLines.map(line => line.productId));
-        setDateSelectedRows([]); setDateHeldRows(Array.from(held.values())); setHeldCount(0); setExcludedImportRows(lines.length - matchedLines.length);
+        setDateSelectedRows([]); setDateHeldRows(Array.from(held.values())); setPriceJumpHeldRows([]); setHeldCount(0); setExcludedImportRows(lines.length - matchedLines.length);
         setCandidates(current => Object.fromEntries(Object.entries(current).filter(([id]) => !touched.has(id))));
         setSelected(current => current.filter(id => !touched.has(id))); setUnmatched([]); setImportedLines(matchedLines); setSheet(null);
         setDatePartial(""); setDateMappedIds([]); setDateCreatedCount(0); setReplaceUndatedCurrent(false); setFileHasDates(importPreview.hasDates); setFileHadConflicts(importPreview.conflicts.length > 0); setSaveReview(false); setConfirmedReview("");
@@ -553,6 +561,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         prices.add(line.cost); selectedPrices.set(key, prices);
       }
       const next: Record<string, Candidate> = {};
+      const priceJumps: number[] = [];
       const missing: NewRow[] = [], seen = new Set<string>();
       for (const line of merged) {
         const key = target(line), date = line.purchaseDate || receiptDate;
@@ -566,11 +575,15 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         const current = matched ? catalogUnique.find(product => product.id === matched.id) : undefined;
         if (current?.priceDate && date < current.priceDate) continue;
         const fileNote = matched ? [matched.name.replace(/\s+/g, "") !== line.name.replace(/\s+/g, "") ? `파일 품목명 ${line.name}` : "", (matched.spec || "").replace(/\s+/g, "").toLowerCase() !== line.spec.replace(/\s+/g, "").toLowerCase() && line.spec ? `파일 규격 ${line.spec}` : "", (matched.unit || "").toLowerCase() !== line.unit.toLowerCase() && line.unit ? `파일 단위 ${line.unit}` : ""].filter(Boolean).join(" · ") : "";
-        if (matched && (!row.supplier || matched.supplierProductId)) next[matched.id] = { purchaseDate: date, cost: line.cost, method: "엑셀", quantity: line.quantity, rawCost: line.rawCost, source: fileName, supplierProductId: matched.supplierProductId, taxType: line.taxType, vatIncluded: line.vatIncluded, ...(fileNote ? { fileNote } : {}) };
+        if (matched && (!row.supplier || matched.supplierProductId)) {
+          next[matched.id] = { purchaseDate: date, cost: line.cost, method: "엑셀", quantity: line.quantity, rawCost: line.rawCost, source: fileName, supplierProductId: matched.supplierProductId, taxType: line.taxType, vatIncluded: line.vatIncluded, ...(fileNote ? { fileNote } : {}) };
+          if (purchasePriceJump(current?.cost || 0, line.cost)) priceJumps.push(line.rowNumber);
+        }
         else missing.push({ ...row, purchaseDate: date, rowId: String(line.rowNumber), fileSpec: line.spec, fileUnit: line.unit, quantity: line.quantity, rawCost: line.rawCost, rawName: line.rawName, taxType: line.taxType, vatIncluded: line.vatIncluded });
       }
       const touched = new Set(Array.from(matchedRows.values()).flatMap(product => product ? [product.id] : []));
       setCandidates(current => ({ ...Object.fromEntries(Object.entries(current).filter(([id]) => !touched.has(id))), ...next }));
+      setPriceJumpHeldRows(priceJumps);
       setSelected(current => Array.from(new Set([...current.filter(id => !touched.has(id)),
         ...autoSelectCurrentPurchaseIds(next, new Map(catalogUnique.map(product => [product.id, product.cost])))])));
       setUnmatched(missing);
@@ -711,6 +724,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     setImportUnitPick([]);
     setImportBulkUnit("");
     setUnitRelinkBlockedRows([]);
+    setPriceJumpHeldRows([]);
     setConflictChoices({});
     setSaveReview(false);
     setConfirmedReview("");
@@ -801,7 +815,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const edited = selected.some(id => mappedProductIds.has(id) && candidates[id]
         && (candidates[id].method !== "엑셀" || !mappedLines.some(line => line.productId === id && line.cost === candidates[id].cost)));
       if (edited) throw new Error("같은 상품·적용일의 현재 매입가 후보가 여러 개입니다. 적용할 행을 선택하거나 이번 가격 반영을 보류해 주세요.");
-      const allRows = holdFuturePrices(buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]), today).map(row => {
+      const allRows = holdFuturePrices(buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...priceJumpHeldRows, ...Array.from(excluded)]), today).map(row => {
         const target = undatedTargets.find(item => item.productId === row.productId && item.date === row.priceDate);
         return replaceUndatedCurrent && row.priceSelected && target ? { ...row, replaceUndatedCurrent: true, expectedPurchasePrice: target.previous } : row;
       });
@@ -839,7 +853,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       if (result.status !== "completed" || result.batchId !== id || result.rowCount !== rows.length || !Number.isSafeInteger(result.historyOnlyProductCount) || result.historyOnlyProductCount < 0 || result.historyOnlyProductCount > new Set(rows.map(row => row.productId)).size || !(result.recalcRunId === null || typeof result.recalcRunId === "string")) throw new Error("저장 완료 상태를 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요.");
       setDateBatch({ id, status: "completed", recalcRunId: result.recalcRunId, rowCount: result.rowCount, historyOnlyProductCount: result.historyOnlyProductCount, sourceFileName: fileName || "매입가 반영", receiptDate });
       forgetDateRequest(companyId);
-      setImportedLines([]); setUnmatched([]); setCandidates({}); setSelected([]); setDatePartial(""); setSaveReview(false); setConfirmedReview(""); setHistoryKey(value => value + 1);
+      setImportedLines([]); setUnmatched([]); setCandidates({}); setSelected([]); setPriceJumpHeldRows([]); setDatePartial(""); setSaveReview(false); setConfirmedReview(""); setHistoryKey(value => value + 1);
       const currentCount = new Set(rows.map(row => row.productId)).size - result.historyOnlyProductCount;
       setSaveResult({ currentCount, historyOnlyCount: result.historyOnlyProductCount });
       setTab("매입 이력");
@@ -1029,6 +1043,12 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const unitOptions = Array.from(new Set([...COMMON_UNITS, ...products.map((product) => product.unit).filter(Boolean)]));
   const saveCount = historyOnlyDefaultEnabled && importedLines.length ? importedLines.length : selected.length + unmatched.length;
   const cleanupNeeded = sheet && (!historyOnlyDefaultEnabled || updateCurrentPrices) ? unresolvedConflicts : 0;
+  const priceJumpReviews = importedLines.filter(line => priceJumpHeldRows.includes(line.rowNumber)).flatMap(line => {
+    const previous = unique.find(product => product.id === line.productId)?.cost;
+    if (!previous) return [];
+    const ratio = line.cost / previous;
+    return [{ ...line, previous, ratio }];
+  });
 
   return <div className="min-w-0 space-y-4" aria-busy={busy}>
     <datalist id="purchase-unit-options">{unitOptions.map((unit) => <option key={unit} value={unit} />)}</datalist>
@@ -1115,6 +1135,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         <p>매입 단위를 입력하거나 상품관리에서 환산을 확인한 뒤 다시 반영해 주세요.</p>
         <ul>{unitConversionHolds.map(row => <li key={row.rowNumber}>원본 {row.rowNumber}행 · {row.name} · 매입 {row.purchaseUnit} → 판매 {row.salesUnit}</li>)}</ul>
       </div> : null}
+      {priceJumpReviews.length ? <section aria-label="급변 매입가 확인" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+        <p className="font-semibold">단위 확인 {priceJumpReviews.length}품목 · 30% 넘는 급변은 기본 보류했습니다.</p>
+        <ul className="space-y-2">{priceJumpReviews.map(line => <li className="flex flex-wrap items-center gap-2" key={line.rowNumber}><span className="mr-auto">원본 {line.rowNumber}행 · {line.rawName} · {money(line.previous)} → {money(line.cost)} ({line.ratio >= 1 ? `${line.ratio.toFixed(1)}배` : `${Math.round((line.ratio - 1) * 100)}%`})</span><button className="maju-button-secondary min-h-[44px]" onClick={() => { setPriceJumpHeldRows(current => current.filter(row => row !== line.rowNumber)); setConfirmedReview(""); }} type="button">맞음</button></li>)}</ul>
+      </section> : null}
       {matchingUnitGroups.length ? <div className="flex flex-wrap items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900" role="status"><span>매입처·품목·단위가 같은 묶음 {matchingUnitGroups.length}개 · 확인 {matchingUnitGroups.filter(group => confirmedUnitGroups.includes(group.key)).length}개 · 미확인 {matchingUnitGroups.filter(group => !confirmedUnitGroups.includes(group.key)).length}개</span><button className="maju-button-secondary min-h-[44px]" disabled={matchingUnitGroups.every(group => confirmedUnitGroups.includes(group.key))} onClick={() => setConfirmedUnitGroups(matchingUnitGroups.map(group => group.key))} type="button">단위 같음 — 한 번에 확인</button><small>서버가 저장 때 단위를 다시 검사합니다. 다른 단위는 환산 확인 전까지 현재가를 보류합니다.</small></div> : null}
       {zeroSelectedRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800" role="alert"><span>0원 확인 · 현재 매입가 후보 {zeroSelectedRows.length}행은 저장할 수 없습니다.</span><button className="maju-button-secondary min-h-[44px]" onClick={() => {
         const zeroGroups = new Set(zeroSelectedRows.map(line => `${line.productId}|${line.purchaseDate}`));
