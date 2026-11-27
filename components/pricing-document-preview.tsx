@@ -23,7 +23,7 @@ import { formatWon } from "@/domains/shared/money";
 
 export function pricingPaperStyle(fontScale: number) {
   const tableScale = Math.min(fontScale, 1.15);
-  return `.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * tableScale)}px;line-height:${Math.round(16 * tableScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * tableScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}`;
+  return `.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * tableScale)}px;line-height:${Math.round(16 * tableScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper [data-indexed] .pricing-output-table td,.pricing-paper [data-indexed] .pricing-output-table th{padding:1px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * tableScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}`;
 }
 
 export async function pricingPaperImage(paper: HTMLElement) {
@@ -161,7 +161,7 @@ export function PageContent({
           ))}
         </div>
       ) : (
-        <div className="pricing-output-grid my-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${chunks.length || 1}, minmax(0, 1fr))` }}>
+        <div className="pricing-output-grid my-3 grid gap-3" data-indexed={indexed || undefined} style={{ gridTemplateColumns: `repeat(${chunks.length || 1}, minmax(0, 1fr))` }}>
           {chunks.map((chunk, c) => (
             <table className="pricing-output-table w-full table-fixed border-collapse text-left" key={c}>
               <colgroup>{(indexed ? [6, display.productWidth * 0.83, (100 - display.productWidth) * 0.83, 11] : [display.productWidth, 100 - display.productWidth]).map((width, i) => <col key={i} style={{ width: `${width}%` }} />)}</colgroup>

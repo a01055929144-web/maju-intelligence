@@ -501,7 +501,7 @@ for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive 
     const version = index + 2;
     await page.getByRole("button", { name: new RegExp(`^버전 ${version} 미리보기`) }).click();
     const preview = page.getByRole("dialog", { name: "미리보기", exact: true });
-    const notes = preview.locator("[data-document-footer]");
+    const notes = preview.locator(".pricing-paper [data-document-footer]");
     await expect(notes.first()).toBeVisible(); expect(await notes.count()).toBe(1);
     expect(await notes.evaluateAll((elements, expected) => elements.every(element => getComputedStyle(element).fontSize === `${expected}px` && getComputedStyle(element).fontWeight === "700"), size)).toBe(true);
     for (const element of await notes.all()) await expect(element).toHaveText(note);
