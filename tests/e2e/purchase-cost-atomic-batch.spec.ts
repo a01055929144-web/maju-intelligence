@@ -209,10 +209,12 @@ for (const width of [1440, 390]) test(`supplier links reveal current-price choic
   await expect(conflicts).toContainText("B매입처");
   await expect(conflicts).toContainText("6,000원");
   await expect(conflicts).toContainText("5,800원");
+  await expect(page.getByRole("status").filter({ hasText: "가격이 2개인 상품 1개" })).toContainText("정리 필요 1개");
+  await expect(page.getByRole("button", { name: "정리 필요 1개", exact: true })).toBeDisabled();
   await expect(page.getByRole("status").filter({ hasText: "연결 후 같은 상품·적용일" })).toContainText("현재 가격을 바꿀 행을 선택하거나 보류");
-  const choice = page.getByLabel("합성 상품 2026-11-19 적용 단가", { exact: true });
+  const choice = conflicts.getByRole("button", { name: /원본 3행 · B매입처 수량 - · 5,800원/ });
   expect((await choice.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  await choice.selectOption("3");
+  await choice.click();
   await align.click();
 
   await page.getByRole("button", { name: "③ 저장 (2건)", exact: true }).click();
@@ -231,8 +233,8 @@ for (const width of [1440, 390]) test(`new-product price choice stays visible th
   await page.setViewportSize({ width, height: 900 });
   const { dateWrites, registration } = await purchaseUpload(page, { historyOnlyDefault: true, newProducts: true, failFirstSave: width === 390 });
   await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,매입처,구매일,단가\nNEW-1,신규 합성 상품,1kg,봉,합성 매입처,2099-11-20,150\nNEW-1,신규 합성 상품,1kg,봉,합성 매입처,2099-11-20,220\n");
-  const choice = page.getByLabel("신규 합성 상품 2099-11-20 적용 단가", { exact: true });
-  await choice.selectOption(width === 390 ? "hold" : "3");
+  const conflicts = page.getByRole("region", { name: "상이 단가 선택", exact: true });
+  await conflicts.getByRole("button", { name: width === 390 ? "이번엔 보류" : /원본 3행/ }).click();
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
 
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
