@@ -100,7 +100,7 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
   const [showPriceDirection, setShowPriceDirection] = useState(false);
   const [data, setData] = useState<SettingsResponse | null>(null);
   const [company, setCompany] = useState<Rule & { notice: string; marketPriceNotice: string }>({
-    ...defaultRule, notice: "", marketPriceNotice: "싯가·경매가에 따라 달라질 수 있습니다." });
+    ...defaultRule, delivery_weekdays: undefined, notice: "", marketPriceNotice: "싯가·경매가에 따라 달라질 수 있습니다." });
   const [territoryId, setTerritoryId] = useState("");
   const [territoryRule, setTerritoryRule] = useState<Rule>(defaultRule);
   const [customerQuery, setCustomerQuery] = useState("");
