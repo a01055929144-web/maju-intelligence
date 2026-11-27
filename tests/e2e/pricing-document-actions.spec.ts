@@ -191,7 +191,7 @@ for(const count of [18,96]) for(const columns of [1,2,3] as const)test(`CX-05 A4
       await dialog.getByRole("button",{name:`${Math.round(scale*100)}%`,exact:true}).click();
       await page.evaluate(()=>document.fonts.ready);
       const pages=printPages(output,scale,qr),before=Math.min(18*columns,Math.floor((Math.floor(26*columns/scale)-(qr?5*columns:0))/3));
-      expect(pages.flatMap(p=>p.lines)).toEqual(output.lines);expect(pages[0].lines.length).toBeGreaterThanOrEqual(Math.min(count,before));
+      expect(pages.flatMap(p=>p.lines)).toEqual(output.lines);expect(pages[0].lines.length).toBe(Math.min(count,20));
       if(count===18 && columns===2 && scale===1 && !qr) expect(pages).toHaveLength(1);
 
       await expect(dialog.locator(".pricing-paper")).toHaveCount(pages.length);
@@ -502,29 +502,31 @@ for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive 
     await page.getByRole("button", { name: new RegExp(`^버전 ${version} 미리보기`) }).click();
     const preview = page.getByRole("dialog", { name: "미리보기", exact: true });
     const notes = preview.locator("[data-document-footer]");
-    await expect(notes.first()).toBeVisible(); expect(await notes.count()).toBeGreaterThan(1);
+    await expect(notes.first()).toBeVisible(); expect(await notes.count()).toBe(1);
     expect(await notes.evaluateAll((elements, expected) => elements.every(element => getComputedStyle(element).fontSize === `${expected}px` && getComputedStyle(element).fontWeight === "700"), size)).toBe(true);
     for (const element of await notes.all()) await expect(element).toHaveText(note);
     const overflow = await preview.locator(".pricing-paper").evaluateAll(papers => papers.some(paper => { const content = paper.querySelector(".pricing-output-content")!; const style = getComputedStyle(paper); return content.getBoundingClientRect().height > paper.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) + 2; }));
     expect(overflow).toBe(false);
-    const spacing = await preview.locator(".pricing-paper").evaluateAll(papers => papers.map(paper => {
+    const spacing = await preview.locator(".pricing-paper").evaluateAll(papers => papers.map((paper, index) => {
       const rows = Array.from(paper.querySelectorAll(".pricing-output-table tbody tr"));
-      const note = paper.querySelector("[data-document-footer]")!;
+      const note = paper.querySelector("[data-document-footer]");
       const pageNumber = paper.querySelector("footer")!.lastElementChild!;
-      return { rows: rows.length, gap: note.getBoundingClientRect().top - Math.max(...rows.map(row => row.getBoundingClientRect().bottom)), pageNumber: pageNumber.textContent, bottom: pageNumber.getBoundingClientRect().bottom, pageBottom: paper.getBoundingClientRect().bottom };
+      return { rows: rows.length, gap: note ? note.getBoundingClientRect().top - Math.max(...rows.map(row => row.getBoundingClientRect().bottom)) : null, hasNote: Boolean(note), last: index === papers.length - 1, pageNumber: pageNumber.textContent, bottom: pageNumber.getBoundingClientRect().bottom, pageBottom: paper.getBoundingClientRect().bottom };
     }));
     for (const metric of spacing) {
       expect(metric.rows).toBeGreaterThan(0);
-      expect(metric.gap).toBeGreaterThanOrEqual(0);
+      expect(metric.hasNote).toBe(metric.last);
+      if (metric.gap !== null) expect(metric.gap).toBeGreaterThanOrEqual(0);
       expect(metric.pageNumber).toMatch(/\d+ \/ \d+쪽/);
       expect(metric.bottom).toBeLessThanOrEqual(metric.pageBottom);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
     await page.screenshot({ path: `test-results/readonly-pg17/document-footer-format/preview-${size}-${width}.png`, fullPage: true });
-    const pending = page.waitForEvent("download"); await preview.getByRole("button", { name: "1쪽 PNG 저장", exact: true }).click();
-    const downloaded = await pending; expect(downloaded.suggestedFilename()).toBe(`document-v${version}-1.png`);
+    const lastPage = await preview.locator(".pricing-paper").count();
+    const pending = page.waitForEvent("download"); await preview.getByRole("button", { name: `${lastPage}쪽 PNG 저장`, exact: true }).click();
+    const downloaded = await pending; expect(downloaded.suggestedFilename()).toBe(`document-v${version}-${lastPage}.png`);
     await downloaded.saveAs(`test-results/readonly-pg17/document-footer-format/export-${size}-${width}.png`);
-    const paper = preview.locator(".pricing-paper").first(), printedNote = paper.locator("[data-document-footer]");
+    const paper = preview.locator(".pricing-paper").last(), printedNote = paper.locator("[data-document-footer]");
     // Compare equal 2x rasters; the phone's horizontal A4 viewport must not clip the reference.
     if (width === 390) await page.setViewportSize({ width: 1440, height: 1000 });
     const reference = await printedNote.screenshot({ animations: "disabled", path: `test-results/readonly-pg17/document-footer-format/reference-${size}-${width}.png` });

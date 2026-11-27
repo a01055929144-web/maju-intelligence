@@ -22,7 +22,8 @@ import { Button } from "./ui/button";
 import { formatWon } from "@/domains/shared/money";
 
 export function pricingPaperStyle(fontScale: number) {
-  return `.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * fontScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}`;
+  const tableScale = Math.min(fontScale, 1.15);
+  return `.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * tableScale)}px;line-height:${Math.round(16 * tableScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * tableScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}`;
 }
 
 export async function pricingPaperImage(paper: HTMLElement) {
@@ -196,13 +197,13 @@ export function PageContent({
         <p className="py-8">표시 가능한 품목이 없습니다.</p>
       )}
       <footer className="mt-auto space-y-1.5 border-t pt-3 text-sm">
-        {qrSettings.position.startsWith("bottom") ? qrBlock : null}
         {(online || page === pages) && footerInfo.length ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
             {footerInfo.map((item) => <p key={`${item.label}-${item.value}`}>{item.label} · {item.value}</p>)}
           </div>
         ) : null}
         {(online || page === pages) && data.footer ? <p className="whitespace-pre-wrap" data-document-footer style={{ fontSize: footerType.fontSize ?? undefined, fontWeight: footerType.bold ? 700 : undefined, lineHeight: footerType.fontSize ? `${footerType.lineHeight}px` : undefined }}>{data.footer}</p> : null}
+        {qrSettings.position.startsWith("bottom") ? qrBlock : null}
         <p className="text-right text-xs">
           {page} / {pages}쪽
         </p>
