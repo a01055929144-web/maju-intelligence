@@ -39,3 +39,15 @@ export function normalizeLeadBulkIds(value: unknown): string[] {
   return Array.from(new Set(value.filter(isLeadBulkUuid))).slice(0, LEAD_BULK_MAX_ITEMS + 1);
 }
 
+export async function runLeadBulkBatches(
+  leadIds: string[],
+  runBatch: (batchIds: string[], remainingIds: string[]) => Promise<boolean>,
+  batchSize = 50
+) {
+  for (let offset = 0; offset < leadIds.length; offset += batchSize) {
+    const keepGoing = await runBatch(leadIds.slice(offset, offset + batchSize), leadIds.slice(offset + batchSize));
+    if (!keepGoing) return false;
+  }
+  return true;
+}
+
