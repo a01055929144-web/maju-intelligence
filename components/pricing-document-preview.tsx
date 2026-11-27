@@ -78,15 +78,16 @@ export function PageContent({
   const price = (l: OutputLine) => (l.price !== null ? formatWon(l.price) : "—");
   const flyer = data.layout === "flyer";
   const qrSettings = qrDisplay || documentQrDisplay(display.qr);
-  const qrMillimeters = { small: 24, normal: 30, large: 36 }[qrSettings.size];
+  const qrPosition = online ? qrSettings.position : page === 1 ? "top-right" : "bottom-right";
+  const qrMillimeters = { small: 30, normal: 30, large: 36 }[qrSettings.size];
   const qrLength = online ? `${{ small: 96, normal: 128, large: 160 }[qrSettings.size]}px` : `${qrMillimeters}mm`;
-  const qrBlock = qr ? <div data-document-qr data-qr-position={qrSettings.position} data-qr-size={qrSettings.size} className={`flex items-center gap-3 ${qrSettings.position.endsWith("right") ? "flex-row-reverse" : ""}`}><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} style={{ width: qrLength, height: qrLength }} className="shrink-0" />{qr.audience !== "public" ? <p className="text-xs"><strong>{qr.customerName}</strong><br />QR을 스캔해 주문하세요. 이 거래처에만 전달해 주세요.</p> : null}</div> : null;
+  const qrBlock = qr ? <div data-document-qr data-qr-position={qrPosition} data-qr-size={qrSettings.size} className={`flex items-center gap-3 ${qrPosition.endsWith("right") ? "flex-row-reverse" : ""}`}><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} style={{ width: qrLength, height: qrLength }} className="shrink-0" /><p className="text-xs"><strong className="text-sm">더 많은 상품·오늘 가격 보러가기 →</strong><br />휴대폰 카메라로 찍으면 바로 열려요 (아이폰·안드로이드){qr.audience !== "public" ? <><br />{qr.customerName} 전용 · 다른 곳에 전달하지 마세요.</> : null}</p></div> : null;
   return (
     <div
       className="pricing-output-content"
       style={{ borderTop: `6px solid ${accent}` }}
     >
-      {qrSettings.position.startsWith("top") ? qrBlock : null}
+      {online && qrPosition.startsWith("top") ? qrBlock : null}
       <header className="space-y-1.5 border-b pb-3">
         {/* 11/4: 문서를 주는 회사가 먼저 눈에 들어오도록 회사명을 가장 크게 */}
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -106,6 +107,7 @@ export function PageContent({
               {data.expired ? " 만료" : "까지"}
             </p>
           </div>
+          {!online && qrPosition.startsWith("top") ? qrBlock : null}
         </div>
         {(online || page === 1) && data.recipient && <p>받는 곳: {data.recipient}</p>}
         {(online || page === 1) && data.contact && <p className="text-xs">{data.contact}</p>}
@@ -203,7 +205,7 @@ export function PageContent({
           </div>
         ) : null}
         {(online || page === pages) && data.footer ? <p className="whitespace-pre-wrap" data-document-footer style={{ fontSize: footerType.fontSize ?? undefined, fontWeight: footerType.bold ? 700 : undefined, lineHeight: footerType.fontSize ? `${footerType.lineHeight}px` : undefined }}>{data.footer}</p> : null}
-        {qrSettings.position.startsWith("bottom") ? qrBlock : null}
+        {qrPosition.startsWith("bottom") ? qrBlock : null}
         <p className="text-right text-xs">
           {page} / {pages}쪽
         </p>

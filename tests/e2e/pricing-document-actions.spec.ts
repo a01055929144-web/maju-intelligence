@@ -121,7 +121,13 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await dialog.getByRole("button", { name: "선택 거래처 QR 생성", exact: true }).click();
   await expect(dialog.getByRole("img", { name: "합성 매장 주문 QR 미리보기", exact: true })).toHaveAttribute("src", /^data:image\/png;base64,/);
   await dialog.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
-  await expect(dialog.locator(".pricing-paper").first().getByRole("img", { name: "합성 매장 주문 링크 QR", exact: true })).toBeVisible();
+  const printQr = dialog.locator(".pricing-paper [data-document-qr]");
+  await expect(printQr.first().getByRole("img", { name: "합성 매장 주문 링크 QR", exact: true })).toBeVisible();
+  await expect(printQr.first()).toHaveAttribute("data-qr-position", "top-right");
+  await expect(printQr.first()).toContainText("더 많은 상품·오늘 가격 보러가기 →");
+  await expect(printQr.first()).toContainText("아이폰·안드로이드");
+  expect(await printQr.first().getByRole("img").evaluate(element => parseFloat(getComputedStyle(element).width))).toBeGreaterThanOrEqual(30 * 96 / 25.4 - 1);
+  if (await printQr.count() > 1) await expect(printQr.nth(1)).toHaveAttribute("data-qr-position", "bottom-right");
   expect(await dialog.locator(".pricing-paper [data-document-price-value]").first().evaluate(element => element.getClientRects().length)).toBe(1);
   const specBox = await dialog.locator(".pricing-paper [data-document-spec]").first().boundingBox(), priceBox = await dialog.locator(".pricing-paper [data-document-price]").first().boundingBox();
   expect(specBox!.x + specBox!.width).toBeLessThanOrEqual(priceBox!.x + 1);
@@ -196,13 +202,13 @@ for(const count of [18,96]) for(const columns of [1,2,3] as const)test(`CX-05 A4
 
       await expect(dialog.locator(".pricing-paper")).toHaveCount(pages.length);
       const metrics=await dialog.locator(".pricing-paper").evaluateAll(papers=>papers.map(paper=>{
-        const style=getComputedStyle(paper),content=paper.querySelector(".pricing-output-content")!,image=paper.querySelector("footer img");
+        const style=getComputedStyle(paper),content=paper.querySelector(".pricing-output-content")!,image=paper.querySelector("footer img"),qr=paper.querySelector("[data-document-qr]");
         return {padding:parseFloat(style.paddingTop),available:paper.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom),actual:content.getBoundingClientRect().height,
-          qrBottom:image?paper.getBoundingClientRect().bottom-image.getBoundingClientRect().bottom:null,
+          qrBottom:image?paper.getBoundingClientRect().bottom-image.getBoundingClientRect().bottom:null,qrPosition:qr?.getAttribute("data-qr-position")||null,
           clipped:Array.from(paper.querySelectorAll("[data-document-spec]")).some(element=>element.scrollWidth>element.clientWidth+1)};
       }));
       for(const metric of metrics){expect(metric.padding).toBeCloseTo(10*96/25.4,0);expect(metric.actual).toBeLessThanOrEqual(metric.available+2);expect(metric.clipped).toBe(false);}
-      if(qr){const positions=metrics.map(m=>m.qrBottom!);expect(Math.max(...positions)-Math.min(...positions)).toBeLessThan(2);}
+      if(qr){expect(metrics[0].qrPosition).toBe("top-right");expect(metrics.slice(1).every(metric=>metric.qrPosition==="bottom-right")).toBe(true);const positions=metrics.slice(1).map(m=>m.qrBottom!);if(positions.length>1)expect(Math.max(...positions)-Math.min(...positions)).toBeLessThan(2);}
       // Intrinsic occupied height excludes the footer's auto margin and the 277mm flex minimum.
       // Reconstruct the former first page from these same rendered rows and its former CSS.
       const fill=await dialog.locator(".pricing-paper").first().evaluate((paper,{before,columns,scale})=>{
