@@ -2511,7 +2511,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           <MapLeadFilterStrip
             allLeadsLoading={allLeadsLoadState === "loading"}
             dongOptions={mapLeadDongOptions}
-            filteredCount={filteredAllLeadsForMap.length}
+            filteredCount={mapLeadVisibility.displayed}
             filtersActive={leadFiltersActive}
             mapTargetType={mapTargetType}
             onApplyOpenDate={() => {

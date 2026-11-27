@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterMapLeads, getPermitLeadType, parseLeadRegion, scopeLeadsByStatus, summarizeMapLeadVisibility, toggleMultiFilter, type MapFilterLead } from "../domains/lead/map-filters";
+import { filterMapLeads, getPermitLeadType, isPermitLeadInOpenDateFilter, parseLeadRegion, scopeLeadsByStatus, summarizeMapLeadVisibility, toggleMultiFilter, type MapFilterLead } from "../domains/lead/map-filters";
 import { isClosedLead } from "../lib/leads";
 import { splitMultiFilter } from "../lib/map-filter-multi";
 import { matchesMapLeadType } from "../lib/map-layer-selection";
@@ -42,9 +42,13 @@ describe("CX-155 표 결과와 지도 표시 수", () => {
   ];
 
   it("openDate 우선·permitDate 대체 규칙으로 표 결과를 만들고 주소 없는 리드만 지도에서 빠진다", () => {
-    const filtered = filterMapLeads(sameFilterLeads, { ...none, openDateStart: "2026-11-01", openDateEnd: "2026-11-30" });
-    expect(filtered.map((item) => item.id)).toEqual(["open", "permit", "both", "no-address"]);
-    expect(summarizeMapLeadVisibility(filtered, {
+    const tableFiltered = sameFilterLeads
+      .filter((item) => item.industryPrimary === "한식")
+      .filter((item) => isPermitLeadInOpenDateFilter(item, "custom", "", "", "2026-11-01", "2026-11-30"));
+    const mapFiltered = filterMapLeads(sameFilterLeads, { ...none, industry: "한식", openDateStart: "2026-11-01", openDateEnd: "2026-11-30" });
+    expect(mapFiltered.map((item) => item.id)).toEqual(tableFiltered.map((item) => item.id));
+    expect(mapFiltered.map((item) => item.id)).toEqual(["open", "permit", "both", "no-address"]);
+    expect(summarizeMapLeadVisibility(mapFiltered, {
       layerOn: true,
       radiusLeadIds: new Set(),
       radiusOn: false,
