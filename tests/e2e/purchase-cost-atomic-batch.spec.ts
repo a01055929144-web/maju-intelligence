@@ -238,7 +238,6 @@ for (const width of [1440, 390]) test(`supplier links reveal current-price choic
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("2026-11-19 · 2행");
   await confirmPurchasePriceJumps(page);
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows.map(row => row.unitPrice)).toEqual([6000, 5800]);
@@ -265,14 +264,12 @@ for (const width of [1440, 390]) test(`new-product price choice stays visible th
   else await expect(futureHold).toHaveCount(0);
   if (width === 1440) await page.getByLabel("1행 과세", { exact: true }).selectOption("taxable");
   await page.getByRole("button", { name: /^③ 저장/ }).click();
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
 
   if (width === 390) {
     await expect(page.getByRole("alert").filter({ hasText: "이 표시는 상품 연결 상태이며 매입 이력 저장 완료를 뜻하지 않습니다" })).toBeVisible();
     expect(registration.standards).toBe(1);
     expect(dateWrites).toHaveLength(1);
-    await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
     await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   }
   await expect.poll(() => dateWrites.length).toBe(width === 390 ? 2 : 1);
@@ -294,10 +291,10 @@ for (const width of [1440, 390]) test(`purchase price jumps stay held until conf
   const jump = page.getByRole("region", { name: "급변 매입가 확인", exact: true });
   await expect(jump).toContainText("100원 → 800원 (8.0배)");
   await page.getByRole("button", { name: /^③ 저장/ }).click();
-  await expect(page.getByRole("region", { name: "저장 전 적용일 확인" })).toContainText("현재 가격 변경 0건");
+  await expect(page.getByRole("region", { name: "저장 요약", exact: true })).toContainText("현재 매입가 바뀜 0품목");
   await jump.getByRole("button", { name: "맞음", exact: true }).click();
   await expect(jump).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "저장 전 적용일 확인" })).toContainText("현재 가격 변경 1건");
+  await expect(page.getByRole("region", { name: "저장 요약", exact: true })).toContainText("현재 매입가 바뀜 1품목");
   expect(dateWrites).toHaveLength(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -340,9 +337,11 @@ for (const width of [1280, 390]) {
     await expect(review).toContainText("2026-11-04 · 1행");
     await expect(review).toContainText("2026-11-07 · 1행");
     const save = review.getByRole("button", { name: "확인한 날짜로 저장", exact: true });
-    await expect(save).toBeDisabled();
+    await expect(review.getByRole("region", { name: "저장 요약", exact: true })).toContainText("새 상품 0개");
+    await expect(review.getByRole("region", { name: "저장 요약", exact: true })).toContainText("이력 2행");
+    await expect(review.getByRole("checkbox", { name: /확인했습니다/ })).toHaveCount(0);
+    await expect(save).toBeEnabled();
     expect(writes).toHaveLength(0); expect(receipts).toHaveLength(0);
-    await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
     expect((await save.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath(`purchase-date-review-${width}.png`), fullPage: true });
@@ -366,11 +365,8 @@ for (const width of [1280, 390]) {
     await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
     const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
     await confirmPurchasePriceJumps(page);
-    await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
     await page.getByLabel("매입일", { exact: true }).fill("2026-11-10");
-    await expect(review.getByRole("checkbox", { name: /확인했습니다/ })).not.toBeChecked();
     await expect(review).toContainText("2026-11-10 · 2행");
-    await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
     await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
     await expect.poll(() => dateWrites.length).toBe(1);
     expect(dateWrites[0].rows.filter(row => row.priceSelected)).toMatchObject([{ cost: 220, priceDate: "2026-11-10" }]);
@@ -387,7 +383,6 @@ test("held latest-day conflicts preserve all original rows without promoting an 
   await page.getByRole("button", { name: "③ 저장 (0건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("가격 반영 보류 1그룹");
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows.map(row => row.unitPrice)).toEqual([300, 200, 400]);
@@ -405,7 +400,6 @@ test("invalid purchase dates and unsupported date protection block saving", asyn
   await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("준비 중");
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await expect(review.getByRole("button", { name: "확인한 날짜로 저장", exact: true })).toBeDisabled();
   expect(writes).toHaveLength(0); expect(receipts).toHaveLength(0);
 });
@@ -418,7 +412,6 @@ test("more than 100 price changes are blocked before any receipt or product writ
   await page.getByRole("button", { name: "③ 저장 (101건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review.getByRole("alert")).toContainText("최대 100건");
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await expect(review.getByRole("button", { name: "확인한 날짜로 저장", exact: true })).toBeDisabled();
   expect(writes).toHaveLength(0); expect(receipts).toHaveLength(0);
 });
@@ -431,7 +424,6 @@ test("undated conflict-free uploads for today keep the existing save path withou
   await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).not.toContainText("준비 중");
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0].changes[0]).toMatchObject({ cost: 300 });
@@ -446,8 +438,7 @@ test("purchase rows older than the current price remain history-only", async ({ 
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
   await page.getByRole("button", { name: "③ 저장 (0건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
-  await expect(review).toContainText("가격 변경 0건");
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
+  await expect(review.getByRole("region", { name: "저장 요약", exact: true })).toContainText("현재 매입가 바뀜 0품목");
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows.map(row => row.priceDate)).toEqual(["2026-11-07", "2026-11-04"]);
@@ -494,7 +485,6 @@ for (const width of [1280, 390]) test(`past imports can be saved as history only
   await page.getByRole("button", { name: "③ 저장 (376건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("매입 이력 376행 · 현재 가격 변경 0품목");
-  await review.getByRole("checkbox", { name: "적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.", exact: true }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows).toHaveLength(376);
@@ -538,7 +528,6 @@ test("different suppliers on the same product and day require an explicit source
   await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await confirmPurchasePriceJumps(page);
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows.filter(row => row.priceSelected)).toMatchObject([{ cost: 150, supplierProductId: "40000000-0000-4000-8000-000000000001" }]);
@@ -566,7 +555,6 @@ test("390px saves all 3417 synthetic rows and 745 selections through v2 only", a
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("원본 거래 3417행");
   await confirmPurchasePriceJumps(page);
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows).toHaveLength(3417);
@@ -589,14 +577,12 @@ for (const width of [1280, 390]) test(`new-product mapping survives failed v2 sa
   await page.getByRole("combobox", { name: "1행 과세" }).selectOption("taxable");
   await page.getByRole("button", { name: /③ 저장/ }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "합성 원자 저장 실패" })).toBeVisible();
   await expect(review).toContainText("날짜별 가격 적용 미완료: 2행");
   await expect(review).toContainText("새로 등록한 미가격 상품 1개");
   expect(registration).toEqual({ imports: 1, standards: 1 });
   expect(dateWrites[0].rows.every(row => row.productId === "20000000-0000-4000-8000-000000000001")).toBe(true);
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(2);
   expect(dateWrites[1]).toEqual(dateWrites[0]);
@@ -612,7 +598,6 @@ test("unresolved catalog mapping reports source rows and never guesses an ID", a
   await page.getByRole("combobox", { name: "1행 과세" }).selectOption("taxable");
   await page.getByRole("button", { name: /③ 저장/ }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "연결 미완료 원본 행: 2" })).toBeVisible();
   expect(dateWrites).toHaveLength(0);
@@ -641,7 +626,6 @@ test("현재 매입가 변경은 기준일 없는 기존가를 자동 교체한�
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath("purchase-date-undated-current-390.png"), fullPage: true });
   await confirmPurchasePriceJumps(page);
-  await review.getByRole("checkbox", { name: "적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.", exact: true }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows[0]).toMatchObject({ replaceUndatedCurrent: true, expectedPurchasePrice: 100 });
@@ -658,7 +642,6 @@ for (const committed of [false, true]) test(`refresh recovers the exact persiste
     await page.getByRole("button", { name: /^② 열 정렬/ }).click();
     await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
     const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
-    await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
     await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   };
   await saveFile();
@@ -710,11 +693,9 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("원본 거래 6행"); await expect(review).toContainText("가격 반영 보류 1그룹");
   await confirmPurchasePriceJumps(page);
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "합성 원자 저장 실패" })).toBeVisible();
   expect(registration).toEqual({ imports: 1, standards: 1 });
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   const deniedRoute = "**/api/price-sheets/costs?*";
   await page.route(deniedRoute, route => route.fulfill({ status: 403, json: { message: "Forbidden" } }));
   await page.getByRole("button", { name: "목록 새로고침", exact: true }).click();
@@ -725,7 +706,6 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   await page.getByRole("button", { name: "목록 새로고침", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "관리자에게 권한" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^③ 저장/ })).toBeEnabled();
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect(page.getByRole("region", { name: "매입가 저장 결과" })).toContainText("현재 매입가 변경 3품목 / 이력만 2품목");
   await expect(nav.getByRole("button", { name: "매입 이력", exact: true })).toHaveAttribute("aria-pressed", "true");
@@ -936,7 +916,6 @@ for (const mode of ["이력만 저장", "현재 매입가 변경"] as const) tes
   if (mode === "이력만 저장") await expect(review.getByText(/단위 확인 필요/)).toHaveCount(0);
   await page.getByRole("button", { name: /^③ 저장/ }).click();
   await confirmPurchasePriceJumps(page);
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows[0]).toMatchObject({ unit: "BOX", priceSelected: mode === "현재 매입가 변경" });
@@ -956,7 +935,6 @@ test("현재가 충돌 선택 뒤 같은 상품으로 다시 매칭되는 단위
   await review.getByLabel("2행 단위", { exact: true }).fill("BOX");
   await expect(review.getByRole("alert")).toHaveCount(0);
   await page.getByRole("button", { name: /^③ 저장/ }).click();
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows).toHaveLength(2);
@@ -976,7 +954,6 @@ for (const width of [1440, 390]) test(`단위 미확인 행은 서버 환산 확
   await expect(review.getByRole("status")).toContainText("상품관리에서 환산을 확인한 뒤 다시 반영해 주세요");
   await page.getByRole("button", { name: /^③ 저장/ }).click();
   await confirmPurchasePriceJumps(page);
-  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows).toMatchObject([{ selectedSourceRowNumber: 2, unit: "BOX", priceSelected: true, priceHeld: false }]);
