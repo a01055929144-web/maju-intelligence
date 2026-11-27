@@ -112,22 +112,22 @@ function clockLabel(time: string) {
   return `${part} ${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")}`;
 }
 
-/** "오늘 밤 11:59까지 주문하면 내일(11/26 목) 배송" / 마감 후 "지금 주문하면 11/27(금) 배송". 서버 기준 한국 시간. */
+/** 실제 주문 가능 범위 안의 배송일·마감을 안내한다. 서버 기준 한국 시간. */
 export function deliveryGuide(policy: DeliveryPolicy, now = new Date()) {
   if (!policy.weekdays.length) return { next: null as string | null, text: "배송 요일이 설정되지 않았습니다." };
   const today = kstDateTime(now).date;
   const next = nextDeliveryDate(policy, now);
   if (!next) return { next: null as string | null, text: "지금은 주문할 수 있는 배송일이 없습니다." };
   const offset = Math.round((parseDay(next).getTime() - parseDay(today).getTime()) / 86400000);
-  const target = offset === 1 ? `내일(${monthDayLabel(next)} ${weekdayLabel(next)})` : `${monthDayLabel(next)}(${weekdayLabel(next)})`;
+  const target = offset === 0 ? "오늘" : offset === 1 ? "내일" : offset === 2 ? "모레" : `${monthDayLabel(next)}(${weekdayLabel(next)})`;
   const cutoffDay = addDays(next, -policy.cutoffDaysBefore);
-  if (cutoffDay === today) return { next, text: `오늘 ${clockLabel(policy.cutoffTime)}까지 주문하면 ${target} 배송` };
-  return { next, text: `지금 주문하면 ${target} 배송` };
+  const deadline = `${cutoffDay === today ? "" : `${monthDayLabel(cutoffDay)}(${weekdayLabel(cutoffDay)}) `}${clockLabel(policy.cutoffTime)}`;
+  return { next, text: `오늘 주문하면 ${target} 배송 (${deadline} 마감)` };
 }
 
 export function nextDeliveryDate(policy: DeliveryPolicy, now = new Date()) {
   const today = kstDateTime(now).date;
-  for (let offset = 0; offset < 32; offset += 1) {
+  for (let offset = 0; offset <= ORDER_HORIZON_DAYS; offset += 1) {
     const day = addDays(today, offset);
     if (canOrderForDelivery(day, policy, now)) return day;
   }

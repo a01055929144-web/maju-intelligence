@@ -1,4 +1,5 @@
 "use client";
+import { deliveryGuide, type HolidayRule } from "@/domains/order/order-rules";
 import { MoneyInput } from "@/components/money-input";
 
 import { useCallback, useEffect, useState } from "react";
@@ -18,7 +19,7 @@ type Customer = { id: string; customer_name: string; delivery_territory_id: stri
 type Holiday = { id: string; territory_id: string | null; kind: "weekly" | "fixed" | "date";
   weekday: number | null; month: number | null; day: number | null; holiday_date: string | null; label: string };
 type SettingsResponse = { settings: Rule & { notice?: string; market_price_notice?: string; show_storefront_price_direction?: boolean } | null;
-  priceDirectionAvailable?: boolean;
+  priceDirectionAvailable?: boolean; companyWeekdays?: number[]; previewAt?: string;
   territories: Territory[]; territoryRules: (Rule & { territory_id: string })[];
   holidays: Holiday[] };
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -47,14 +48,14 @@ function PolicyFields({ value, onChange, inherit = false, weekdaysNote }: {
       </div>
     </fieldset>}
     <label className="text-[11px] font-black text-slate-600">마감일
-      <select className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={value.cutoff_days_before ?? ""}
+      <select aria-label="마감일" className="mt-1 w-full min-h-[44px] rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={value.cutoff_days_before ?? ""}
         onChange={(event) => onChange({ ...value, cutoff_days_before: numberOrNull(event.target.value) })}>
         {inherit && <option value="">상위 설정 사용</option>}
-        <option value="0">배송 당일</option><option value="1">전날</option><option value="2">2일 전</option>
+        <option value="0">배송 당일</option><option value="1">배송 1일 앞</option><option value="2">2일 전</option>
       </select>
     </label>
     <label className="text-[11px] font-black text-slate-600">마감 시각
-      <input className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" type="time" value={value.cutoff_time ?? ""}
+      <input className="mt-1 w-full min-h-[44px] rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" type="time" value={value.cutoff_time ?? ""}
         onChange={(event) => onChange({ ...value, cutoff_time: event.target.value || null })} />
     </label>
     <label className="text-[11px] font-black text-slate-600">최소 주문금액 (원)
@@ -74,16 +75,38 @@ function PolicyFields({ value, onChange, inherit = false, weekdaysNote }: {
   </div>;
 }
 
+function DeliveryPreview({ value, parent = {}, company, data, territoryId }: {
+  value: Rule; parent?: Rule; company: Rule; data: SettingsResponse | null; territoryId?: string;
+}) {
+  let text = "설정을 불러오면 배송 안내를 확인할 수 있습니다.";
+  if (data?.previewAt) {
+    try {
+      const before = value.cutoff_days_before ?? parent.cutoff_days_before ?? company.cutoff_days_before ?? 1;
+      if (before !== 0 && before !== 1 && before !== 2) throw new Error("마감일을 확인해 주세요.");
+      const weekdays = value.delivery_weekdays ?? parent.delivery_weekdays ?? data.companyWeekdays ?? [];
+      const holidays = data.holidays.filter(item => item.territory_id === null || item.territory_id === territoryId)
+        .map((item): HolidayRule => item.kind === "weekly" ? { kind: "weekly", weekday: item.weekday! }
+          : item.kind === "fixed" ? { kind: "fixed", month: item.month!, day: item.day! } : { kind: "date", date: item.holiday_date! });
+      text = weekdays.length ? deliveryGuide({ weekdays, cutoffDaysBefore: before,
+        cutoffTime: (value.cutoff_time ?? parent.cutoff_time ?? company.cutoff_time ?? "22:00").slice(0, 5),
+        holidays, minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 }, new Date(data.previewAt)).text
+        : "배송일은 권역·매장별로 확인해 주세요.";
+    } catch { text = "마감 시각과 배송 설정을 확인해 주세요."; }
+  }
+  return <p className="text-xs text-slate-600" data-testid="delivery-policy-preview">매장에는 이렇게 보입니다: <strong>{text}</strong><br />조회 시점의 설정 예시입니다. 실제 주문은 배송지·품목 조건도 확인합니다.</p>;
+}
+
 export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }) {
   const [showPriceDirection, setShowPriceDirection] = useState(false);
   const [data, setData] = useState<SettingsResponse | null>(null);
   const [company, setCompany] = useState<Rule & { notice: string; marketPriceNotice: string }>({
-    ...defaultRule, notice: "", marketPriceNotice: "싯가·경매가에 따라 달라질 수 있습니다." });
+    ...defaultRule, delivery_weekdays: undefined, notice: "", marketPriceNotice: "싯가·경매가에 따라 달라질 수 있습니다." });
   const [territoryId, setTerritoryId] = useState("");
   const [territoryRule, setTerritoryRule] = useState<Rule>(defaultRule);
   const [customerQuery, setCustomerQuery] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
+  const [customerPreviewReady, setCustomerPreviewReady] = useState("");
   const [customerRule, setCustomerRule] = useState<Rule>({ delivery_weekdays: null,
     cutoff_days_before: null, cutoff_time: null, minimum_amount: null,
     minimum_policy: null, delivery_fee: null });
@@ -110,12 +133,13 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
   }, [data, territoryId]);
   useEffect(() => {
     if (!data || !customerId) return;
+    setCustomerPreviewReady("");
     const empty: Rule = {
       delivery_weekdays: null, cutoff_days_before: null, cutoff_time: null,
       minimum_amount: null, minimum_policy: null, delivery_fee: null };
     void fetch(`${url}&customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" })
-      .then((response) => response.json()).then((result: { rule?: Rule | null }) =>
-        setCustomerRule(result.rule ?? empty))
+      .then(async (response) => { if (!response.ok) throw new Error("매장별 예외를 불러오지 못했습니다."); return response.json(); }).then((result: { rule?: Rule | null }) => {
+        setCustomerRule(result.rule ?? empty); setCustomerPreviewReady(customerId); })
       .catch(() => setMessage("매장별 예외를 불러오지 못했습니다."));
   }, [data, customerId, url]);
   async function save(body: Record<string, unknown>) {
@@ -153,7 +177,8 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
     <p className="text-xs font-semibold text-slate-500">회사 기본값보다 권역, 권역보다 매장별 예외가 우선합니다. 지금은 후결제 주문만 받습니다.</p>
     {message && <p role="status" className="rounded-md bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{message}</p>}
     <section className="space-y-3 rounded-lg border border-slate-200 p-4"><h2 className="text-sm font-black text-slate-950">회사 기본값</h2>
-      <PolicyFields value={company} onChange={(rule) => setCompany({ ...company, ...rule })} weekdaysNote="배송 요일은 아래 ‘권역별 배송’(매장별 예외는 매장 설정)에서 정합니다. 단가표 하단에 보이는 배송 요일은 회사 정보에서 바꿉니다." />
+      <PolicyFields value={company} onChange={(rule) => setCompany({ ...company, ...rule })} weekdaysNote="배송 요일은 아래 ‘권역별 배송’(매장별 예외는 매장 설정)에서 정합니다. 단가표 하단도 같은 배송 규칙을 따릅니다." />
+      <DeliveryPreview value={company} company={company} data={data} />
       <label className="block text-[11px] font-black text-slate-600">매장 공지<textarea className="mt-1 w-full rounded-md border border-slate-200 p-2 text-xs font-semibold leading-5" value={company.notice}
         onChange={(event) => setCompany({ ...company, notice: event.target.value })} /></label>
       <label className="block text-[11px] font-black text-slate-600">시세 품목 안내<textarea className="mt-1 w-full rounded-md border border-slate-200 p-2 text-xs font-semibold leading-5" value={company.marketPriceNotice}
@@ -174,11 +199,12 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
       <Button type="button" className="min-h-11 text-xs" disabled={busy || !data?.priceDirectionAvailable} onClick={() => void save({ action: "storefront-price-direction", enabled: showPriceDirection })}>판매가 등락 공개 설정 저장</Button>
     </section>
     <section className="space-y-3 rounded-lg border border-slate-200 p-4"><h2 className="text-sm font-black text-slate-950">권역별 배송</h2>
-      <select aria-label="배송 권역" className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={territoryId}
+      <select aria-label="배송 권역" className="w-full min-h-[44px] rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={territoryId}
         onChange={(event) => setTerritoryId(event.target.value)}><option value="">권역 선택</option>
         {data?.territories.filter((item) => item.is_active).map((item) =>
           <option key={item.id} value={item.id}>{item.name}</option>)}</select>
       {territoryId && <><PolicyFields value={territoryRule} onChange={setTerritoryRule} />
+        <DeliveryPreview value={territoryRule} company={company} data={data} territoryId={territoryId} />
         <button type="button" disabled={busy} className="maju-button-primary h-9 px-4 text-xs"
           onClick={() => void save({ action: "territory", territoryId,
             weekdays: territoryRule.delivery_weekdays, cutoffDaysBefore: territoryRule.cutoff_days_before,
@@ -192,6 +218,7 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
         onChange={(event) => setCustomerId(event.target.value)}><option value="">거래처 선택</option>
         {customers.map((item) => <option key={item.id} value={item.id}>{item.customer_name}</option>)}</select>
       {customerId && <><PolicyFields value={customerRule} onChange={setCustomerRule} inherit />
+        <DeliveryPreview value={customerRule} parent={data?.territoryRules.find(rule => rule.territory_id === customers.find(item => item.id === customerId)?.delivery_territory_id)} company={company} data={customerPreviewReady === customerId ? data : null} territoryId={customers.find(item => item.id === customerId)?.delivery_territory_id ?? undefined} />
         <button type="button" disabled={busy} className="maju-button-primary h-9 px-4 text-xs"
           onClick={() => void save({ action: "customer", customerId,
             weekdays: customerRule.delivery_weekdays, cutoffDaysBefore: customerRule.cutoff_days_before,

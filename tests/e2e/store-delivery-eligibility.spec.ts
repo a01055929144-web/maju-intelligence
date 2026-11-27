@@ -38,3 +38,38 @@ for(const width of [1440,390])test(`server delivery eligibility blocks and recov
   await expect(page.getByLabel("합성 품목 수량",{exact:true})).toHaveText("1");
   await page.screenshot({path:info.outputPath(`delivery-ready-${width}.png`),fullPage:true});
 });
+
+for (const width of [1440,390]) test('P1-6 order settings shares the delivery guide without saving at '+width+'px',async({page},info)=>{
+ const company='00000000-0000-4000-8000-000000000001',territoryId='30000000-0000-4000-8000-000000000001';
+ let holiday=false,noDefaults=false,writes=0;
+ await page.setViewportSize({width,height:1000});
+ expect((await page.request.post('/api/admin/login',{data:{email:'ci-admin@example.test',password:'ci-admin-layout-password-2026'}})).ok()).toBeTruthy();
+ await page.route('**/api/pricing-order-settings*',route=>{
+  if(route.request().method()!=='GET'){writes++;return route.fulfill({status:500,json:{message:'미리보기는 저장하지 않습니다.'}});}
+  return route.fulfill({json:{settings:noDefaults?null:{cutoff_days_before:1,cutoff_time:'23:59',minimum_amount:0,minimum_policy:'notice',delivery_fee:0,notice:'',market_price_notice:''},
+   companyWeekdays:noDefaults?[]:[1,2,3,4,5,6],previewAt:'2026-11-25T13:29:00.000Z',territories:[{id:territoryId,name:'합성 배송권역',is_active:true}],
+   territoryRules:[{territory_id:territoryId,delivery_weekdays:[1,2,3,4,5,6],cutoff_days_before:1,cutoff_time:'23:59',minimum_amount:0,minimum_policy:'notice',delivery_fee:0}],
+   holidays:holiday?[{id:'holiday',territory_id:null,kind:'date',holiday_date:'2026-11-26',weekday:null,month:null,day:null,label:'합성 휴무'}]:[]}});
+ });
+ await page.goto('/revenue/pricing/order-settings?companyId='+company);
+ const companySection=page.locator('section').filter({has:page.getByRole('heading',{name:'회사 기본값',exact:true})});
+ const territorySection=page.locator('section').filter({has:page.getByRole('heading',{name:'권역별 배송',exact:true})});
+ await expect(companySection.getByTestId('delivery-policy-preview')).toContainText('오늘 주문하면 내일 배송 (밤 11:59 마감)');
+ await page.getByLabel('배송 권역',{exact:true}).selectOption(territoryId);
+ await expect(territorySection.getByTestId('delivery-policy-preview')).toContainText('오늘 주문하면 내일 배송 (밤 11:59 마감)');
+ const before=territorySection.getByLabel('마감일',{exact:true});
+ await before.selectOption('2');
+ await expect(territorySection.getByTestId('delivery-policy-preview')).toContainText('오늘 주문하면 모레 배송 (밤 11:59 마감)');
+ await territorySection.getByLabel('마감 시각',{exact:true}).fill('00:00');
+ await expect(territorySection.getByTestId('delivery-policy-preview')).toContainText('오늘 주문하면 11/28(토) 배송 (11/26(목) 오전 12:00 마감)');
+ expect(writes).toBe(0);expect((await before.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ holiday=true;await page.reload();
+ await expect(companySection.getByTestId('delivery-policy-preview')).toContainText('오늘 주문하면 모레 배송 (11/26(목) 밤 11:59 마감)');
+ await page.getByLabel('배송 권역',{exact:true}).selectOption(territoryId);
+ await expect(before).toHaveValue('1');await expect(territorySection.getByLabel('마감 시각',{exact:true})).toHaveValue('23:59');
+ expect(writes).toBe(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+3)).toBe(false);
+ await page.screenshot({path:info.outputPath('p16-delivery-settings-'+width+'.png'),fullPage:true});
+ noDefaults=true;await page.reload();
+ await expect(companySection.getByTestId('delivery-policy-preview')).toContainText('배송일은 권역·매장별로 확인해 주세요.');
+ expect(writes).toBe(0);
+});
