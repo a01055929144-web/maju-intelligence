@@ -17,6 +17,8 @@ customer (리드→거래처 전환, 교차 중복)
 - `components/permit-leads-view.tsx`
 - `components/lead-contact-channels-panel.tsx`
 - `components/lead-status-select.tsx`
+- `components/map/map-side-panel.tsx` (리드 선택·외부정보 일괄 작업만)
+- `lib/lead-bulk-enrichment.ts`, `lib/lead-bulk-enrichment-feature.ts` (CX-156 서버 작업·설정 경계)
 - `components/sales-route-map-workspace.tsx` (지도 탭 안 리드 오버레이 — map-and-route.md와 공유, 마커 렌더링 자체는 그쪽 소관)
 - `app/api/leads/**`
 - `lib/gov-restaurant.ts`, `lib/seoul-restaurant.ts`, `lib/kakao-keyword-leads.ts`, `lib/leads.ts`
