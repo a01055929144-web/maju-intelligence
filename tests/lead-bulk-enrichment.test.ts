@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { processLeadBulkJob, type LeadBulkRepository } from "@/application/lead/run-bulk-enrichment";
-import { isLeadBulkUuid, LEAD_BULK_MAX_ITEMS, normalizeLeadBulkIds, type LeadBulkJobItem } from "@/domains/lead/bulk-enrichment";
+import { isLeadBulkUuid, LEAD_BULK_MAX_ITEMS, normalizeLeadBulkIds, runLeadBulkBatches, type LeadBulkJobItem } from "@/domains/lead/bulk-enrichment";
 import { leadBulkDailyCap, leadBulkEnrichmentEnabled, leadBulkMinIntervalMs, leadBulkRunBudgetMs } from "@/lib/lead-bulk-enrichment-feature";
 
 const companyId = "10000000-0000-4000-8000-000000000001";
@@ -20,6 +20,23 @@ afterEach(() => {
 });
 
 describe("lead bulk enrichment", () => {
+  it.each([51, 120])("continues every synthetic batch for %i selected leads", async (count) => {
+    const ids = Array.from({ length: count }, (_, index) => String(index));
+    const batches: string[][] = [];
+    expect(await runLeadBulkBatches(ids, async (batchIds) => { batches.push(batchIds); return true; })).toBe(true);
+    expect(batches.map((batch) => batch.length)).toEqual(count === 51 ? [50, 1] : [50, 50, 20]);
+    expect(batches.flat()).toEqual(ids);
+  });
+
+  it("does not start the next batch after a stopped or failed batch", async () => {
+    const runs: number[] = [];
+    expect(await runLeadBulkBatches(Array.from({ length: 120 }, (_, index) => String(index)), async (batchIds) => {
+      runs.push(batchIds.length);
+      return false;
+    })).toBe(false);
+    expect(runs).toEqual([50]);
+  });
+
   it("processes a fake batch of 50 strictly one at a time and keeps going after a row failure", async () => {
     const queue = [...items];
     const completed: Array<{ id: string; ok: boolean }> = [];
