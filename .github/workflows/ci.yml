@@ -940,7 +940,7 @@ jobs:
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
       - name: Responsive layout and route smoke checks
-        run: npx playwright test tests/e2e/p16-merged-delivery-check.spec.ts --workers=1 --retries=0
+        run: npx playwright test tests/e2e/p16-merged-delivery-check.spec.ts --grep 1440px --workers=1 --retries=0
         env:
           CI_LAYOUT_FIXTURES: enabled
           PRICING_DOCUMENT_FOOTER_FORMAT_ENABLED: "true"

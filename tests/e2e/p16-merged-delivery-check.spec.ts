@@ -54,7 +54,7 @@ for (const width of [1440, 390]) test('P1-6 merged guide to saved delivery at '+
  await expect(page.locator('[data-day="2026-11-28"]')).toHaveAttribute('aria-pressed','true');
  await overflow();
  await page.screenshot({path:info.outputPath('p16-confirm-'+width+'.png'),fullPage:true});
- if(width===1440) await page.getByRole('button',{name:'합성 양파 수량 늘리기'}).click();
+ if(width===1440){const qty=page.getByLabel('합성 양파 수량',{exact:true});await qty.fill('1');await qty.press('Tab');}
  await page.getByRole('button',{name:width===390?'주문 접수':'후결제로 주문 신청',exact:true}).click();
  expect(placed).toHaveLength(1);expect(placed[0].deliveryDate).toBe('2026-11-28');
  if(width===390){
