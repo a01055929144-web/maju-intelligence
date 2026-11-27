@@ -6,6 +6,31 @@ const storefront = {
   orders: [], preferences: [], historyPage: 1, historyHasMore: false,
 };
 
+for (const width of [1440, 390]) test(`CX-153 shared store shell at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.route("**/api/store/information?**", route => route.fulfill({ json: {
+    businessRegistrationNumber: "0000000000", canEdit: true, phone: "",
+    representativeName: "합성 점주", storeName: "합성 가 매장",
+  } }));
+  await page.goto("/store?fixture=s1-single");
+  const nav = page.getByRole("navigation", { name: width === 390 ? "매장 메뉴" : "주요 작업공간" });
+  await expect(nav).toBeVisible();
+  if (width === 390) {
+    await expect(nav.getByRole("link")).toHaveCount(4);
+    await expect(page.getByRole("heading", { name: "홈", exact: true })).toBeVisible();
+    await expect(page.getByText("합성 가 매장", { exact: true }).first()).toBeVisible();
+    await nav.getByRole("link", { name: "내 매장", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "내 매장", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "원가관리", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "원가관리", exact: true })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "내 매장", exact: true })).toHaveAttribute("aria-current", "page");
+  } else {
+    await expect(nav.getByRole("link", { name: "데이터", exact: true })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "매장 정보", exact: true })).toBeVisible();
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+});
+
 for (const width of [1440, 1920, 390]) test(`store shell navigation keeps token and query at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   await page.route("**/api/storefront", (route) => route.fulfill({ json: storefront }));
@@ -48,10 +73,17 @@ for (const width of [1440, 390]) {
     await page.goto("/store?fixture=s1-single");
     const nav = page.getByRole("navigation", { name: width === 390 ? "매장 메뉴" : "주요 작업공간" });
     await expect(page.getByRole("heading", { name: "홈", exact: true })).toBeVisible();
-    for (const [label, evidence] of [
+    const links = width === 390 ? [
+      ["주문", "합성 주문 문서 · 주문하기"], ["주문 내역", "접수됨 · 11,100원"], ["내 매장", "구성원 관리"],
+    ] : [
       ["주문", "합성 주문 문서 · 주문하기"], ["주문 내역", "접수됨 · 11,100원"],
       ["데이터", "매장 원가관리"], ["매장 정보", "구성원 관리"],
-    ]) {
+    ];
+    if (width === 390) {
+      await expect(nav.getByRole("link")).toHaveCount(4);
+      await expect(page.getByText("합성 가 매장", { exact: true }).first()).toBeVisible();
+    }
+    for (const [label, evidence] of links) {
       await nav.getByRole("link", { name: label, exact: true }).click();
       await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
       await expect(page.getByText(evidence, { exact: true })).toBeVisible();
@@ -59,6 +91,11 @@ for (const width of [1440, 390]) {
       expect(new URL(page.url()).searchParams.has("storeAccountId")).toBe(false);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
       await page.screenshot({ path: info.outputPath(`S-1-${new URL(page.url()).searchParams.get("view")}-${width}.png`) });
+    }
+    if (width === 390) {
+      await page.getByRole("link", { name: "원가관리", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "원가관리", exact: true })).toBeVisible();
+      await expect(nav.getByRole("link", { name: "내 매장", exact: true })).toHaveAttribute("aria-current", "page");
     }
     await nav.getByRole("link", { name: "홈", exact: true }).click();
     await expect(page.getByRole("heading", { name: "홈", exact: true })).toBeVisible();

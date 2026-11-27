@@ -2,15 +2,18 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Store } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, Store } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { storeNavigationGroups, storeViewFrom } from "@/lib/store-navigation";
+import { BottomNav } from "@/components/ui/mobile";
 
-/** 매장 PC 화면 틀: 고객사 화면과 같은 사이드바·제목줄. 휴대폰(≤640px)은 틀 없이 본문(하단 탭)만. */
-export function StoreAppShell({ children, stores = [], selectedStore }: {
+/** 매장 공통 틀: PC 사이드바와, 허용된 회사의 휴대폰 상단·하단 탭. */
+export function StoreAppShell({ children, mobile, stores = [], selectedStore }: {
   children: ReactNode;
   stores?: Array<{ key: string; name: string; href: string }>;
   selectedStore?: string;
+  mobile?: { storeName: string };
 }) {
   const pathname = usePathname();
   const params = useSearchParams();
@@ -50,6 +53,17 @@ export function StoreAppShell({ children, stores = [], selectedStore }: {
   }] : [];
   // activate·members 같은 하위 화면은 틀 없이 그대로.
   if (pathname !== "/store") return <>{children}</>;
+  const mobileItems = groups[0].items.filter(item => item.active !== "data").map(item => {
+    const Icon = item.icon;
+    return {
+      href: item.href,
+      icon: <Icon aria-hidden className="h-5 w-5" />,
+      active: item.active === active || (item.active === "info" && active === "data"),
+      label: item.active === "info" ? "내 매장" : item.label,
+    };
+  });
+  const title = active === "data" ? "원가관리" : mobileItems.find(item => item.active)?.label ?? "홈";
+  const homeHref = mobileItems[0].href;
   return (
     <div className="maju-app-bg min-h-screen text-slate-950">
       <div className="flex min-h-screen flex-col lg:flex-row">
@@ -57,10 +71,15 @@ export function StoreAppShell({ children, stores = [], selectedStore }: {
           <AppSidebar active={active} brand="MAJU" context="매장" groups={[...storeGroup, ...groups]} homeHref={groups[0].items[0].href} storageScope="store" variant="customer" />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
+          {mobile && <header className="sticky top-0 z-20 flex min-h-14 items-center gap-2 border-b border-slate-200 bg-white px-2 sm:hidden">
+            {active !== "home" ? <Link aria-label="뒤로" className="grid h-11 w-11 place-items-center" href={homeHref}><ChevronLeft aria-hidden className="h-5 w-5" /></Link> : <span className="w-2" />}
+            <div className="min-w-0"><h1 className="truncate text-lg font-bold">{title}</h1><p className="truncate text-xs text-slate-600">{mobile.storeName}</p></div>
+          </header>}
           <header className="sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur max-sm:hidden">
             <div className="flex items-center px-4 py-3 xl:h-[72px] xl:py-0"><h1 className="text-xl font-bold">MAJU 매장</h1></div>
           </header>
-          <div className="w-full sm:px-4 sm:py-4 lg:px-6 lg:py-5">{children}</div>
+          <div className={`w-full sm:px-4 sm:py-4 lg:px-6 lg:py-5 ${mobile ? "pb-20 sm:pb-4" : ""}`}>{children}</div>
+          {mobile && <div className="fixed inset-x-0 bottom-0 z-30 sm:hidden"><BottomNav ariaLabel="매장 메뉴" items={mobileItems} /></div>}
         </div>
       </div>
     </div>

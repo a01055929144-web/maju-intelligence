@@ -113,6 +113,7 @@ export default async function StorePage({ searchParams }: {
   const selected = memberAccounts.find(account => keyOf(account) === preferred) ??
     (memberAccounts.length === 1 ? memberAccounts[0] : undefined);
   const view = storeViewFrom(typeof params.view === "string" ? params.view : scoped && costAccess && "companyId" in costAccess ? "data" : undefined);
+  const unifiedMobileShell = Boolean(selected && (fixture || isFeatureEnabled("STORE_MOBILE_ORDER_PAGES", selected.companyId)));
   // CX-149: 플래그를 켠 회사의 매장 홈은 "받은 단가표 품목 목록 + 담기"로 바로 연다(하단 카드·문서 2열 화면 대신).
   // 주문 화면(전체 상품 링크 토큰)은 해시에 있어 서버가 보지 못하므로 catalogHref로 이동한다. 가격은 주문 화면이 self_order_price_v2로만 받는다.
   if (selected && view === "home" && !params.document && selected.catalogHref && isFeatureEnabled("STORE_RECEIVED_ORDER_HOME", selected.companyId))
@@ -191,7 +192,7 @@ export default async function StorePage({ searchParams }: {
     deliveryPhotosEnabled={Boolean(selected && isFeatureEnabled("DELIVERY_ORDER_PHOTOS", selected.companyId))}
     menu={STORE_VIEWS.map(value => storeHref(value, selected))}
     orders={orders} historyError={historyError} historyDetails={historyDetails} documentView={documentView}
-    home={<>
+    unifiedMobileShell={unifiedMobileShell} home={<>
       {selected && relation && !relation.confirmed && <StoreRelationPreview companyName={(selected as StorePortalAccount).companyName} products={relation.products ?? []} />}
       {selected && PriceSearch && <PriceSearch companyId={selected.companyId} storeAccountId={selected.storeAccountId}
         documents={selected.documents.map(document => ({ key: documentKey(document.href), title: document.title, kind: document.kind }))} />}
@@ -208,7 +209,8 @@ export default async function StorePage({ searchParams }: {
       </> : home}
     </>}
   /> : null;
-  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StoreAppShell stores={stores} selectedStore={selected && memberAccounts.length > 1 ? keyOf(selected) : undefined}>
+  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StoreAppShell stores={stores} selectedStore={selected && memberAccounts.length > 1 ? keyOf(selected) : undefined}
+    mobile={unifiedMobileShell && selected ? { storeName: selected.customerName } : undefined}>
     {!memberView && addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}
     <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} memberView={memberView} portal={<StorePortal accounts={accounts} fixture={directFixture} error={portalError} loginEnabled={directFixture ? true : storeMemberSessionEnabled()} view={view} />} />
     {!memberView && addressAccess && <main id="store-address-management" className="mx-auto max-w-6xl scroll-mt-4 p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</StoreAppShell></>;
