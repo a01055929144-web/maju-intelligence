@@ -21,6 +21,7 @@ import { supabaseRequest } from "@/lib/store";
 import { getStoreDeliveryEligibility,storeAddressVerificationEnabled } from "../../../lib/pricing/store-delivery-eligibility";
 import { deliveryEligibilityMessage } from "../../../domains/order/delivery-eligibility";
 import { DELIVERY_REASON_LABEL, deliveryDayState } from "../../../domains/order/order-rules";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -219,6 +220,7 @@ export async function POST(request: NextRequest) {
         ...(process.env.STORE_MOBILE_COMMON_ENABLED === "true" &&
           (process.env.FEATURE_STORE_MOBILE_COMMON_COMPANY_IDS ?? "").split(",").some(id => id.trim() === store.companyId)
             ? { mobileCommon: true } : {}),
+        ...(orderMember && isFeatureEnabled("STORE_MOBILE_ORDER_PAGES", store.companyId) ? { mobileOrderPages: true } : {}),
         ...(memberManagement ? { memberManagement } : {}),
         // CX-152: 이 매장의 점주·관리자로 로그인한 경우에만 배송 정보 입력 시트를 연다(같은 범위를 /api/store/delivery-info가 다시 확인한다).
         ...(orderMember && (orderMember.role === "owner" || orderMember.role === "manager") ? { deliveryEdit: { companyId: store.companyId, storeAccountId: orderMember.storeAccountId } } : {}),
