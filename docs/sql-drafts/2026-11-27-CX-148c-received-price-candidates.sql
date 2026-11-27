@@ -59,6 +59,7 @@ language sql stable security invoker set search_path = '' as $cx148c$
       join public.pricing_documents document on document.company_id = version.company_id and document.id = version.document_id and document.archived_at is null
       cross join lateral jsonb_array_elements(version.content->'lines') with ordinality line(value, ordinality)
       where version.published_at is not null
+        and (versions.priority = 0 or version.content->>'kind' = 'sheet')
         and coalesce((version.content->>'showPrice')::boolean, false)
         and (version.content->>'validUntil')::date >= p_date
         and coalesce((line.value->>'visible')::boolean, false)

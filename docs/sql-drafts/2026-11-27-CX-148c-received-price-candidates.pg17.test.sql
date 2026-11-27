@@ -56,6 +56,9 @@ do $test$ declare v jsonb; line jsonb; variation text; r record; c uuid:='100000
  update pricing_document_versions set content=jsonb_set(jsonb_set(v,'{lines}',jsonb_build_array(line)),'{display,priceIncludesTax}','true') where id='50000000-0000-4000-8000-0000000000a5';
  select * into r from self_order_price_v2(c,k,p,'2026-11-25',true);
  if (r.price,r.tax_type,r.includes_tax) is distinct from (6845::bigint,'taxable'::text,true) then raise exception 'tax conversion drift %',row_to_json(r); end if;
+ update pricing_document_versions set content=jsonb_set(content,'{lines,0,priceIncludesTax}','true') where id='50000000-0000-4000-8000-0000000000a5';
+ select * into r from self_order_price_v2(c,k,p,'2026-11-25',true);
+ if r.price is distinct from 6223::bigint or r.includes_tax is distinct from true then raise exception 'tax added twice'; end if;
  foreach variation in array array['hidden','unit','exhausted','future','expired'] loop
   update pricing_document_versions set content=jsonb_set(v,'{lines}',jsonb_build_array(case variation
    when 'hidden' then line||'{"visible":false}'::jsonb when 'unit' then line||'{"unit":"BOX"}'::jsonb
