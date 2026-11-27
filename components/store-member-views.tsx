@@ -17,7 +17,7 @@ const date = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyl
 const dateTime = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
 const linkClass = "inline-flex min-h-11 items-center rounded-lg border px-3 underline";
 
-export function StoreMemberViews({ account, deliveryPhotosEnabled = false, documentView, historyDetails, historyError, home, menu, orders, stores, view }: {
+export function StoreMemberViews({ account, deliveryPhotosEnabled = false, documentView, historyDetails, historyError, home, menu, orders, stores, unifiedMobileShell = false, view }: {
   account?: StorePortalAccount;
   deliveryPhotosEnabled?: boolean;
   documentView?: ReactNode;
@@ -28,6 +28,7 @@ export function StoreMemberViews({ account, deliveryPhotosEnabled = false, docum
   orders: StorePortalOrder[];
   stores: Array<{ key: string; name: string; href: string }>;
   view: StoreView;
+  unifiedMobileShell?: boolean;
 }) {
   const items = storeNavigationGroups[0].items;
   const current = STORE_VIEWS.indexOf(view);
@@ -45,7 +46,7 @@ export function StoreMemberViews({ account, deliveryPhotosEnabled = false, docum
       )}
       {account && (
         <section aria-label={items[current].label} className="space-y-4">
-          <header>
+          <header className={unifiedMobileShell ? "hidden sm:block" : undefined}>
             <p className="text-sm text-slate-600">{account.customerName}</p>
             <h2 className="text-xl font-semibold">{items[current].label}</h2>
           </header>
@@ -102,6 +103,7 @@ export function StoreMemberViews({ account, deliveryPhotosEnabled = false, docum
               : { message: "이 매장에서는 원가관리를 이용할 수 없습니다." }} />
           </div>}
           {view === "info" && <>
+            {unifiedMobileShell && account.hasCostAccess && <Card><CardContent className="pt-4"><Link className={linkClass} href={menu[STORE_VIEWS.indexOf("data")]}>원가관리</Link></CardContent></Card>}
             <StoreInformationPanel companyId={account.companyId} storeAccountId={account.storeAccountId}
               canManageAddress={account.canManageAddress} canManageMembers={account.canManageMembers} />
             {account.canManageAddress && <div id="store-address-management" className="scroll-mt-24">
@@ -112,9 +114,9 @@ export function StoreMemberViews({ account, deliveryPhotosEnabled = false, docum
           </>}
         </section>
       )}
-      <nav aria-label="매장 메뉴" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t bg-white pb-[env(safe-area-inset-bottom)] sm:hidden">
+      {!unifiedMobileShell && <nav aria-label="매장 메뉴" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t bg-white pb-[env(safe-area-inset-bottom)] sm:hidden">
         {items.map((item, index) => <Link aria-current={index === current ? "page" : undefined} className={`flex min-h-11 items-center justify-center px-1 text-center text-xs font-semibold ${index === current ? "text-teal-800" : "text-slate-600"}`} href={menu[index]} key={item.active}>{item.label}</Link>)}
-      </nav>
+      </nav>}
     </main>
   );
 }

@@ -62,6 +62,13 @@ describe("company pricing gates", () => {
     expect(isFeatureEnabled("STORE_RECEIVED_DOCUMENTS_HOME", "company-b")).toBe(false);
   });
 
+  it("keeps the mobile store shell off and scoped to its company allowlist", () => {
+    expect(isFeatureEnabled("STORE_MOBILE_ORDER_PAGES", "company-a")).toBe(false);
+    process.env.FEATURE_STORE_MOBILE_ORDER_PAGES_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("STORE_MOBILE_ORDER_PAGES", "company-a")).toBe(true);
+    expect(isFeatureEnabled("STORE_MOBILE_ORDER_PAGES", "company-b")).toBe(false);
+  });
+
   it("keeps Stage D order IDs off until a company is explicitly allowed", () => {
     expect(isFeatureEnabled("STAGE_D_ORDER_IDS", "company-a")).toBe(false);
     process.env.FEATURE_STAGE_D_ORDER_IDS_COMPANY_IDS = "company-a";
