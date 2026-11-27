@@ -498,7 +498,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       {pricesVisible && summary && <div className="rounded bg-slate-50 p-3 text-sm" data-testid="cart-summary">
         <p>과세 공급가액 {won(summary.taxableSupply)} · 면세 공급가액 {won(summary.exemptSupply)}</p>
         <p>부가세 {won(summary.tax)} · 배송비 {won(summary.deliveryFee)}</p>
-        <p className="font-semibold">확정된 품목 합계 {mobileOrder ? <MoneyText value={summary.knownTotal} /> : won(summary.knownTotal)}</p>
+        <p className="font-semibold">확정된 품목 합계 {mobileOrder || legacyMobileOrder ? <MoneyText value={summary.knownTotal} /> : won(summary.knownTotal)}</p>
         {summary.marketCount > 0 && <p className="text-amber-800">시세 품목 {summary.marketCount}개는 가격 확정 후 합계가 달라집니다.</p>}
         {summary.belowMinimum && <p className="text-amber-800">최소 주문금액 {won(store.policy.minimumAmount)} 미달</p>}
       </div>}
