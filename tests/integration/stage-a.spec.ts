@@ -99,12 +99,13 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     const conflicts=page.getByRole('region',{name:'상이 단가 선택',exact:true});
     let chosen=0;
     while(chosen<188) {
-      const rows=conflicts.locator('tbody tr');
-      await expect(rows).toHaveCount(Math.min(100,188-chosen));
-      const count=await rows.count();
+      const count=Math.min(100,188-chosen);
+      const groups=conflicts.locator('tbody tr, li').filter({has:page.getByRole('button',{name:/^원본 /})});
+      await expect(groups).toHaveCount(count);
       for(let index=0;index<count;index++) {
-        if(chosen<scenario.held) await rows.nth(index).getByRole('button',{name:'이번엔 보류',exact:true}).click();
-        else await rows.nth(index).getByRole('button',{name:/^원본 /}).last().click();
+        const group=groups.nth(index);
+        if(chosen<scenario.held) await group.getByRole('button',{name:'이번엔 보류',exact:true}).click();
+        else await group.getByRole('button',{name:/^원본 /}).first().click();
         chosen++;
       }
       if(chosen<188)await conflicts.getByRole('button',{name:'다음',exact:true}).click();
