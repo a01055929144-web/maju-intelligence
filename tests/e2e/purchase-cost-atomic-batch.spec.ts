@@ -171,6 +171,18 @@ async function selectPurchaseCsv(page: Page, text: string) {
   await page.locator('input[type="file"]').setInputFiles({ name: "합성-구매일.csv", mimeType: "text/csv", buffer: Buffer.from(text, "utf8") });
 }
 
+test("매입가 탭은 인상·인하·확인 필요를 따로 보여 준다 at 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await purchaseUpload(page);
+  const nav = page.getByRole("navigation", { name: "매입가 보기", exact: true });
+  await expect(nav.getByRole("button", { name: "인상 0", exact: true })).toBeVisible();
+  await expect(nav.getByRole("button", { name: "인하 0", exact: true })).toBeVisible();
+  await expect(nav.getByRole("button", { name: "확인 필요 0", exact: true })).toBeVisible();
+  await expect(nav.getByRole("button", { name: /변동 있음/ })).toHaveCount(0);
+  await expect(nav.getByRole("button", { name: "전체", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 async function confirmPurchasePriceJumps(page: Page) {
   const confirmations = page.getByRole("region", { name: "급변 매입가 확인", exact: true }).getByRole("button", { name: "맞음", exact: true });
   while (await confirmations.count()) await confirmations.first().click();
