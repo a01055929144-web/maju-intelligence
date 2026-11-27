@@ -116,6 +116,9 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     const review=page.getByRole('region',{name:'저장 전 적용일 확인',exact:true});
     await expect(review).toContainText('매입 이력 3417행');
     await expect(review).toContainText('단위 미기재 1552행');
+    const priceJumps=page.getByRole('region',{name:'급변 매입가 확인',exact:true});
+    while(await priceJumps.getByRole('button',{name:'맞음',exact:true}).count())
+      await priceJumps.getByRole('button',{name:'맞음',exact:true}).first().click();
     await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.screenshot({path:info.outputPath('real-stage-a-review.png'),fullPage:true});

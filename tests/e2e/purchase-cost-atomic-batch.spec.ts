@@ -171,6 +171,11 @@ async function selectPurchaseCsv(page: Page, text: string) {
   await page.locator('input[type="file"]').setInputFiles({ name: "합성-구매일.csv", mimeType: "text/csv", buffer: Buffer.from(text, "utf8") });
 }
 
+async function confirmPurchasePriceJumps(page: Page) {
+  const confirmations = page.getByRole("region", { name: "급변 매입가 확인", exact: true }).getByRole("button", { name: "맞음", exact: true });
+  while (await confirmations.count()) await confirmations.first().click();
+}
+
 async function selectErpPurchaseWorkbook(page: Page) {
   const rows: Array<Array<string | number>> = [
     ["회사명 : 합성회사 / 2026/11/18 ~ 2026/11/20"],
@@ -220,6 +225,7 @@ for (const width of [1440, 390]) test(`supplier links reveal current-price choic
   await page.getByRole("button", { name: "③ 저장 (2건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("2026-11-19 · 2행");
+  await confirmPurchasePriceJumps(page);
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
@@ -265,6 +271,22 @@ for (const width of [1440, 390]) test(`new-product price choice stays visible th
   expect(savedRows.filter(row => row.priceHeld).map(row => row.selectedSourceRowNumber)).toEqual([width === 390 ? 2 : 3]);
   await page.getByRole("button", { name: "매입 이력", exact: true }).click();
   await expect(page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]")).toContainText("신규 합성 상품");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+for (const width of [1440, 390]) test(`purchase price jumps stay held until confirmed at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const { dateWrites } = await purchaseUpload(page, { historyOnlyDefault: true });
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-20,800\n");
+  await page.getByRole("button", { name: /^② 열 정렬/ }).click();
+  const jump = page.getByRole("region", { name: "급변 매입가 확인", exact: true });
+  await expect(jump).toContainText("100원 → 800원 (8.0배)");
+  await page.getByRole("button", { name: /^③ 저장/ }).click();
+  await expect(page.getByRole("region", { name: "저장 전 적용일 확인" })).toContainText("현재 가격 변경 0건");
+  await jump.getByRole("button", { name: "맞음", exact: true }).click();
+  await expect(jump).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "저장 전 적용일 확인" })).toContainText("현재 가격 변경 1건");
+  expect(dateWrites).toHaveLength(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
@@ -331,6 +353,7 @@ for (const width of [1280, 390]) {
     await align.click();
     await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
     const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+    await confirmPurchasePriceJumps(page);
     await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
     await page.getByLabel("매입일", { exact: true }).fill("2026-11-10");
     await expect(review.getByRole("checkbox", { name: /확인했습니다/ })).not.toBeChecked();
@@ -502,6 +525,7 @@ test("different suppliers on the same product and day require an explicit source
   await expect(page.getByRole("cell", { name: "150원", exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+  await confirmPurchasePriceJumps(page);
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
@@ -516,7 +540,7 @@ test("390px saves all 3417 synthetic rows and 745 selections through v2 only", a
   const { writes, receipts, dateWrites } = await purchaseUpload(page, { count: 745 });
   const rows = Array.from({ length: 3417 }, (_, index) => {
     const item = index % 745;
-    return `ERP-${item + 1},${item ? `합성 상품 ${item + 1}` : "합성 상품"},1kg,봉,300`;
+    return `ERP-${item + 1},${item ? `합성 상품 ${item + 1}` : "합성 상품"},1kg,봉,125`;
   });
   await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,단가\n" + rows.join("\n"));
   const align = page.getByRole("button", { name: /^② 열 정렬/ });
@@ -529,6 +553,7 @@ test("390px saves all 3417 synthetic rows and 745 selections through v2 only", a
   await save.click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("원본 거래 3417행");
+  await confirmPurchasePriceJumps(page);
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
@@ -603,6 +628,7 @@ test("현재 매입가 변경은 기준일 없는 기존가를 자동 교체한�
   await expect(review.getByRole("checkbox", { name: "기준일 없는 기존가 교체", exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath("purchase-date-undated-current-390.png"), fullPage: true });
+  await confirmPurchasePriceJumps(page);
   await review.getByRole("checkbox", { name: "적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.", exact: true }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
@@ -671,6 +697,7 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   await page.getByRole("button", { name: /^③ 저장/ }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("원본 거래 6행"); await expect(review).toContainText("가격 반영 보류 1그룹");
+  await confirmPurchasePriceJumps(page);
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "합성 원자 저장 실패" })).toBeVisible();
@@ -896,6 +923,7 @@ for (const mode of ["이력만 저장", "현재 매입가 변경"] as const) tes
   await expect(review.getByLabel("2행 단위", { exact: true })).toHaveValue("BOX");
   if (mode === "이력만 저장") await expect(review.getByText(/단위 확인 필요/)).toHaveCount(0);
   await page.getByRole("button", { name: /^③ 저장/ }).click();
+  await confirmPurchasePriceJumps(page);
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
@@ -935,6 +963,7 @@ for (const width of [1440, 390]) test(`단위 미확인 행은 서버 환산 확
   await expect(review.getByRole("status")).toContainText("서버에서 검증된 환산이 없으면 원본 이력만 저장하고 현재 매입가는 보류합니다");
   await expect(review.getByRole("status")).toContainText("상품관리에서 환산을 확인한 뒤 다시 반영해 주세요");
   await page.getByRole("button", { name: /^③ 저장/ }).click();
+  await confirmPurchasePriceJumps(page);
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
