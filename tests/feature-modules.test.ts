@@ -8,6 +8,7 @@ import {
   isHoldModulePath,
   isLeadNativeAttachmentsEnabled,
   isMapFilterPersistenceEnabled,
+  isSalesAreaDeliverySyncEnabled,
   isStoreDeliveryProofHistoryEnabled,
   isStoreRevisionHistoryEnabled,
   resolveLegacyDashboardHref
@@ -26,6 +27,13 @@ describe("hold feature modules", () => {
     expect(isMapFilterPersistenceEnabled("false")).toBe(false);
     expect(isMapFilterPersistenceEnabled("true")).toBe(true);
     expect(isMapFilterPersistenceEnabled("1")).toBe(true);
+  });
+
+  it("requires both the CX-151 switch and an exact company allowlist match", () => {
+    expect(isSalesAreaDeliverySyncEnabled("company-a", "", "company-a")).toBe(false);
+    expect(isSalesAreaDeliverySyncEnabled("company-a", "true", "company-b")).toBe(false);
+    expect(isSalesAreaDeliverySyncEnabled("company-a", "true", "company-b,company-a")).toBe(true);
+    expect(isSalesAreaDeliverySyncEnabled(undefined, "true", "company-a")).toBe(false);
   });
 
   it("is hidden by default and enabled only for an allow-listed company", () => {

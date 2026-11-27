@@ -16,9 +16,18 @@ type SalesAreaState = {
   source: "default" | "explicit" | "none";
   unrecognizedRegions: Region[];
 };
+type DeliverySyncStatus = {
+  conflictAreas: string[];
+  defaultTerritoryId: string | null;
+  disabledAreas: string[];
+  missingAreas: string[];
+  syncedAreas: string[];
+};
 
 export type SalesAreaSelectorSnapshot = {
   canManage: boolean;
+  deliverySync: DeliverySyncStatus | null;
+  deliverySyncEnabled: boolean;
   expansionCandidateEnabled: boolean;
   expansionCandidateRegions: Region[];
   recommendations: Recommendation[];
@@ -28,6 +37,8 @@ export type SalesAreaSelectorSnapshot = {
 
 const EMPTY_STATE: SalesAreaSelectorSnapshot = {
   canManage: false,
+  deliverySync: null,
+  deliverySyncEnabled: false,
   expansionCandidateEnabled: false,
   expansionCandidateRegions: [],
   recommendations: [],
@@ -148,6 +159,32 @@ export function SalesAreaSelector({
     }
   }
 
+  async function toggleDelivery(region: Region) {
+    if (!snapshot.canManage || !snapshot.deliverySyncEnabled) return;
+    const deliveryDisabled = !snapshot.deliverySync?.disabledAreas.includes(region.label);
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(withPreviewCompany("/api/leads/permits/keyword-search-regions"), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: previewCompanyId() || undefined, deliveryDisabled, id: region.id })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setMessage(payload?.message || "배송 여부를 변경하지 못했습니다.");
+        return;
+      }
+      await load();
+      onChanged?.();
+      setMessage(deliveryDisabled ? `${region.label}은 영업만 하고 배송하지 않습니다.` : `${region.label}을 기본 배송 권역에 반영했습니다.`);
+    } catch {
+      setMessage("네트워크 연결을 확인한 뒤 다시 시도해주세요.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function setAreaChecked(administrativeArea: string, checked: boolean) {
     if (checked) {
       if (KOREAN_PROVINCES.includes(administrativeArea)) {
@@ -245,9 +282,11 @@ export function SalesAreaSelector({
         <div className="mt-2 flex flex-wrap gap-2">
           {snapshot.regions.map((region) => {
             const unrecognized = unrecognizedIds.has(region.id);
+            const deliveryDisabled = snapshot.deliverySync?.disabledAreas.includes(region.label);
             return (
               <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${unrecognized ? "bg-amber-50 text-amber-800" : "bg-teal-50 text-teal-800"}`} key={region.id}>
                 {region.label}{unrecognized ? " · 인식 안 됨" : ""}
+                {snapshot.deliverySyncEnabled && snapshot.canManage ? <button className="rounded-full border border-current px-1.5 py-0.5 text-[10px]" disabled={busy} onClick={() => void toggleDelivery(region)} type="button">{deliveryDisabled ? "배송함" : "배송 안 함"}</button> : null}
                 {snapshot.canManage ? <button aria-label={`${region.label} 해제`} disabled={busy} onClick={() => void removeArea(region.id)} type="button"><X className="h-3 w-3" /></button> : null}
               </span>
             );
@@ -255,6 +294,11 @@ export function SalesAreaSelector({
           {!snapshot.regions.length ? snapshot.salesAreaState.effectiveAreas.map((area) => <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700" key={area}>{area}</span>) : null}
           {!snapshot.salesAreaState.effectiveAreas.length && !snapshot.regions.length ? <span className="text-xs font-semibold text-amber-700">영업할 지역을 골라 주세요.</span> : null}
         </div>
+        {snapshot.deliverySyncEnabled && snapshot.deliverySync && (snapshot.deliverySync.missingAreas.length || snapshot.deliverySync.conflictAreas.length) ? (
+          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+            영업 지역과 배송 권역이 다릅니다. {snapshot.deliverySync.conflictAreas.length ? `다른 배송 권역에 이미 포함된 지역: ${snapshot.deliverySync.conflictAreas.join(", ")}. ` : ""}{snapshot.deliverySync.missingAreas.length ? `기본 배송 권역에 반영되지 않은 지역: ${snapshot.deliverySync.missingAreas.join(", ")}.` : ""}
+          </p>
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
