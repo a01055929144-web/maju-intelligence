@@ -208,12 +208,12 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   }
   const savedVersion = JSON.stringify(version());
   const linkRequests = publicInputs.length;
-  const qr = preview.locator(".pricing-paper footer img").first();
+  const qr = preview.locator(".pricing-paper header img").first();
   await expect(qr).toBeVisible();
   const qrSource = await qr.getAttribute("src");
   const qrRow = qr.locator("..");
-  await expect(qrRow).toHaveText("");
-  await expect(preview.locator(".pricing-online footer img").locator("..")).toHaveText("");
+  await expect(qrRow).toContainText("더 많은 상품·오늘 가격 보러가기 →");
+  await expect(preview.locator(".pricing-online footer img").locator("..")).toContainText("아이폰·안드로이드");
   await preview.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
   await expect(qr).toHaveAttribute("src", qrSource!);
   expect(JSON.stringify(version())).toBe(savedVersion); expect(publicInputs).toHaveLength(linkRequests);
@@ -240,19 +240,19 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       }
       await expect(preview.getByRole("status", { name: "QR 표시 설정 저장 결과", exact: true })).toBeVisible();
       const rendered = preview.locator(".pricing-paper [data-document-qr]").first();
-      await expect(rendered).toHaveAttribute("data-qr-position", position);
+      await expect(rendered).toHaveAttribute("data-qr-position", "top-right");
       await expect(rendered).toHaveAttribute("data-qr-size", size);
       await expect(rendered.locator("img")).toHaveAttribute("src", qrSource!);
       const metrics = await rendered.evaluate(element => {
         const box = element.getBoundingClientRect(), image = element.querySelector("img")!.getBoundingClientRect();
         const paper = element.closest(".pricing-paper")!, output = paper.querySelector(".pricing-output-content")!;
         const style = getComputedStyle(paper);
-        return { left: image.left - box.left, right: box.right - image.right, size: image.width, top: element === output.firstElementChild,
+        return { left: image.left - box.left, right: box.right - image.right, size: image.width, top: Boolean(element.closest("header")),
           content: output.getBoundingClientRect().height, available: paper.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) };
       });
-      expect(position.endsWith("left") ? metrics.left : metrics.right).toBeLessThan(2);
-      expect(metrics.top).toBe(position.startsWith("top"));
-      expect(metrics.size).toBeCloseTo(({ small: 24, normal: 30, large: 36 }[size as "small" | "normal" | "large"]) * 96 / 25.4, 0);
+      expect(metrics.right).toBeLessThan(2);
+      expect(metrics.top).toBe(true);
+      expect(metrics.size).toBeCloseTo(({ small: 30, normal: 30, large: 36 }[size as "small" | "normal" | "large"]) * 96 / 25.4, 0);
       expect(metrics.content).toBeLessThanOrEqual(metrics.available + 2);
       await expect(preview.locator(".pricing-online [data-document-qr]")).toHaveAttribute("data-qr-position", position);
       await expect(preview.locator(".pricing-online [data-document-qr]")).toHaveAttribute("data-qr-size", size);
