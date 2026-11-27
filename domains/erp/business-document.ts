@@ -1,15 +1,17 @@
+import { lineAmounts } from "../pricing/vat-split";
+
 export type ErpTaxType = "taxable" | "exempt";
 
 export type ErpLineInput = {
   quantity: number;
   unitPrice: number;
   taxType: ErpTaxType;
+  /** 단가가 부가세 포함가이면 true. 공급가·세액은 주문과 같은 규칙(lineAmounts)으로 나눈다. */
+  priceIncludesTax?: boolean;
 };
 
 export function calculateErpLine(input: ErpLineInput) {
-  const supplyAmount = Math.round(input.quantity * input.unitPrice);
-  const taxAmount = input.taxType === "taxable" ? Math.round(supplyAmount * 0.1) : 0;
-  return { supplyAmount, taxAmount, totalAmount: supplyAmount + taxAmount };
+  return lineAmounts(Math.round(input.quantity * input.unitPrice), input.taxType, input.priceIncludesTax === true);
 }
 
 export function calculateErpTotals(lines: ErpLineInput[]) {
