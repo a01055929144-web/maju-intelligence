@@ -183,6 +183,20 @@ test("매입가 탭은 인상·인하·확인 필요를 따로 보여 준다 at 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test("새 상품 필수 빈 칸에서 단위를 빠르게 고르거나 대문자로 입력한다 at 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await purchaseUpload(page, { newProducts: true });
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nNEW-1,새 합성 상품,1kg,,2026-11-07,150\n");
+  await page.getByRole("button", { name: /^② 열 정렬/ }).click();
+
+  await page.getByRole("button", { name: "필수 빈 칸 1개", exact: true }).click();
+  for (const unit of ["EA", "KG", "BOX", "PACK"]) await expect(page.getByRole("button", { name: unit, exact: true })).toBeVisible();
+  const unit = page.getByLabel("1행 단위", { exact: true });
+  await unit.fill("box");
+  await expect(unit).toHaveValue("BOX");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 async function confirmPurchasePriceJumps(page: Page) {
   const confirmations = page.getByRole("region", { name: "급변 매입가 확인", exact: true }).getByRole("button", { name: "맞음", exact: true });
   while (await confirmations.count()) await confirmations.first().click();
