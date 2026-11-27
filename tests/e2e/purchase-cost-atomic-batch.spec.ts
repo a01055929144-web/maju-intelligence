@@ -656,7 +656,7 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   await expect(stageBar).toHaveCSS("position", "sticky");
   await expect(stageBar.getByRole("button", { name: "① 엑셀 올리기", exact: true })).toBeVisible();
   await expect(stageBar.getByRole("button", { name: /^② 열 정렬/ })).toBeVisible();
-  await expect(stageBar.getByRole("button", { name: /^③ 저장/ })).toBeVisible();
+  await expect(stageBar.getByRole("button", { name: "정리 필요 1개", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^② 열 정렬/ })).toBeDisabled();
   await page.getByRole("region", { name: "상이 단가 선택", exact: true }).getByRole("button", { name: "이번엔 보류", exact: true }).click();
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
