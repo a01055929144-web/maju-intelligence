@@ -54,4 +54,15 @@ describe("POST /api/admin/stores/status", () => {
     expect(response.status).toBe(409);
     expect((await response.json()).message).toContain("새 요청 키");
   });
+
+  it("does not report success when the atomic audit write fails", async () => {
+    process.env.FEATURE_ADMIN_STORE_MANAGEMENT_COMPANY_IDS = input.companyId;
+    mocks.session.mockResolvedValue({ role: "super_admin", name: "대표 관리자" });
+    mocks.update.mockRejectedValue(new Error("synthetic_audit_failure"));
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(500);
+    expect((await response.json()).message).toContain("바꾸지 못했습니다");
+  });
 });
