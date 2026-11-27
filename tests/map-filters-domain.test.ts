@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterMapLeads, getPermitLeadType, parseLeadRegion, scopeLeadsByStatus, toggleMultiFilter, type MapFilterLead } from "../domains/lead/map-filters";
+import { filterMapLeads, getPermitLeadType, parseLeadRegion, scopeLeadsByStatus, summarizeMapLeadVisibility, toggleMultiFilter, type MapFilterLead } from "../domains/lead/map-filters";
 import { isClosedLead } from "../lib/leads";
 import { splitMultiFilter } from "../lib/map-filter-multi";
 import { matchesMapLeadType } from "../lib/map-layer-selection";
@@ -30,6 +30,42 @@ describe("필터 계산", () => {
     expect(filterMapLeads(leads, { ...none, openDateStart: today }).map((l) => l.id)).toEqual(["new"]);
   });
   it("리마인드만은 주입한 판정을 쓴다", () => expect(filterMapLeads(leads, { ...none, reminderOnly: true, hasReminder: (l) => l.industryPrimary === "카페" }).map((l) => l.id)).toEqual(["cafe"]));
+});
+
+describe("CX-155 표 결과와 지도 표시 수", () => {
+  const sameFilterLeads = [
+    lead({ id: "open", openDate: "2026-11-10", permitDate: null }),
+    lead({ id: "permit", openDate: null, permitDate: "2026-11-11" }),
+    lead({ id: "both", openDate: "2026-11-12", permitDate: "2025-01-01" }),
+    lead({ id: "no-date", openDate: null, permitDate: null }),
+    lead({ id: "no-address", address: "", openDate: null, permitDate: "2026-11-13" })
+  ];
+
+  it("openDate 우선·permitDate 대체 규칙으로 표 결과를 만들고 주소 없는 리드만 지도에서 빠진다", () => {
+    const filtered = filterMapLeads(sameFilterLeads, { ...none, openDateStart: "2026-11-01", openDateEnd: "2026-11-30" });
+    expect(filtered.map((item) => item.id)).toEqual(["open", "permit", "both", "no-address"]);
+    expect(summarizeMapLeadVisibility(filtered, {
+      layerOn: true,
+      radiusLeadIds: new Set(),
+      radiusOn: false,
+      visibleLeadIds: new Set(["open", "permit", "both"])
+    })).toEqual({ displayed: 3, filtered: 4, layerHidden: 0, missingAddress: 1, missingDate: 0, outsideRadius: 0 });
+  });
+
+  it("날짜 미확인·주소·반경·레이어 누락을 서로 섞지 않는다", () => {
+    expect(summarizeMapLeadVisibility(sameFilterLeads, {
+      layerOn: false,
+      radiusLeadIds: new Set(["open"]),
+      radiusOn: true,
+      visibleLeadIds: new Set(["open"])
+    })).toEqual({ displayed: 1, filtered: 5, layerHidden: 0, missingAddress: 1, missingDate: 1, outsideRadius: 3 });
+    expect(summarizeMapLeadVisibility(sameFilterLeads, {
+      layerOn: false,
+      radiusLeadIds: new Set(),
+      radiusOn: false,
+      visibleLeadIds: new Set()
+    })).toEqual({ displayed: 0, filtered: 5, layerHidden: 4, missingAddress: 1, missingDate: 1, outsideRadius: 0 });
+  });
 });
 
 describe("옛 경로 다시 내보내기·작은 규칙", () => {

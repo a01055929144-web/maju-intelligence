@@ -168,3 +168,25 @@ export function filterMapLeads<T extends MapFilterLead>(leads: readonly T[], o: 
     return true;
   });
 }
+
+type MapLeadVisibility = LeadDateFields & { readonly id: string; readonly address?: string | null };
+
+export function summarizeMapLeadVisibility<T extends MapLeadVisibility>(
+  leads: readonly T[],
+  options: { readonly layerOn: boolean; readonly radiusLeadIds: ReadonlySet<string>; readonly radiusOn: boolean; readonly visibleLeadIds: ReadonlySet<string> }
+) {
+  const summary = { displayed: 0, filtered: leads.length, layerHidden: 0, missingAddress: 0, missingDate: 0, outsideRadius: 0 };
+  leads.forEach((lead) => {
+    if (!getPermitLeadOpenDate(lead)) summary.missingDate += 1;
+    if (!lead.address?.trim()) {
+      summary.missingAddress += 1;
+    } else if (options.visibleLeadIds.has(lead.id)) {
+      summary.displayed += 1;
+    } else if (options.radiusOn && !options.layerOn && !options.radiusLeadIds.has(lead.id)) {
+      summary.outsideRadius += 1;
+    } else {
+      summary.layerHidden += 1;
+    }
+  });
+  return summary;
+}
