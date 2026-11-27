@@ -8,11 +8,13 @@ import { orderFooterNotice, withOrderFooter } from "../domains/pricing/document-
 import { pricingDocuments } from "../application/pricing/documents";
 const company = "10000000-0000-4000-8000-000000000001", customerId = "20000000-0000-4000-8000-000000000001", territoryId = "30000000-0000-4000-8000-000000000001";
 const scope = { companyId: company, actor: "synthetic-owner", manager: true, orderFooterEnabled: true };
-let companyRule: object[], customers: object[], territory: object[], customer: object[];
+const now = new Date("2026-11-25T13:29:00Z");
+let companyRule: object[], customers: object[], territory: object[], customer: object[], holidays: object[], profiles: object[];
 beforeEach(() => {
   vi.resetAllMocks(); mocks.enabled.mockReturnValue(false);
   companyRule = [{ cutoff_days_before: 1, cutoff_time: "23:59:00" }];
   customers = [{ delivery_territory_id: territoryId }];
+  holidays = []; profiles = [];
   territory = [{ cutoff_days_before: 2, cutoff_time: "19:15:00", delivery_weekdays: [4,2] }]; customer = [];
   mocks.request.mockImplementation(async (path: string) => {
     expect(path).toContain("company_id=eq." + company);
@@ -21,6 +23,8 @@ beforeEach(() => {
     if (path.startsWith("normalized_customers?")) return customers;
     if (path.startsWith("store_order_territory_rules?")) return territory;
     if (path.startsWith("store_order_customer_rules?")) return customer;
+    if (path.startsWith("store_order_holidays?")) return holidays;
+    if (path.startsWith("company_profiles?")) return profiles;
     throw new Error("Unexpected table");
   });
 });
@@ -35,34 +39,34 @@ it("is OFF without an explicit company and rejects before reading", async () => 
 });
 it("shows the actual company cutoff without inventing common delivery weekdays", async () => {
   const rows = await readDocumentOrderFooter(scope);
-  expect(rows.map(row => row.value)).toEqual(["전날 23:59 (권역·매장별 예외)", "권역·매장별 확인"]);
+  expect(rows.map(row => row.value)).toEqual(["배송 1일 앞 23:59 (권역·매장별 예외)", "권역·매장별 확인"]);
   expect(mocks.request).toHaveBeenCalledTimes(1);
 });
 it("inherits territory then company independently, preserving explicit zero and midnight", async () => {
-  expect((await readDocumentOrderFooter(scope, customerId)).map(row => row.value)).toEqual(["2일 전 19:15", "화·목"]);
+  expect((await readDocumentOrderFooter(scope, customerId, now)).map(row => row.value)).toEqual(["오늘 주문하면 12/1(화) 배송 (11/29(일) 밤 7:15 마감)", "화·목"]);
   customer = [{ cutoff_days_before: 0, cutoff_time: null, delivery_weekdays: [0,6] }];
-  expect((await readDocumentOrderFooter(scope, customerId)).map(row => row.value)).toEqual(["당일 19:15", "일·토"]);
+  expect((await readDocumentOrderFooter(scope, customerId, now)).map(row => row.value)).toEqual(["오늘 주문하면 11/28(토) 배송 (11/28(토) 밤 7:15 마감)", "일·토"]);
   customer = [{ cutoff_days_before: 0, cutoff_time: "00:00:00", delivery_weekdays: [0] }];
-  expect((await readDocumentOrderFooter(scope, customerId)).map(row => row.value)).toEqual(["당일 00:00", "일"]);
+  expect((await readDocumentOrderFooter(scope, customerId, now)).map(row => row.value)).toEqual(["오늘 주문하면 11/29(일) 배송 (11/29(일) 오전 12:00 마감)", "일"]);
   territory = []; customer = [];
-  expect((await readDocumentOrderFooter(scope, customerId)).map(row => row.value)).toEqual(["전날 23:59", "배송 설정 확인 필요"]);
+  expect((await readDocumentOrderFooter(scope, customerId, now)).map(row => row.value)).toEqual(["배송 설정 확인 필요", "배송 설정 확인 필요"]);
 });
 it("uses the same verified territory boundary as actual storefront ordering", async () => {
   mocks.enabled.mockReturnValue(true); mocks.eligibility.mockResolvedValue({ eligible: false, reason: "address_unknown", weekdays: [] });
-  expect((await readDocumentOrderFooter(scope, customerId)).map(row => row.value)).toEqual(["전날 23:59", "배송 설정 확인 필요"]);
+  expect((await readDocumentOrderFooter(scope, customerId, now)).map(row => row.value)).toEqual(["배송 설정 확인 필요", "배송 설정 확인 필요"]);
   expect(mocks.request.mock.calls.some(([path]) => path.startsWith("store_order_territory_rules?"))).toBe(false);
   mocks.eligibility.mockResolvedValue({ eligible: true, territoryId, weekdays: [1,5] });
-  expect((await readDocumentOrderFooter(scope, customerId))[1].value).toBe("월·금");
+  expect((await readDocumentOrderFooter(scope, customerId, now))[1].value).toBe("월·금");
   expect(mocks.eligibility).toHaveBeenCalledWith(company, customerId);
 });
 it("rejects a foreign or missing customer and never returns names or addresses", async () => {
   customers = [];
-  await expect(readDocumentOrderFooter(scope, customerId)).rejects.toMatchObject({ status: 404 });
+  await expect(readDocumentOrderFooter(scope, customerId, now)).rejects.toMatchObject({ status: 404 });
   expect(mocks.request).toHaveBeenCalledTimes(2);
 });
 it("keeps the same absent-row default as ordering and fails closed on errors", async () => {
   companyRule = [];
-  expect((await readDocumentOrderFooter(scope))[0].value).toBe("전날 22:00 (권역·매장별 예외)");
+  expect((await readDocumentOrderFooter(scope))[0].value).toBe("배송 1일 앞 22:00 (권역·매장별 예외)");
   mocks.request.mockRejectedValue(new Error("synthetic read failure"));
   await expect(readDocumentOrderFooter(scope)).rejects.toThrow("synthetic read failure");
 });
@@ -90,4 +94,13 @@ it("adds only allowlisted current public policy and degrades without exposing re
   expect(result).toEqual({ status: "available", items: await readDocumentOrderFooter(scope) });
   mocks.request.mockRejectedValue(new Error("PRIVATE-ERROR-CANARY"));
   expect(await readPublicDocumentOrderFooter(company)).toEqual({ status: "unavailable" });
+});
+
+it("uses the same company weekday fallback and selected-territory holidays without writing settings", async () => {
+ territory = []; profiles = [{ delivery_weekdays: [4] }];
+ expect((await readDocumentOrderFooter(scope,customerId,now))[0].value).toBe("오늘 주문하면 내일 배송 (밤 11:59 마감)");
+ holidays = [{ kind: "date", holiday_date: "2026-11-26", weekday: null, month: null, day: null }];
+ expect((await readDocumentOrderFooter(scope,customerId,now))[0].value).toBe("오늘 주문하면 12/3(목) 배송 (12/2(수) 밤 11:59 마감)");
+ expect(mocks.request.mock.calls.some(([path]) => path.includes("or=(territory_id.is.null,territory_id.eq."+territoryId+")"))).toBe(true);
+ expect(mocks.request.mock.calls.every(([,options]) => !options || !options.method || options.method === "GET")).toBe(true);
 });

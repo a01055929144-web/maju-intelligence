@@ -41,7 +41,7 @@ async function setup(page: Page, at: string, holidays: DeliveryPolicy["holidays"
 
 test("CX-145 P1-1 22시대 주문 → 내일(11/26 목) 배송이 기본, 금액이 보이고 주문 성공", async ({ page }) => {
   const { placed } = await setup(page, "2026-11-25T22:29:00");
-  await expect(page.getByTestId("delivery-guide")).toHaveText("오늘 밤 11:59까지 주문하면 내일(11/26 목) 배송");
+  await expect(page.getByTestId("delivery-guide")).toHaveText("오늘 주문하면 내일 배송 (밤 11:59 마감)");
   await expect(page.getByTestId("delivery-date")).toHaveText("11/26(목)");
   await page.getByRole("button", { name: "합성 양파 수량 늘리기" }).click();
   await expect(page.getByTestId("cart-line-amount")).toHaveText("2,200원 × 1 = 2,200원");
@@ -55,13 +55,13 @@ test("CX-145 P1-1 22시대 주문 → 내일(11/26 목) 배송이 기본, 금액
 
 test("CX-145 P1-1 자정 이후(11/26 00:10)는 마감이 다시 열려 11/27 배송", async ({ page }) => {
   await setup(page, "2026-11-26T00:10:00");
-  await expect(page.getByTestId("delivery-guide")).toHaveText("오늘 밤 11:59까지 주문하면 내일(11/27 금) 배송");
+  await expect(page.getByTestId("delivery-guide")).toHaveText("오늘 주문하면 내일 배송 (밤 11:59 마감)");
   await expect(page.getByTestId("delivery-date")).toHaveText("11/27(금)");
 });
 
 test("CX-145 P1-1 토요일 밤은 일요일 배송 없음 → 월요일, 마감 후 문구", async ({ page }) => {
   await setup(page, "2026-11-28T22:00:00");
-  await expect(page.getByTestId("delivery-guide")).toHaveText("지금 주문하면 11/30(월) 배송");
+  await expect(page.getByTestId("delivery-guide")).toHaveText("오늘 주문하면 모레 배송 (11/29(일) 밤 11:59 마감)");
   await expect(page.getByTestId("delivery-date")).toHaveText("11/30(월)");
   await expect(page.locator('[data-day="2026-11-29"]')).toBeDisabled();
 });

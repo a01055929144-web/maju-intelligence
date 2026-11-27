@@ -14,3 +14,10 @@ beforeEach(()=>{vi.clearAllMocks();vi.stubEnv("PRICE_SHEETS_ENABLED","true");vi.
 afterEach(()=>vi.unstubAllEnvs());
 it.each(["FEATURE_PRICING_COMPANY_IDS","FEATURE_STORE_ORDERING_COMPANY_IDS"])("%s blocks reads and writes before data access",async flag=>{vi.stubEnv(flag,"");vi.stubEnv("HOLD_MODULES_ENABLED_COMPANY_IDS",company);expect((await GET(new NextRequest("https://test/api/pricing-order-settings"))).status).toBe(404);expect((await POST(new NextRequest("https://test/api/pricing-order-settings",{method:"POST",body:"{}"}))).status).toBe(404);expect(db).not.toHaveBeenCalled()});
 it("reads the session company with HOLD off",async()=>{expect((await GET(new NextRequest("https://test/api/pricing-order-settings?companyId=forged"))).status).toBe(200);expect(db.mock.calls.every(c=>String(c[0]).includes("company_id=eq."+company))).toBe(true)});
+
+it("returns only scoped weekday fallback and server preview time without changing settings", async()=>{
+ db.mockImplementation(async(path:string)=>path.startsWith("company_profiles?")?[{delivery_weekdays:[1,3],private_phone:"PRIVATE-CANARY"}]:[]);
+ const response=await GET(new NextRequest("https://test/api/pricing-order-settings?companyId=forged"));
+ const body=await response.json();expect(body.companyWeekdays).toEqual([1,3]);expect(body.previewAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+ expect(JSON.stringify(body)).not.toContain("PRIVATE-CANARY");expect(db.mock.calls.every(([path,options])=>path.includes("company_id=eq."+company)&&(!options||!options.method||options.method==="GET"))).toBe(true);
+});

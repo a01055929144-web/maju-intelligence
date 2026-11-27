@@ -108,14 +108,15 @@ export async function GET(request: NextRequest) {
       );
       return NextResponse.json({ customers }, { headers: { "Cache-Control": "no-store" } });
     }
-    const [settings, territories, territoryRules, holidays] = await Promise.all([
+    const [settings, territories, territoryRules, holidays, profiles] = await Promise.all([
       supabaseRequest<Record<string, unknown>[]>(`store_order_settings?company_id=eq.${company}&select=*`),
       supabaseRequest<Record<string, unknown>[]>(`delivery_territories?company_id=eq.${company}&select=id,name,is_active&order=name.asc&limit=100`),
       supabaseRequest<Record<string, unknown>[]>(`store_order_territory_rules?company_id=eq.${company}&select=*`),
       supabaseRequest<Record<string, unknown>[]>(`store_order_holidays?company_id=eq.${company}&select=*&order=holiday_date.asc.nullslast&limit=200`),
+      supabaseRequest<Array<{ delivery_weekdays: number[] | null }>>(`company_profiles?company_id=eq.${company}&select=delivery_weekdays&limit=1`),
     ]);
     return NextResponse.json({ settings: settings[0] ?? null, ...(priceDirectionEnabled() ? { priceDirectionAvailable: true } : {}), territories, territoryRules,
-      holidays }, { headers: { "Cache-Control": "no-store" } });
+      holidays, companyWeekdays: profiles[0]?.delivery_weekdays ?? [], previewAt: new Date().toISOString() }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ message: "주문 설정을 불러오지 못했습니다." }, { status: 500 });
   }
