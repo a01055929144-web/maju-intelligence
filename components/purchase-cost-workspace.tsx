@@ -815,7 +815,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const edited = selected.some(id => mappedProductIds.has(id) && candidates[id]
         && (candidates[id].method !== "엑셀" || !mappedLines.some(line => line.productId === id && line.cost === candidates[id].cost)));
       if (edited) throw new Error("같은 상품·적용일의 현재 매입가 후보가 여러 개입니다. 적용할 행을 선택하거나 이번 가격 반영을 보류해 주세요.");
-      const allRows = holdFuturePrices(buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...priceJumpHeldRows, ...Array.from(excluded)]), today).map(row => {
+      const priceJumpHeld = new Set(priceJumpHeldRows);
+      const allRows = holdFuturePrices(buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row) && !priceJumpHeld.has(row)), [...dateHeldRows, ...priceJumpHeldRows, ...Array.from(excluded)]), today).map(row => {
         const target = undatedTargets.find(item => item.productId === row.productId && item.date === row.priceDate);
         return replaceUndatedCurrent && row.priceSelected && target ? { ...row, replaceUndatedCurrent: true, expectedPurchasePrice: target.previous } : row;
       });
