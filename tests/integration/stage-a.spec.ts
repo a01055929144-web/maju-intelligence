@@ -119,7 +119,6 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     const priceJumps=page.getByRole('region',{name:'급변 매입가 확인',exact:true});
     while(await priceJumps.getByRole('button',{name:'맞음',exact:true}).count())
       await priceJumps.getByRole('button',{name:'맞음',exact:true}).first().click();
-    await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.screenshot({path:info.outputPath('real-stage-a-review.png'),fullPage:true});
     db('fail-on');
@@ -131,7 +130,6 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     expect(Number(failed.other_cost)).toBe(999);
     expect(writes).toHaveLength(1);
     db('fail-off');
-    await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
     const started=Date.now();
     await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
     const expectedChanged=Array.from({length:745-188},(_,offset)=>offset+188)
@@ -251,7 +249,6 @@ for (const width of [1280,390]) test(`history-only default retries, reloads and 
   const review=page.getByRole('region',{name:'저장 전 적용일 확인',exact:true});
   await expect(review).toContainText('매입 이력 3389행 · 현재 가격 변경 0품목 · 연결되지 않은 원문 28행 제외');
   await expect(review).toContainText('2026-11-01 · 3389행');
-  await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   db('receipt-fail-on');
   await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
@@ -259,7 +256,6 @@ for (const width of [1280,390]) test(`history-only default retries, reloads and 
   expect(state()).toMatchObject({receipts:0,batches:0,price_runs:0});
   expect(writes).toHaveLength(1);
   db('receipt-fail-off');
-  await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
   await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
   await expect.poll(()=>state().batches).toBe(1);
   expect(writes).toHaveLength(2); expect(writes[1]).toEqual(writes[0]); expect(writes[1].rows).toBe(3389);
