@@ -682,7 +682,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   }
 
   function applyBulkUnit(target: "picked" | "empty") {
-    const unit = bulkUnit.trim();
+    const unit = bulkUnit.trim().toLocaleUpperCase("en-US");
     if (!unit) { setError("넣을 단위를 입력해 주세요."); return; }
     setUnmatched((current) => current.map((row, index) => (target === "picked" ? rowPick.includes(index) : !row.unit.trim()) ? { ...row, unit } : row));
     setRowPick([]);
@@ -1030,9 +1030,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   ], [busy, candidates, edit, latestHistory, purchaseDateEnabled, selected, selectedIds, uploadedQuantities, usedBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const missingTotal = unmatched.filter((row) => missingFields(row).length).length;
-  const unitCounts = new Map<string, number>();
-  for (const unit of [...unmatched.map((row) => row.unit), ...products.map((product) => product.unit)]) if (unit.trim()) unitCounts.set(unit.trim(), (unitCounts.get(unit.trim()) || 0) + 1);
-  const quickUnits = Array.from(new Set([...Array.from(unitCounts.entries()).sort((a, b) => b[1] - a[1]).map(([unit]) => unit), "EA", "BOX", "PACK", "KG", "통"])).slice(0, 6);
+  const quickUnits = ["EA", "KG", "BOX", "PACK"];
   const suspectCount = unmatched.filter((row) => !row.notDuplicate && findDuplicateSuspects(row, unique, 1).length).length;
   const unitOptions = Array.from(new Set([...COMMON_UNITS, ...products.map((product) => product.unit).filter(Boolean)]));
   const saveCount = historyOnlyDefaultEnabled && importedLines.length ? importedLines.length : selected.length + unmatched.length;
@@ -1194,7 +1192,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {tab === "매입 이력" ? <PurchaseHistoryPanel batch={dateBatch ? { fileName: dateBatch.sourceFileName, receiptDate: dateBatch.receiptDate, rowCount: dateBatch.rowCount, status: dateBatch.status } : undefined} companyId={companyId} refreshKey={historyKey} restore={{ disabled: busy || (purchaseDateEnabled ? dateBatch?.status !== "completed" : !(batchEnabled && latestBatch && !latestBatch.restoredAt) && !undo), label: purchaseDateEnabled && dateBatch?.status === "completed" ? "직전 날짜별 매입가·판매가 함께 되돌리기" : batchEnabled && latestBatch && !latestBatch.restoredAt ? "직전 매입가·판매가 함께 되돌리기" : "직전 저장 되돌리기 (현재 화면)", run: () => void restore() }} /> : tab === "신규" && unmatched.length ? <section className="maju-section-card min-w-0 space-y-3 p-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="font-semibold">새 상품 {unmatched.length}개{missingTotal ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-black text-amber-800">필수값 미입력 {missingTotal}개</span> : null}{suspectCount ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-black text-rose-700">중복 의심 {suspectCount}개</span> : null}</h2>
+          <h2 className="font-semibold">새 상품 {unmatched.length}개{missingTotal ? <button className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-black text-amber-800" onClick={() => openFilter("unit")} type="button">필수 빈 칸 {missingTotal}개</button> : null}{suspectCount ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-black text-rose-700">중복 의심 {suspectCount}개</span> : null}</h2>
           <p className="text-sm text-slate-600">상품명 옆에 섞인 규격·단위를 나눠 두었습니다. 단위와 과세 구분은 꼭 고르고(규격은 비워도 됨), <b>중복 의심</b>은 기존 상품에 연결하거나 &lsquo;새 상품&rsquo;으로 확정하세요.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1210,7 +1208,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       </div>
       <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
         <span>단위 일괄 입력</span>
-        <input aria-label="일괄 입력할 단위" className="maju-input h-8 w-28" list="purchase-unit-options" onChange={(event) => setBulkUnit(event.target.value)} placeholder="EA·BOX·KG" value={bulkUnit} />
+        <input aria-label="일괄 입력할 단위" className="maju-input h-8 w-28" list="purchase-unit-options" onChange={(event) => setBulkUnit(event.target.value.toLocaleUpperCase("en-US"))} placeholder="EA·BOX·KG" value={bulkUnit} />
         <button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={!rowPick.length} onClick={() => applyBulkUnit("picked")} type="button">선택 {rowPick.length}개에 넣기</button>
         <button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={!missingTotal} onClick={() => applyBulkUnit("empty")} type="button">빈 단위 {missingTotal}개에 모두 넣기</button>
       </div>
@@ -1226,7 +1224,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
           <td className="max-w-[180px] truncate px-2 py-2 text-slate-400" title={row.rawName}>{row.rawName || "-"}</td>
           <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 품목`} className="h-8 w-full rounded-md border bg-white px-2 text-xs font-semibold min-w-[170px] border-slate-200" onChange={(event) => updateNewRow(index, { name: event.target.value })} value={row.name} />{twins ? <p className="mt-0.5 text-xs font-bold text-rose-600">파일 안에 같은 이름 {twins}개 더 있음(규격·단위 다름)</p> : null}</td>
           <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 규격`} className="h-8 w-full rounded-md border bg-white px-2 text-xs font-semibold min-w-[90px] border-slate-200" onChange={(event) => updateNewRow(index, { spec: event.target.value })} placeholder="없으면 비움" value={row.spec} /></td>
-          <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 단위`} className={`h-8 w-full rounded-md border bg-white px-2 text-xs font-semibold min-w-[70px] ${!row.unit.trim() ? "border-amber-400" : "border-slate-200"}`} data-unit-input list="purchase-unit-options" onChange={(event) => updateNewRow(index, { unit: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); focusNextEmptyUnit(event.currentTarget); } }} placeholder="EA·BOX·KG" value={row.unit} />{newFilter === "unit" ? <div className="mt-1 flex flex-wrap gap-0.5">{quickUnits.map((unit) => <button className={`rounded px-1.5 py-0.5 text-xs font-black ${row.unit === unit ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-teal-50"}`} key={unit} onClick={(event) => { const cell = event.currentTarget.closest("td")?.querySelector<HTMLInputElement>("input[data-unit-input]"); updateNewRow(index, { unit }); window.setTimeout(() => focusNextEmptyUnit(cell), 30); }} type="button">{unit}</button>)}</div> : null}</td>
+          <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 단위`} className={`h-8 w-full rounded-md border bg-white px-2 text-xs font-semibold min-w-[70px] ${!row.unit.trim() ? "border-amber-400" : "border-slate-200"}`} data-unit-input list="purchase-unit-options" onChange={(event) => updateNewRow(index, { unit: event.target.value.toLocaleUpperCase("en-US") })} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); focusNextEmptyUnit(event.currentTarget); } }} placeholder="EA·BOX·KG" value={row.unit} />{newFilter === "unit" ? <div className="mt-1 flex flex-wrap gap-0.5">{quickUnits.map((unit) => <button className={`rounded px-1.5 py-0.5 text-xs font-black ${row.unit === unit ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-teal-50"}`} key={unit} onClick={(event) => { const cell = event.currentTarget.closest("td")?.querySelector<HTMLInputElement>("input[data-unit-input]"); updateNewRow(index, { unit }); window.setTimeout(() => focusNextEmptyUnit(cell), 30); }} type="button">{unit}</button>)}</div> : null}</td>
           <td className="px-2 py-2 text-right">{row.quantity != null ? row.quantity.toLocaleString("ko-KR") : "-"}</td>
           <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 매입가`} className="h-8 w-full rounded-md border bg-white px-2 text-xs font-semibold min-w-[90px] border-slate-200 text-right" min="0" onChange={(event) => updateNewRow(index, { cost: Number(event.target.value), rawCost: Number(event.target.value), vatIncluded: false })} type="number" value={row.cost} /></td>
           <td className="px-2 py-1.5"><button className={`rounded-full px-2 py-0.5 text-xs font-bold ${row.vatIncluded ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`} disabled={busy} onClick={() => { const raw = row.rawCost ?? row.cost; updateNewRow(index, { cost: costExcludingVat(raw, !row.vatIncluded), rawCost: raw, vatIncluded: !row.vatIncluded }); }} type="button">{row.vatIncluded ? "포함" : "별도"}</button></td>
