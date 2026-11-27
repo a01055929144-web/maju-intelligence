@@ -48,14 +48,14 @@ function PolicyFields({ value, onChange, inherit = false, weekdaysNote }: {
       </div>
     </fieldset>}
     <label className="text-[11px] font-black text-slate-600">마감일
-      <select aria-label="마감일" className="mt-1 w-full min-h-11 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={value.cutoff_days_before ?? ""}
+      <select aria-label="마감일" className="mt-1 w-full min-h-[44px] rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={value.cutoff_days_before ?? ""}
         onChange={(event) => onChange({ ...value, cutoff_days_before: numberOrNull(event.target.value) })}>
         {inherit && <option value="">상위 설정 사용</option>}
         <option value="0">배송 당일</option><option value="1">배송 1일 앞</option><option value="2">2일 전</option>
       </select>
     </label>
     <label className="text-[11px] font-black text-slate-600">마감 시각
-      <input className="mt-1 w-full min-h-11 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" type="time" value={value.cutoff_time ?? ""}
+      <input className="mt-1 w-full min-h-[44px] rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" type="time" value={value.cutoff_time ?? ""}
         onChange={(event) => onChange({ ...value, cutoff_time: event.target.value || null })} />
     </label>
     <label className="text-[11px] font-black text-slate-600">최소 주문금액 (원)
@@ -199,7 +199,7 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
       <Button type="button" className="min-h-11 text-xs" disabled={busy || !data?.priceDirectionAvailable} onClick={() => void save({ action: "storefront-price-direction", enabled: showPriceDirection })}>판매가 등락 공개 설정 저장</Button>
     </section>
     <section className="space-y-3 rounded-lg border border-slate-200 p-4"><h2 className="text-sm font-black text-slate-950">권역별 배송</h2>
-      <select aria-label="배송 권역" className="w-full min-h-11 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={territoryId}
+      <select aria-label="배송 권역" className="w-full min-h-[44px] rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={territoryId}
         onChange={(event) => setTerritoryId(event.target.value)}><option value="">권역 선택</option>
         {data?.territories.filter((item) => item.is_active).map((item) =>
           <option key={item.id} value={item.id}>{item.name}</option>)}</select>
