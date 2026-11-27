@@ -8,7 +8,7 @@ import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { erpOrderDocumentsEnabled, orderReceiptDraftEnabled } from "@/lib/erp-order-documents-feature";
 import { readConfirmedOrderSaleDocuments, readOrderSaleDocuments, receiveStoreOrderWithSaleDocument, syncStoreOrderSaleDocument } from "@/lib/pricing/store-order-sale-document";
 import { supabaseRequest } from "@/lib/store";
-import { isStoreOrderStatus } from "../../../domains/order/store-order-status";
+import { STORE_ORDER_STATUSES, isStoreOrderStatus } from "../../../domains/order/store-order-status";
 import { markNewOrderNotificationProcessed } from "@/lib/store/07-company-notifications";
 import { orderListExportEnabled } from "@/lib/order-list-export-feature";
 
@@ -21,10 +21,15 @@ const MEMBER_ROLE: Record<string, string> = { owner: "점주", manager: "관리�
 
 type OrderRow = {
   id: string; customer_id: string; delivery_date: string | null; status: string;
-  known_total: number; has_market_price: boolean; request_memo: string;
-  submitted_at: string; revision: number; ordered_by_member_id: string | null; store_account_id: string | null;
+  known_total: number; taxable_supply: number; exempt_supply: number; tax_amount: number;
+  has_market_price: boolean; request_memo: string; submitted_at: string; updated_at: string; revision: number;
+  ordered_by_member_id: string | null; store_account_id: string | null;
+  delivery_customer_name_snapshot: string | null; delivery_address_snapshot: string | null;
+  delivery_address_detail_snapshot: string | null; delivery_recipient_phone_snapshot: string | null;
+  delivery_loading_position_snapshot: string | null;
   store_order_lines: Array<{ product_name: string; specification: string; sales_unit: string;
-    quantity: number; total_amount: number | null; is_market_price: boolean }>;
+    quantity: number; unit_price: number | null; supply_amount: number | null; tax_amount: number | null;
+    total_amount: number | null; is_market_price: boolean; promotion_id: string | null }>;
 };
 type CustomerRow = { id: string; customer_name: string; address: string | null;
   delivery_base_address: string | null; delivery_address_detail: string | null };
@@ -41,6 +46,26 @@ function sameOrigin(request: NextRequest) {
     return ["http:", "https:"].includes(origin.protocol) &&
       origin.host.toLowerCase() === (request.headers.get("host") || request.nextUrl.host).toLowerCase();
   } catch { return false; }
+}
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+function nextDate(value: string) {
+  return new Date(Date.parse(`${value}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+}
+function kstDate(offsetDays = 0) {
+  const shifted = new Date(Date.now() + offsetDays * 86_400_000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(shifted);
+}
+
+function orderDateFilter(params: URLSearchParams) {
+  const field = params.get("dateField") || "submitted";
+  const today = kstDate();
+  const from = params.get("from") || kstDate(-29);
+  const to = params.get("to") || today;
+  if (!DATE.test(from) || !DATE.test(to) || from > to || !["submitted", "delivery"].includes(field)) return null;
+  return field === "delivery"
+    ? `&delivery_date=gte.${from}&delivery_date=lte.${to}`
+    : `&submitted_at=gte.${encodeURIComponent(`${from}T00:00:00+09:00`)}&submitted_at=lt.${encodeURIComponent(`${nextDate(to)}T00:00:00+09:00`)}`;
 }
 
 async function authorize(request: NextRequest, write: boolean, companyId?: string) {
@@ -68,10 +93,12 @@ export async function GET(request: NextRequest) {
   const scope = auth.companyId;
   const company = encodeURIComponent(scope);
   const page = Math.max(1, Math.min(500, Number.parseInt(params.get("page") || "1", 10) || 1));
-  const status = params.get("status") || "submitted";
+  const status = params.get("status") || "all";
   const storeQuery = (params.get("q") || "").trim();
+  const dateFilter = orderDateFilter(params);
   if (status !== "all" && !isStoreOrderStatus(status))
     return NextResponse.json({ message: "주문 상태를 다시 선택해 주세요." }, { status: 400 });
+  if (!dateFilter) return NextResponse.json({ message: "조회 기간을 다시 선택해 주세요." }, { status: 400 });
   if (storeQuery && (storeQuery.length < 2 || storeQuery.length > 50 || /[%*,()]/.test(storeQuery)))
     return NextResponse.json({ message: "매장 이름을 두 글자 이상 입력해 주세요." }, { status: 400 });
   try {
@@ -85,19 +112,24 @@ export async function GET(request: NextRequest) {
       customerFilter = `&customer_id=in.(${matched.map((row) => row.id).join(",")})`;
     }
     const pageSize = orderListExportEnabled(scope) ? EXPORT_PAGE_SIZE : LEGACY_PAGE_SIZE;
-    const orders = await supabaseRequest<OrderRow[]>(
-      `store_orders?company_id=eq.${company}${status === "all" ? "" : `&status=eq.${status}`}${customerFilter}` +
-      "&select=id,customer_id,delivery_date,status,known_total,has_market_price,request_memo,submitted_at,revision,ordered_by_member_id,store_account_id," +
-      "store_order_lines(product_name,specification,sales_unit,quantity,total_amount,is_market_price)" +
-      `&order=submitted_at.desc,id.desc&limit=${pageSize + 1}&offset=${(page - 1) * pageSize}`,
-    );
+    const orderScope = `company_id=eq.${company}${dateFilter}${customerFilter}`;
+    const [orders, statusRows] = await Promise.all([
+      supabaseRequest<OrderRow[]>(
+        `store_orders?${orderScope}${status === "all" ? "" : `&status=eq.${status}`}` +
+        "&select=id,customer_id,delivery_date,status,known_total,taxable_supply,exempt_supply,tax_amount,has_market_price,request_memo,submitted_at,updated_at,revision,ordered_by_member_id,store_account_id," +
+        "delivery_customer_name_snapshot,delivery_address_snapshot,delivery_address_detail_snapshot,delivery_recipient_phone_snapshot,delivery_loading_position_snapshot," +
+        "store_order_lines(product_name,specification,sales_unit,quantity,unit_price,supply_amount,tax_amount,total_amount,is_market_price,promotion_id)" +
+        `&order=submitted_at.desc,id.desc&limit=${pageSize + 1}&offset=${(page - 1) * pageSize}`,
+      ),
+      supabaseRequest<Array<{ status: string }>>(`store_orders?${orderScope}&select=status&limit=5000`),
+    ]);
     const items = orders.slice(0, pageSize);
     const customerIds = Array.from(new Set(items.map((order) => order.customer_id)));
     const memberIds = Array.from(new Set(items.map((order) => order.ordered_by_member_id).filter((id): id is string => Boolean(id))));
     const accountIds = Array.from(new Set(items.map((order) => order.store_account_id).filter((id): id is string => Boolean(id))));
     const erpEnabled = erpOrderDocumentsEnabled(scope);
     const draftReceipt = orderReceiptDraftEnabled(scope);
-    const [customers, members, pending, documents] = await Promise.all([
+    const [customers, members, pending, profiles, documents] = await Promise.all([
       customerIds.length ? supabaseRequest<CustomerRow[]>(
         `normalized_customers?company_id=eq.${company}&id=in.(${customerIds.join(",")})&select=id,customer_name,address,delivery_base_address,delivery_address_detail`,
       ) : Promise.resolve([]),
@@ -107,25 +139,39 @@ export async function GET(request: NextRequest) {
       accountIds.length ? supabaseRequest<Array<{ id: string }>>(
         `store_accounts?company_id=eq.${company}&id=in.(${accountIds.join(",")})&customer_review_status=eq.needs_review&select=id`,
       ) : Promise.resolve([]),
+      accountIds.length ? supabaseRequest<Array<{ id: string; store_profiles: { access_password_updated_at: string | null } | null }>>(
+        `store_accounts?company_id=eq.${company}&id=in.(${accountIds.join(",")})&select=id,store_profiles(access_password_updated_at)`,
+      ) : Promise.resolve([]),
       draftReceipt ? readOrderSaleDocuments(scope, items.map(order => order.id))
         : erpEnabled ? readConfirmedOrderSaleDocuments(scope, items.map(order => order.id)) : undefined,
     ]);
     const needsReview = new Set(pending.map((row) => row.id));
+    const passwordSet = new Map(profiles.map((row) => [row.id, Boolean(row.store_profiles?.access_password_updated_at)]));
     const customerById = new Map(customers.map((customer) => [customer.id, customer]));
     const memberLabel = new Map(members.map((member) => [member.id,
       `${member.app_users?.name?.trim().slice(0, 80) || "이름 미등록"} · ${MEMBER_ROLE[member.role] || "구성원"}`]));
+    const statusCounts = Object.fromEntries(STORE_ORDER_STATUSES.map((key) => [key, 0])) as Record<string, number>;
+    for (const row of statusRows) if (row.status in statusCounts) statusCounts[row.status] += 1;
     return NextResponse.json({
       hasMore: orders.length > pageSize,
+      statusCounts,
       items: items.map((order) => {
         const customer = customerById.get(order.customer_id);
         const base = customer?.delivery_base_address?.trim();
         const document = documents?.get(order.id);
+        const snapshotAddress = order.delivery_address_snapshot?.trim();
+        const recipientDigits = order.delivery_recipient_phone_snapshot?.replace(/\D/g, "") || "";
         return {
           id: order.id,
           storeAccountId: order.store_account_id && needsReview.has(order.store_account_id) ? order.store_account_id : null,
-          customerName: customer?.customer_name ?? "이름 없는 거래처",
-          // 주문 당시 배송지 저장(#410)이 적용되기 전이라 지금 거래처에 저장된 주소를 보여 준다.
-          deliveryAddress: base ? [base, customer?.delivery_address_detail?.trim()].filter(Boolean).join(" ") : customer?.address?.trim() || null,
+          customerName: order.delivery_customer_name_snapshot?.trim() || customer?.customer_name || "이름 없는 거래처",
+          // 예전 주문은 snapshot이 없으므로 현재 거래처 주소로만 폴백한다. 금액은 어느 경우에도 다시 계산하지 않는다.
+          deliveryAddress: snapshotAddress
+            ? [snapshotAddress, order.delivery_address_detail_snapshot?.trim()].filter(Boolean).join(" ")
+            : base ? [base, customer?.delivery_address_detail?.trim()].filter(Boolean).join(" ") : customer?.address?.trim() || null,
+          loadingPosition: order.delivery_loading_position_snapshot?.trim() || null,
+          recipientPhoneLast4: recipientDigits ? recipientDigits.slice(-4) : null,
+          deliveryPasswordSet: order.store_account_id ? passwordSet.get(order.store_account_id) === true : false,
           orderedBy: order.ordered_by_member_id ? memberLabel.get(order.ordered_by_member_id) ?? "작성자 확인 필요" : "기존 링크 주문",
           deliveryDate: order.delivery_date,
           status: order.status,
@@ -133,7 +179,10 @@ export async function GET(request: NextRequest) {
           hasMarketPrice: order.has_market_price,
           requestMemo: order.request_memo,
           submittedAt: order.submitted_at,
+          updatedAt: order.updated_at,
           revision: order.revision,
+          supplyAmount: order.taxable_supply + order.exempt_supply,
+          taxAmount: order.tax_amount,
           ...(draftReceipt || erpEnabled ? {
              ...(draftReceipt ? { draftReceipt: true } : {}),
             orderDocument: document?.customer_id === order.customer_id
@@ -142,7 +191,9 @@ export async function GET(request: NextRequest) {
           } : {}),
           lines: order.store_order_lines.map((line) => ({
             name: line.product_name, spec: line.specification, unit: line.sales_unit,
-            quantity: line.quantity, total: line.total_amount, marketPrice: line.is_market_price,
+            quantity: line.quantity, unitPrice: line.unit_price, supply: line.supply_amount,
+            tax: line.tax_amount, total: line.total_amount, marketPrice: line.is_market_price,
+            promotion: Boolean(line.promotion_id),
           })),
         };
       }),
