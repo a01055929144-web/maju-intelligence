@@ -35,23 +35,33 @@ describe("order inbox API", () => {
   });
 
   const orderRow = (member: string | null) => ({ id: orderId, customer_id: "c1", delivery_date: "2026-11-12", status: "submitted", known_total: 12000,
-    has_market_price: false, request_memo: "", submitted_at: "2026-11-10T01:00:00Z", revision: 1, ordered_by_member_id: member, store_order_lines: [] });
+    taxable_supply: 10000, exempt_supply: 1000, tax_amount: 1000, has_market_price: false, request_memo: "", submitted_at: "2026-11-10T01:00:00Z",
+    updated_at: "2026-11-10T01:00:00Z", revision: 1, ordered_by_member_id: member, store_account_id: "a1",
+    delivery_customer_name_snapshot: "주문 당시 매장", delivery_address_snapshot: "서울 송파구 주문로 2", delivery_address_detail_snapshot: "202호",
+    delivery_recipient_phone_snapshot: "010-1234-5678", delivery_loading_position_snapshot: "뒷문", store_order_lines: [{ product_name: "합성 상품", specification: "1kg", sales_unit: "봉", quantity: 2, unit_price: 5000, supply_amount: 10000, tax_amount: 1000, total_amount: 11000, is_market_price: false, promotion_id: "p1" }] });
   const routeFor = (path: string) => {
+    if (path.startsWith("store_orders?") && path.includes("select=status")) return [{ status: "submitted" }, { status: "received" }];
     if (path.startsWith("store_orders?")) return [orderRow("m1")];
     if (path.startsWith("normalized_customers?") && path.includes("ilike")) return [{ id: "c1" }];
     if (path.startsWith("normalized_customers?")) return [{ id: "c1", customer_name: "송파 시험 매장", address: "옛 주소", delivery_base_address: "서울 송파구 합성로 1", delivery_address_detail: "101호" }];
     if (path.startsWith("store_account_members?")) return [{ id: "m1", role: "owner", app_users: { name: "합성 점주" } }];
+    if (path.startsWith("store_accounts?")) return [{ id: "a1", customer_review_status: "confirmed", store_profiles: { access_password_updated_at: "2026-11-01T00:00:00Z" } }];
+    if (path.startsWith("business_documents?")) return [];
     throw new Error(`unexpected ${path}`);
   };
 
-  it("lists only this company's new orders with store, delivery address and orderer", async () => {
+  it("lists this company's recent orders from stored snapshots without recalculating amounts", async () => {
     mocks.supabase.mockImplementation(async (path: string) => routeFor(path));
     const response = await GET(new NextRequest("http://localhost/api/orders"));
     expect(response.status).toBe(200);
     const result = await response.json();
-    expect(result.items[0]).toMatchObject({ customerName: "송파 시험 매장", status: "submitted",
-      deliveryAddress: "서울 송파구 합성로 1 101호", orderedBy: "합성 점주 · 점주" });
-    expect(mocks.supabase.mock.calls[0][0]).toContain(`company_id=eq.${companyId}&status=eq.submitted`);
+    expect(result.items[0]).toMatchObject({ customerName: "주문 당시 매장", status: "submitted", knownTotal: 12000,
+      supplyAmount: 11000, taxAmount: 1000, deliveryAddress: "서울 송파구 주문로 2 202호", loadingPosition: "뒷문",
+      recipientPhoneLast4: "5678", deliveryPasswordSet: true, orderedBy: "합성 점주 · 점주" });
+    expect(result.items[0].lines[0]).toMatchObject({ unitPrice: 5000, supply: 10000, tax: 1000, total: 11000, promotion: true });
+    expect(result.statusCounts).toMatchObject({ submitted: 1, received: 1 });
+    expect(mocks.supabase.mock.calls[0][0]).toContain(`company_id=eq.${companyId}&submitted_at=gte.`);
+    expect(mocks.supabase.mock.calls[0][0]).not.toContain("status=eq.");
     for (const [path] of mocks.supabase.mock.calls) expect(path).toContain(`company_id=eq.${companyId}`);
   });
 
@@ -77,6 +87,15 @@ describe("order inbox API", () => {
     expect(mocks.supabase.mock.calls[0][0]).not.toContain("status=eq.");
     mocks.supabase.mockClear();
     expect((await GET(new NextRequest("http://localhost/api/orders?status=paid"))).status).toBe(400);
+    expect(mocks.supabase).not.toHaveBeenCalled();
+  });
+
+  it("supports delivery date ranges and rejects invalid ranges", async () => {
+    mocks.supabase.mockImplementation(async (path: string) => routeFor(path));
+    await GET(new NextRequest("http://localhost/api/orders?dateField=delivery&from=2026-11-01&to=2026-11-30"));
+    expect(mocks.supabase.mock.calls[0][0]).toContain("delivery_date=gte.2026-11-01&delivery_date=lte.2026-11-30");
+    mocks.supabase.mockClear();
+    expect((await GET(new NextRequest("http://localhost/api/orders?from=2026-12-01&to=2026-11-01"))).status).toBe(400);
     expect(mocks.supabase).not.toHaveBeenCalled();
   });
 
@@ -107,10 +126,7 @@ describe("order inbox API", () => {
 
   it("shows a pending document and accepts only the atomic receipt response", async () => {
     vi.stubEnv("FEATURE_ORDER_RECEIPT_DRAFT_COMPANY_IDS", companyId);
-    mocks.supabase.mockImplementationOnce(async (path: string) => routeFor(path))
-      .mockImplementationOnce(async (path: string) => routeFor(path))
-      .mockImplementationOnce(async (path: string) => routeFor(path))
-      .mockResolvedValueOnce([]);
+    mocks.supabase.mockImplementation(async (path: string) => routeFor(path));
     const listed = await (await GET(new NextRequest("http://localhost/api/orders"))).json();
     expect(listed.items[0].orderDocument).toEqual({ status: "unlinked" });
 

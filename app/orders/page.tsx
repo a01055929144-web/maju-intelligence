@@ -22,7 +22,7 @@ export default async function OrdersPage({ searchParams }: {
   if (!companyId || !(isFeatureEnabled("PRICING", companyId) && isFeatureEnabled("STORE_ORDERING", companyId)) ||
     (customer && !canManagePriceSheets(customer) && customer.workspaceRole !== "sales")) notFound();
   const preview = Boolean(admin && !customer);
-  return <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="주문 확인" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
+  return <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="주문 관리" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
     <main className="w-full p-4">
       {/* 확인 처리는 고객사 대표·관리자만. 영업과 MAJU 관리자 미리보기는 보기만 한다. */}
       <OrderInboxWorkspace canConfirm={Boolean(customer && canManagePriceSheets(customer))} companyId={companyId}
