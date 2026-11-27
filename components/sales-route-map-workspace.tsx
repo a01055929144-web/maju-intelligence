@@ -45,6 +45,7 @@ import {
   PERMIT_LEAD_TYPE_OPTIONS,
   parseLeadRegion,
   scopeLeadsByStatus,
+  summarizeMapLeadVisibility,
   type LeadOpenDateFilterMode,
   type PermitLeadType
 } from "@/domains/lead/map-filters";
@@ -1228,6 +1229,15 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         excludeFromAutoBounds: mapTargetType !== "distributor"
       }));
   }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers, mapTargetType]);
+  const mapLeadVisibility = useMemo(
+    () => summarizeMapLeadVisibility(filteredAllLeadsForMap, {
+      layerOn: showAllLeadsOnMap,
+      radiusLeadIds: new Set((leadRadiusResult?.leads || []).map((lead) => lead.id)),
+      radiusOn: Boolean(leadRadiusOpen && leadRadiusResult),
+      visibleLeadIds: new Set([...leadRadiusMapMarkers, ...allLeadsMapMarkers].map((marker) => marker.id || ""))
+    }),
+    [filteredAllLeadsForMap, showAllLeadsOnMap, leadRadiusOpen, leadRadiusResult, leadRadiusMapMarkers, allLeadsMapMarkers]
+  );
   // 우측 목록은 원본 조회 결과가 아니라 실제 생성된 지도 마커 ID를 기준으로 만듭니다. 반경과 전체
   // 보기를 함께 켠 경우 두 집합을 합치고, 주소가 없어 마커를 만들 수 없는 리드는 목록에서도 제외합니다.
   const detailLead = useMemo(
@@ -2501,7 +2511,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           <MapLeadFilterStrip
             allLeadsLoading={allLeadsLoadState === "loading"}
             dongOptions={mapLeadDongOptions}
-            filteredCount={filteredAllLeadsForMap.length}
+            filteredCount={mapLeadVisibility.displayed}
             filtersActive={leadFiltersActive}
             mapTargetType={mapTargetType}
             onApplyOpenDate={() => {
@@ -2533,6 +2543,15 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             showOutsideSalesArea={showOutsideSalesAreaOnMap}
             totalCount={statusScopedLeadsForMap.length}
           />
+        ) : null}
+        {activeView === "map" && allLeadsLoadState === "ready" && filteredAllLeadsForMap.length > 0 ? (
+          <p className="px-3 pb-2 text-xs font-medium text-slate-600" role="status">
+            필터 결과 {mapLeadVisibility.filtered.toLocaleString()}곳 · 지도 표시 {mapLeadVisibility.displayed.toLocaleString()}곳
+            {mapLeadVisibility.missingAddress ? ` · 위치 미확인 ${mapLeadVisibility.missingAddress.toLocaleString()}곳` : ""}
+            {mapLeadVisibility.missingDate ? ` · 개시일 미확인 ${mapLeadVisibility.missingDate.toLocaleString()}곳` : ""}
+            {mapLeadVisibility.outsideRadius ? ` · 반경 밖 ${mapLeadVisibility.outsideRadius.toLocaleString()}곳` : ""}
+            {mapLeadVisibility.layerHidden ? ` · 리드 레이어 꺼짐 ${mapLeadVisibility.layerHidden.toLocaleString()}곳` : ""}
+          </p>
         ) : null}
         </div>
       </section>
