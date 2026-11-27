@@ -376,6 +376,17 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
 }
 export type DocumentOutput = ReturnType<typeof documentOutput>;
 export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = false) {
+  if (output.layout !== "cards") {
+    const promotionCards = output.lines.filter((line) => line.badge).slice(0, 6);
+    const cardSet = new Set(promotionCards);
+    const tableLines = output.lines.filter((line) => !cardSet.has(line));
+    const pages: DocumentOutput[] = [];
+    for (let start = 0; start < tableLines.length; start += 20) {
+      pages.push({ ...output, lines: [...(start === 0 ? promotionCards : []), ...tableLines.slice(start, start + 20)] });
+    }
+    if (!pages.length) pages.push({ ...output, lines: promotionCards });
+    return pages;
+  }
   const pages: DocumentOutput[] = [];
   const columns = Math.max(1, Math.min(3, output.display?.columns || 1));
   const scale = Math.max(1, fontScale);

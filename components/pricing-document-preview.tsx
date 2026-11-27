@@ -22,7 +22,8 @@ import { Button } from "./ui/button";
 import { formatWon } from "@/domains/shared/money";
 
 export function pricingPaperStyle(fontScale: number) {
-  return `.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * fontScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}`;
+  const tableScale = Math.min(fontScale, 1.15);
+  return `.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * tableScale)}px;line-height:${Math.round(16 * tableScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper [data-indexed] .pricing-output-table td,.pricing-paper [data-indexed] .pricing-output-table th{padding:1px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * tableScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}`;
 }
 
 export async function pricingPaperImage(paper: HTMLElement) {
@@ -67,8 +68,9 @@ export function PageContent({
   const headerInfo = display.info.filter((item) => item.place === "header");
   const footerInfo = display.info.filter((item) => item.place === "footer");
   const footerType = documentFooterTypography(display, fontScale);
-  const promos = data.lines.filter((l) => l.badge);
-  const regular = data.lines.filter((l) => !l.badge);
+  const promos = online ? data.lines.filter((l) => l.badge) : page === 1 ? data.lines.filter((l) => l.badge).slice(0, 6) : [];
+  const promoSet = new Set(promos);
+  const regular = data.lines.filter((l) => !promoSet.has(l));
   const columns = online ? 1 : Math.max(1, Math.min(3, display.columns || 1));
   const indexed = columns === 1 && !online;
   const perColumn = Math.ceil(regular.length / columns) || 0;
@@ -89,26 +91,26 @@ export function PageContent({
         {/* 11/4: 문서를 주는 회사가 먼저 눈에 들어오도록 회사명을 가장 크게 */}
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-2xl font-black leading-tight" style={{ color: accent }}>
+            <p className={online || page === 1 ? "text-2xl font-black leading-tight" : "text-base font-bold leading-tight"} style={{ color: accent }}>
               {data.companyName}
             </p>
-            {data.industry ? <p className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700">{data.industry}</p> : null}
-            {headerInfo.length ? (
+            {(online || page === 1) && data.industry ? <p className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700">{data.industry}</p> : null}
+            {(online || page === 1) && headerInfo.length ? (
               <p className="mt-0.5 text-xs text-slate-700">{headerInfo.map((item) => `${item.label} ${item.value}`).join(" · ")}</p>
             ) : null}
           </div>
           <div className="text-right text-xs">
-            <p className="text-base font-bold">{data.title}</p>
+            <p className={online || page === 1 ? "text-base font-bold" : "text-sm font-bold"}>{data.title}</p>
             <p>
               {data.version ? `버전 ${data.version}` : "작성 중"} · 발행 {koreaDay(new Date(data.publishedAt))} · 유효 {data.validUntil}
               {data.expired ? " 만료" : "까지"}
             </p>
           </div>
         </div>
-        {data.recipient && <p>받는 곳: {data.recipient}</p>}
-        {data.contact && <p className="text-xs">{data.contact}</p>}
-        <p className="text-xs">{display.priceIncludesTax ? "과세 품목 부가세 포함" : "부가세 별도"}{display.showTaxType ? " · 면세 품목 별도 표시" : ""}</p>
-        {data.expired && (
+        {(online || page === 1) && data.recipient && <p>받는 곳: {data.recipient}</p>}
+        {(online || page === 1) && data.contact && <p className="text-xs">{data.contact}</p>}
+        {(online || page === 1) ? <p className="text-xs">{display.priceIncludesTax ? "과세 품목 부가세 포함" : "부가세 별도"}{display.showTaxType ? " · 면세 품목 별도 표시" : ""}</p> : null}
+        {(online || page === 1) && data.expired && (
           <p className="font-semibold text-red-700">
             유효기간이 지나 가격을 표시하지 않습니다.
           </p>
@@ -159,7 +161,7 @@ export function PageContent({
           ))}
         </div>
       ) : (
-        <div className="pricing-output-grid my-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${chunks.length || 1}, minmax(0, 1fr))` }}>
+        <div className="pricing-output-grid my-3 grid gap-3" data-indexed={indexed || undefined} style={{ gridTemplateColumns: `repeat(${chunks.length || 1}, minmax(0, 1fr))` }}>
           {chunks.map((chunk, c) => (
             <table className="pricing-output-table w-full table-fixed border-collapse text-left" key={c}>
               <colgroup>{(indexed ? [6, display.productWidth * 0.83, (100 - display.productWidth) * 0.83, 11] : [display.productWidth, 100 - display.productWidth]).map((width, i) => <col key={i} style={{ width: `${width}%` }} />)}</colgroup>
@@ -177,12 +179,12 @@ export function PageContent({
                   <tr key={i}>
                     {indexed ? <td className="border-b p-1.5">{start + c * perColumn + i + 1}</td> : null}
                     <td className="min-w-0 border-b p-1.5 font-semibold [overflow-wrap:anywhere]">
-                      <span className="block">{l.displayName}</span>
-                      {l.brand ? <span className="block font-normal text-xs">{l.brand}</span> : null}
-                      {l.spec || l.unit ? <span data-document-spec className="block font-normal text-xs text-slate-600 [overflow-wrap:anywhere]">{[l.spec, l.unit].filter(Boolean).join(" · ")}</span> : null}
+                      <span className="line-clamp-2">{l.badge ? <span className="mr-1 rounded bg-amber-200 px-1 text-xs">{l.badge}</span> : null}{l.displayName}</span>
+                      {l.brand ? <span className="block truncate font-normal text-xs">{l.brand}</span> : null}
+                      {l.spec || l.unit ? <span data-document-spec className="block truncate font-normal text-xs text-slate-600">{[l.spec, l.unit].filter(Boolean).join(" · ")}{l.badge && l.endsOn ? ` · ${l.endsOn}까지` : ""}</span> : l.badge && l.endsOn ? <span className="block truncate font-normal text-xs text-slate-600">{l.endsOn}까지</span> : null}
                       {!indexed && display.showTaxType ? <span data-document-tax className="block font-normal text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</span> : null}
                     </td>
-                    <td data-document-price className="border-b border-l px-1.5 py-1.5 text-right tabular-nums [overflow-wrap:anywhere]"><span data-document-price-value>{price(l)}</span></td>
+                    <td data-document-price className="whitespace-nowrap border-b border-l px-1.5 py-1.5 text-right tabular-nums"><span data-document-price-value>{price(l)}</span></td>
                     {indexed ? <td className="border-b p-1.5 text-xs">{display.showTaxType ? <span data-document-tax>{l.taxType === "exempt" ? "면세" : "과세"}</span> : null}</td> : null}
                   </tr>
                 ))}
@@ -195,13 +197,13 @@ export function PageContent({
         <p className="py-8">표시 가능한 품목이 없습니다.</p>
       )}
       <footer className="mt-auto space-y-1.5 border-t pt-3 text-sm">
-        {qrSettings.position.startsWith("bottom") ? qrBlock : null}
-        {footerInfo.length ? (
+        {(online || page === pages) && footerInfo.length ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
             {footerInfo.map((item) => <p key={`${item.label}-${item.value}`}>{item.label} · {item.value}</p>)}
           </div>
         ) : null}
-        {data.footer ? <p className="whitespace-pre-wrap" data-document-footer style={{ fontSize: footerType.fontSize ?? undefined, fontWeight: footerType.bold ? 700 : undefined, lineHeight: footerType.fontSize ? `${footerType.lineHeight}px` : undefined }}>{data.footer}</p> : null}
+        {(online || page === pages) && data.footer ? <p className="whitespace-pre-wrap" data-document-footer style={{ fontSize: footerType.fontSize ?? undefined, fontWeight: footerType.bold ? 700 : undefined, lineHeight: footerType.fontSize ? `${footerType.lineHeight}px` : undefined }}>{data.footer}</p> : null}
+        {qrSettings.position.startsWith("bottom") ? qrBlock : null}
         <p className="text-right text-xs">
           {page} / {pages}쪽
         </p>
