@@ -61,7 +61,7 @@ for (const width of [1440, 390]) test('P1-6 merged guide to saved delivery at '+
   await expect(page.getByRole('region',{name:'접수 완료'})).toContainText('2026-11-28');
   await page.getByRole('button',{name:'배송 현황 보기',exact:true}).click();
  }else{
-  await page.getByRole('button',{name:'주문 내역',exact:true}).click();
+  await page.getByRole('link',{name:'주문 내역',exact:true}).click();
   await page.getByRole('button',{name:'배송 현황',exact:true}).click();
  }
  await expect(page.getByRole('region',{name:'배송 확인'})).toContainText('배송일 2026-11-28');
