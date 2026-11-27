@@ -139,6 +139,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   }, []);
   const [checkoutStep, setCheckoutStep] = useState<"order" | "cart" | "confirm" | "complete">("order");
   const [completedOrder, setCompletedOrder] = useState<{ id: string; deliveryDate: string; total: number } | null>(null);
+  const [deliveryOrderId, setDeliveryOrderId] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [deliverySheet, setDeliverySheet] = useState(false);
   const tableView = desktop && orderView === "table";
@@ -717,10 +718,23 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
     {mobileOrder && checkoutStep === "complete" && completedOrder && <section aria-label="접수 완료" className="space-y-4 p-4 text-center">
       <h2 className="text-xl font-bold">주문이 접수됐습니다</h2><p>주문번호 {completedOrder.id || "주문 내역에서 확인"}</p>
       <p>배송일 {completedOrder.deliveryDate} · 합계 {won(completedOrder.total)}</p>
-      <Button className="min-h-12 w-full" onClick={() => setTab("history")} type="button">주문 내역 보기</Button>
+      <Button className="min-h-12 w-full" onClick={() => { setDeliveryOrderId(completedOrder.id); setTab("history"); }} type="button">배송 현황 보기</Button>
       <Button className="min-h-12 w-full" onClick={() => { setCompletedOrder(null); setCheckoutStep("order"); }} type="button" variant="outline">계속 주문</Button>
     </section>}
     {tab === "history" && <section className="space-y-3 p-4 md:p-6"><h2 className="font-semibold">주문 내역</h2>
+      {deliveryOrderId && (() => {
+        const order = data?.orders.find((item) => item.id === deliveryOrderId);
+        if (!order) return <Notice kind="error">선택한 주문을 현재 내역에서 찾지 못했습니다.</Notice>;
+        const steps = ["submitted", "received", "in_delivery", "delivered"] as const;
+        const current = steps.indexOf(order.status as typeof steps[number]);
+        return <section aria-label="배송 확인" className="space-y-3 rounded-lg border bg-white p-4">
+          <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">배송 확인</h3><button className="min-h-11 underline" onClick={() => setDeliveryOrderId(null)} type="button">목록으로</button></div>
+          <p className="text-sm">주문번호 {order.id} · 배송일 {order.deliveryDate || DELIVERY_CONFIRMATION_NOTICE}</p>
+          {order.status === "cancelled" ? <Notice kind="error">취소된 주문입니다.</Notice> : <ol className="grid grid-cols-4 gap-2" aria-label="배송 상태 단계">
+            {steps.map((step, index) => <li className={`rounded border p-2 text-center text-xs ${index <= current ? "border-blue-600 bg-blue-50 font-semibold text-blue-800" : "text-slate-500"}`} key={step} aria-current={index === current ? "step" : undefined}>{storeOrderStatusLabel(step)}</li>)}
+          </ol>}
+        </section>;
+      })()}
       {!store.priceAvailable ? <p className="text-sm text-slate-600">문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다. 담당자에게 새 링크를 요청해 주세요.</p> :
         !pricesReady ? retryLoad : !data?.orders.length && <p className="text-sm text-slate-600">아직 주문이 없습니다.</p>}
       {pricesReady && store.priceAvailable && Boolean(data?.orders.length) && <table className="w-full border-collapse text-sm"><thead className="hidden bg-slate-50 md:table-header-group"><tr>
@@ -731,7 +745,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">상태</span><span>{order.deliveryDate === null ? order.status === "cancelled" ? "취소됨" : "접수됨 · 배송일 확인 대기" : storeOrderStatusLabel(order.status)}</span></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">품목</span><ul className="min-w-0 break-words">{order.lines.map((line, index) => <li key={index}>{line.product_name} {line.quantity}{line.sales_unit || "개"}{line.specification ? ` · ${line.specification}` : ""}{line.tax_type ? ` · ${line.tax_type === "exempt" ? "면세" : "과세"}` : ""} · {line.unit_price === null ? "단가 미정" : won(line.unit_price)}</li>)}</ul></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">합계</span><span>{won(order.knownTotal)}{order.marketPricePending ? " + 시세 품목 가격 미정" : ""}</span></td>
-        <td className="p-2 md:p-3"><div className="flex flex-wrap gap-2"><button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, false)}>다시 담기</button>
+        <td className="p-2 md:p-3"><div className="flex flex-wrap gap-2"><button className="min-h-[44px] rounded border px-3" onClick={() => setDeliveryOrderId(order.id)} type="button">배송 현황</button><button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, false)}>다시 담기</button>
           {order.status === "submitted" && order.deliveryDate && store.priceAvailable && store.policy.weekdays.length > 0 &&
             canOrderForDelivery(order.deliveryDate, store.policy) &&
             <button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, true)}>마감 전 수정</button>}</div></td>
