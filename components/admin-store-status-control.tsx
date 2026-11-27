@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 
 type CompanyOption = { id: string; name: string };
 
-export function AdminStoreStatusPreview({ companies, enabled, initialStatus, storeProfileId }: {
+export function AdminStoreStatusControl({ companies, enabled, initialStatus, storeProfileId }: {
   companies: CompanyOption[];
   enabled: boolean;
   initialStatus: string;
@@ -24,7 +24,7 @@ export function AdminStoreStatusPreview({ companies, enabled, initialStatus, sto
     setPending(true);
     setError("");
     try {
-      const response = await fetch("/api/admin/stores/status-preview", {
+      const response = await fetch("/api/admin/stores/status", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ companyId, storeProfileId, status: nextStatus, requestKey: crypto.randomUUID() }),
@@ -42,10 +42,10 @@ export function AdminStoreStatusPreview({ companies, enabled, initialStatus, sto
   return <div className="flex min-w-0 flex-wrap items-center gap-2">
     <Badge>{statusLabel(status)}</Badge>
     {canChange ? <>
-      {companies.length > 1 ? <select aria-label="상태 변경 회사" className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs font-bold" onChange={(event) => setCompanyId(event.target.value)} value={companyId}>
+      {companies.length > 1 ? <select aria-label="상태 변경 회사" className="h-11 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs font-bold" onChange={(event) => setCompanyId(event.target.value)} value={companyId}>
         {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
       </select> : null}
-      <button className="min-h-9 rounded-md border border-slate-300 bg-white px-3 text-xs font-black text-slate-800 disabled:opacity-50" disabled={pending} onClick={changeStatus} type="button">
+      <button className="min-h-11 rounded-md border border-slate-300 bg-white px-3 text-xs font-black text-slate-800 disabled:opacity-50" disabled={pending} onClick={changeStatus} type="button">
         {pending ? "처리 중" : actionLabel}
       </button>
     </> : null}

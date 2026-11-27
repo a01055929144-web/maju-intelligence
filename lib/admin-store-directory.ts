@@ -63,8 +63,8 @@ const fixtureStores: AdminStoreDirectoryItem[] = [
     businessStatus: "active", address: "서울특별시 중구 합성로 10 1층", status: "active", origin: "direct", createdAt: "2026-11-01T00:00:00Z", recentOrderAt: "2026-11-26T03:00:00Z",
     duplicateSuspected: true,
     connections: [
-      { id: "a1", companyId: "c1", companyName: "합성 유통사 A", customerName: "중앙식당 본점", status: "active", reviewStatus: null },
-      { id: "a2", companyId: "c2", companyName: "합성 유통사 B", customerName: "합성 중앙식당", status: "active", reviewStatus: "needs_review" },
+      { id: "a1", companyId: "00000000-0000-4000-8000-000000000001", companyName: "합성 유통사 A", customerName: "중앙식당 본점", status: "active", reviewStatus: null },
+      { id: "a2", companyId: "00000000-0000-4000-8000-000000000002", companyName: "합성 유통사 B", customerName: "합성 중앙식당", status: "active", reviewStatus: "needs_review" },
     ],
     members: [{ id: "m1", name: "합성 점주", phone: "010-0000-0000", email: "owner@example.test", kakaoLinked: true, role: "owner", status: "active", lastLoginAt: "2026-11-26T02:00:00Z" }],
     changes: [{ id: "e1", actorName: "합성 점주", fields: ["storeName", "baseAddress"], createdAt: "2026-11-17T00:00:00Z" }],
