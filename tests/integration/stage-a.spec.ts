@@ -95,21 +95,22 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await page.locator('input[type="file"]').setInputFiles({name:'stage-a-synthetic.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:file.buffer});
     const preview=page.getByRole('region',{name:'업로드 적용일과 단가 확인',exact:true});
     await expect(page.getByRole('radio',{name:'현재 매입가 변경',exact:true})).toBeChecked();
-    await expect(preview).toContainText('미선택 188그룹');
+    await expect(preview).toContainText('정리 필요 188개');
     const conflicts=page.getByRole('region',{name:'상이 단가 선택',exact:true});
-    await conflicts.getByRole('combobox').first().selectOption('100');
     let chosen=0;
     while(chosen<188) {
-      const options=conflicts.getByRole('combobox',{name:/적용 단가$/});
-      await expect(options).toHaveCount(Math.min(100,188-chosen));
-      const count=await options.count();
+      const count=Math.min(100,188-chosen);
+      const groups=conflicts.locator('tbody tr, li').filter({has:page.getByRole('button',{name:/^원본 /})});
+      await expect(groups).toHaveCount(count);
       for(let index=0;index<count;index++) {
-        const value=chosen<scenario.held?'hold':await options.nth(index).locator('option').nth(2).getAttribute('value');
-        await options.nth(index).selectOption(value!); chosen++;
+        const group=groups.nth(index);
+        if(chosen<scenario.held) await group.getByRole('button',{name:'이번엔 보류',exact:true}).click();
+        else await group.getByRole('button',{name:/^원본 /}).first().click();
+        chosen++;
       }
       if(chosen<188)await conflicts.getByRole('button',{name:'다음',exact:true}).click();
     }
-    await expect(preview).toContainText('미선택 0그룹');
+    await expect(preview).toContainText('정리 필요 0개');
     await page.getByRole('button',{name:/^② 열 정렬/}).click();
     await page.getByRole('button',{name:/③ 저장/}).click();
     const review=page.getByRole('region',{name:'저장 전 적용일 확인',exact:true});
