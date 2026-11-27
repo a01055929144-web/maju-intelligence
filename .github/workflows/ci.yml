@@ -98,6 +98,18 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-66-order-dispatch.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-66-partial-dispatch-final-cancel.pg17.test.sql
 
+      - name: Verify CX-154 customer order cancellation on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx154_customer_order_cancel_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-27-CX-154-customer-order-cancel.pg17.test.sql
+
       - name: Verify CX-151 sales area delivery sync on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
