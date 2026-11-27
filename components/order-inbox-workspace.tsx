@@ -113,6 +113,28 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
     }
   }
 
+  async function dispatch(order: Order) {
+    setBusyId(order.id); setNotice("");
+    try {
+      const response = await fetch("/api/orders/fulfillment", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, orderIds: [order.id], idempotencyKey: crypto.randomUUID() }),
+      });
+      const result = await response.json().catch(() => ({})) as { items?: Array<{ status: string; revision: number }>; message?: string };
+      const saved = result.items?.[0];
+      if (!response.ok || !saved) { setNotice(result.message || "배송 출발 처리에 실패했습니다."); return; }
+      const next = { ...order, status: saved.status, revision: saved.revision, updatedAt: new Date().toISOString(), justConfirmed: false };
+      setOrders((current) => current?.map((item) => item.id === order.id ? next : item) ?? []);
+      setSelectedOrder(next);
+      setStatusCounts((current) => ({ ...current, received: Math.max(0, (current.received || 0) - 1), in_delivery: (current.in_delivery || 0) + 1 }));
+      setNotice(`${order.customerName} 주문이 배송 중으로 바뀌었습니다.`);
+    } catch {
+      setNotice("배송 출발 결과를 불러오지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
   // CC-08: 첫 거래 거래처 확인 — 후보 보기, 새 거래처로 확인, 기존 거래처에 연결. 규칙은 서버(DB 함수)가 정한다.
   async function post(payload: Record<string, unknown>) {
     const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, ...payload }) });
@@ -235,7 +257,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
       <Button className="min-h-11" type="submit" variant="outline">검색</Button>
     </form>
     {!canConfirm && <p className="text-sm text-slate-600">{preview ? "관리자 미리보기입니다. 확인 처리는 고객사 계정에서 합니다." : "주문 관리는 대표·관리자가 합니다. 이 계정은 보기만 할 수 있습니다."}</p>}
-    {notice && <p className="rounded-lg bg-teal-50 p-3 text-sm text-teal-800" role="status">{notice}</p>}
+    {notice && !selectedOrder && <p className="rounded-lg bg-teal-50 p-3 text-sm text-teal-800" role="status">{notice}</p>}
     {review ? <div aria-label="거래처 확인" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm" role="region">
       <p className="font-bold">{review.order.customerName} — 처음 거래하는 매장입니다. 같은 거래처가 이미 있는지 확인해 주세요.</p>
       <p className="text-slate-600">확인하기 전에는 이 매장 주문을 확인·배송 처리할 수 없습니다. 기존 거래처에 연결하면 접수된 주문도 그 거래처로 옮겨지고, 자동으로 만든 거래처는 중복으로 표시됩니다.</p>
@@ -257,6 +279,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
     </div>}
     {selectedOrder ? <Dialog fullScreenOnMobile onClose={() => setSelectedOrder(null)} size="lg" title={`${selectedOrder.customerName} 주문 상세`}>
       <div className="mt-4 space-y-4 text-sm">
+        {notice ? <p className="rounded-lg bg-teal-50 p-3 text-teal-800" role="status">{notice}</p> : null}
         <dl className="grid gap-2 rounded-lg bg-slate-50 p-3 sm:grid-cols-2">
           <div><dt className="font-semibold">주문 번호</dt><dd className="break-all">{selectedOrder.id}</dd></div>
           <div><dt className="font-semibold">접수 시각</dt><dd>{kst(selectedOrder.submittedAt)}</dd></div>
@@ -276,7 +299,17 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
         <div><h3 className="font-bold">상태 이력</h3><ul className="mt-1 list-disc pl-5"><li>접수됨 · {kst(selectedOrder.submittedAt)}</li>{selectedOrder.status !== "submitted" ? <li>{storeOrderStatusLabel(selectedOrder.status)} · {kst(selectedOrder.updatedAt)}</li> : null}</ul></div>
         {selectedOrder.orderDocument ? <p><b>매출 전표</b> · {selectedOrder.orderDocument.status === "unlinked" ? "미연결" : `${selectedOrder.orderDocument.status === "draft" ? "작성중" : "확정"} · ${selectedOrder.orderDocument.number}`}</p> : null}
         {deliveryPhotosEnabled ? <OrderDeliveryPhotos audience="customer" companyId={companyId} orderId={selectedOrder.id} /> : null}
-        {fulfillmentEnabled ? <a className="maju-button-secondary inline-flex min-h-11 items-center" href={`/orders/fulfillment?companyId=${encodeURIComponent(companyId)}`}>출고 준비로 이동</a> : null}
+        <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+          {canConfirm && selectedOrder.storeAccountId && canConfirmStoreOrder(selectedOrder.status)
+            ? <Button disabled={busyId !== ""} onClick={() => { setSelectedOrder(null); void openReview(selectedOrder); }}>거래처 확인</Button>
+            : canConfirm && canConfirmStoreOrder(selectedOrder.status)
+              ? <Button disabled={busyId !== ""} onClick={() => void confirm(selectedOrder)}>{busyId === selectedOrder.id ? "확인 중…" : "확인"}</Button>
+              : canConfirm && fulfillmentEnabled && selectedOrder.status === "received"
+                ? <Button disabled={busyId !== ""} onClick={() => void dispatch(selectedOrder)}>{busyId === selectedOrder.id ? "처리 중…" : "배송 출발"}</Button>
+                : null}
+          {selectedOrder.status === "in_delivery" ? <p className="text-slate-600">배송 완료는 기사 화면에서 코스·증빙과 함께 처리합니다.</p> : null}
+          {fulfillmentEnabled ? <a className="maju-button-secondary inline-flex min-h-11 items-center" href={`/orders/fulfillment?companyId=${encodeURIComponent(companyId)}`}>출고 준비로 이동</a> : null}
+        </div>
       </div>
     </Dialog> : null}
     {confirmDialog}

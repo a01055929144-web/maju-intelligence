@@ -17,6 +17,12 @@ for (const width of [1440, 390]) test(`order inbox filters, expands and confirms
   await login(page);
   const confirmed = new Set<string>();
   const requests: URL[] = [];
+  await page.route("**/api/orders/fulfillment", async (route) => {
+    const body = route.request().postDataJSON();
+    expect(body.orderIds).toEqual(["o1"]);
+    expect(body.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+    return route.fulfill({ json: { items: [{ orderId: "o1", status: "in_delivery", revision: 3 }] } });
+  });
   await page.route("**/api/orders*", async (route) => {
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON();
@@ -74,6 +80,12 @@ for (const width of [1440, 390]) test(`order inbox filters, expands and confirms
   await expect(page.getByText("합성 송파 시험 매장 주문을 확인했습니다.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "합성 송파 시험 매장" })).toBeVisible();
   await expect(page.getByText("확인됨", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "합성 송파 시험 매장" }).click();
+  await page.getByRole("button", { name: "배송 출발" }).click();
+  await expect(page.getByText("합성 송파 시험 매장 주문이 배송 중으로 바뀌었습니다.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toContainText("배송 중");
+  await expect(page.getByText("배송 완료는 기사 화면에서 코스·증빙과 함께 처리합니다.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "닫기" }).click();
   await page.getByRole("button", { name: "확인", exact: true }).first().click();
   await expect(page.getByText(/점주가 방금 수정했거나/)).toBeVisible();
 
