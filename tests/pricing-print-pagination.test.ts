@@ -12,13 +12,13 @@ const content: DocumentContent = {
 const version: DocumentVersion = { id: "30000000-0000-4000-8000-000000000001", documentId: "10000000-0000-4000-8000-000000000001", version: 1, revision: 1, publishedAt: "2026-11-10T00:00:00Z", content, unavailablePromotions: [], promotionStock: {} };
 
 describe("A4 2단 인쇄 페이지 나누기", () => {
-  it.each([[1, 40], [1.15, 36], [1.3, 32]])("%s 배율에서 표시하지 않는 세금 유형 줄만큼 빈칸을 남기지 않는다", (scale, firstPageLines) => {
+  it.each([1, 1.15, 1.3])("%s 배율에서도 페이지당 20품목을 유지한다", (scale) => {
     const output = documentOutput(version, "2026-11-10");
     const pages = printPages(output, scale);
-    expect(pages).toHaveLength(3);
-    expect(pages[0].lines).toHaveLength(firstPageLines);
+    expect(pages).toHaveLength(5);
+    expect(pages.map((page) => page.lines.length)).toEqual([20, 20, 20, 20, 16]);
     expect(pages.flatMap((page) => page.lines)).toEqual(output.lines);
-    expect(printPages({ ...output, display: { ...output.display, showTaxType: true } }, scale)[0].lines.length).toBeLessThan(firstPageLines);
+    expect(printPages({ ...output, display: { ...output.display, showTaxType: true } }, scale).map((page) => page.lines.length)).toEqual([20, 20, 20, 20, 16]);
   });
 
   it("전단지 형식도 행사 가격을 바꾸지 않고 모든 품목을 페이지에 한 번씩 담는다", () => {
