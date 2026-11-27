@@ -1,0 +1,31 @@
+name: CX-148c received price candidates PG17
+on:
+  pull_request:
+    paths:
+      - 'docs/sql-drafts/2026-11-27-CX-148c-*'
+      - '.github/workflows/cx148c-received-price-candidates.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pg17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify shared received candidates and exact rollback
+        run: |
+          createdb cx148c_disposable_test
+          psql -X --dbname=cx148c_disposable_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/2026-11-27-CX-148c-received-price-candidates.pg17.test.sql
