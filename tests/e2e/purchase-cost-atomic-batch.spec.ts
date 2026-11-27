@@ -540,7 +540,7 @@ test("390px saves all 3417 synthetic rows and 745 selections through v2 only", a
   const { writes, receipts, dateWrites } = await purchaseUpload(page, { count: 745 });
   const rows = Array.from({ length: 3417 }, (_, index) => {
     const item = index % 745;
-    return `ERP-${item + 1},${item ? `합성 상품 ${item + 1}` : "합성 상품"},1kg,봉,300`;
+    return `ERP-${item + 1},${item ? `합성 상품 ${item + 1}` : "합성 상품"},1kg,봉,125`;
   });
   await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,단가\n" + rows.join("\n"));
   const align = page.getByRole("button", { name: /^② 열 정렬/ });
