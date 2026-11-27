@@ -207,7 +207,7 @@ describe("pricing P1 documents", () => {
     expect(documentOutput(soldOut, "2026-10-30").lines).toHaveLength(0);
     expect(draft.content.lines[0].remaining).toBe(10);
   });
-  it("retains order and all long names across conservative A4 pages", () => {
+  it("prints exactly 20 table items per page and keeps at most six promotion cards on page one", () => {
     const lines = Array.from({ length: 100 }, (_, i) => ({
       ...content.lines[0],
       productId: `10000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
@@ -215,16 +215,24 @@ describe("pricing P1 documents", () => {
       brand: "나".repeat(80),
       spec: "다".repeat(80),
     }));
-    const output = documentOutput(
-      { ...version, content: { ...content, lines } },
-      "2026-10-30",
-    );
-    const pages = printPages(output);
-    expect(pages.length).toBeGreaterThan(10);
-    expect(pages.flatMap((p) => p.lines).map((l) => l.displayName)).toEqual(
-      lines.map((l) => l.displayName),
-    );
-    expect(pages.every((p) => p.lines.length <= 18)).toBe(true);
+    for (const columns of [1, 2] as const) for (const promotionCount of [3, 8]) {
+      const promotions = Array.from({ length: promotionCount }, (_, i) => ({
+        ...lines[i],
+        promotionId: `30000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+        badge: "행사" as const,
+        startsOn: "2026-10-01",
+        endsOn: "2026-12-31",
+      }));
+      const output = documentOutput(
+        { ...version, content: { ...content, lines: [...promotions, ...lines.slice(promotionCount, 49)], display: { ...content.display, columns } } },
+        "2026-10-30",
+      );
+      const pages = printPages(output);
+      expect(pages.map((page) => page.lines.length - Math.min(6, promotionCount) * Number(page === pages[0]))).toEqual([20, 20, 9 - Math.min(6, promotionCount)]);
+      expect(pages[0].lines.slice(0, Math.min(6, promotionCount)).every((line) => line.badge)).toBe(true);
+      expect(pages.slice(1).flatMap((page) => page.lines).filter((line) => line.badge)).toHaveLength(0);
+      expect(pages.flatMap((page) => page.lines)).toEqual(output.lines);
+    }
   });
   it("uses current P0 cost markup and Korean day boundaries", () => {
     expect(withMargin(content.lines[0], 18910, 12).price).toBe(21180);
