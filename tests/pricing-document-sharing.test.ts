@@ -642,7 +642,7 @@ it("shows current policy beside an existing v1 with no stored footer without rep
   expect(response.status).toBe(200); const body = await response.json();
   expect(body.document.version).toBe(1); expect(body.document.display.info).toEqual([]); expect(body.document.footer).toBe("");
   expect(body.orderFooter).toEqual({ status: "available", items: [
-    { key: "next_day_cutoff_time", label: "주문 마감", place: "footer", value: "전날 23:59 (권역·매장별 예외)" },
+    { key: "next_day_cutoff_time", label: "주문 마감", place: "footer", value: "배송 1일 앞 23:59 (권역·매장별 예외)" },
     { key: "delivery_weekdays", label: "배송 요일", place: "footer", value: "권역·매장별 확인" },
   ] });
   expect(JSON.stringify(body)).not.toContain("PRIVATE-"); expect(JSON.stringify({ links, content })).toBe(frozen);
