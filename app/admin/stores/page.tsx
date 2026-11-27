@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, Building2, History, Store, Users } from "lucide-react";
 import { AdminPageHeader } from "../admin-page-header";
+import { AdminStoreDirectoryTable, AdminStoreMemberDirectoryTable } from "@/components/admin-store-directory-tables";
 import { StoreActivityList } from "@/components/store-activity-list";
 import { AdminStoreConnectionActions } from "@/components/admin-store-connection-actions";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +12,7 @@ import { getAdminSession } from "@/lib/auth";
 import { getAdminStoreDirectory } from "@/lib/admin-store-directory";
 import { hasFeatureRollout } from "@/lib/feature-flags";
 
-export default async function AdminStoresPage({ searchParams }: { searchParams: Promise<{ duplicate?: string; q?: string; storeId?: string }> }) {
+export default async function AdminStoresPage({ searchParams }: { searchParams: Promise<{ duplicate?: string; q?: string; storeId?: string; view?: string }> }) {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
   if (!hasFeatureRollout("ADMIN_STORE_MANAGEMENT")) redirect("/admin");
@@ -19,35 +20,41 @@ export default async function AdminStoresPage({ searchParams }: { searchParams: 
   const stores = await getAdminStoreDirectory().catch(() => null);
   const query = (params.q || "").trim().toLowerCase();
   const filtered = (stores || []).filter((store) => (!params.duplicate || store.duplicateSuspected)
-    && (!query || [store.storeName, store.businessNumber, store.address, ...store.connections.flatMap((item) => [item.companyName, item.customerName])]
+    && (!query || [store.storeName, store.businessNumber, store.address, ...store.connections.flatMap((item) => [item.companyName, item.customerName]), ...store.members.map((item) => item.name)]
       .some((value) => value?.toLowerCase().includes(query))));
-  const selected = filtered.find((store) => store.id === params.storeId) || filtered[0];
+  const selected = filtered.find((store) => store.id === params.storeId);
+  const memberRows = filtered.flatMap((store) => store.members.map((member) => ({
+    id: member.id, storeId: store.id, name: member.name, kakaoLinked: member.kakaoLinked, storeName: store.storeName,
+    role: roleLabel(member.role), status: statusLabel(member.status), lastLoginAt: member.lastLoginAt,
+  })));
 
   return <main className="min-h-screen maju-app-bg">
-    <AdminPageHeader active="stores" badge="CX-78 · 읽기 전용" session={session} subtitle="유통사별 연결을 넘어 같은 실제 매장을 한 곳에서 확인합니다" title="매장 관리" />
+    <AdminPageHeader active="stores" badge="CX-145" session={session} subtitle="유통사별 연결을 넘어 같은 실제 매장을 한 곳에서 확인합니다" title="매장 관리" />
     <section className="mx-auto max-w-7xl space-y-4 px-4 py-4">
+      <nav aria-label="매장 관리 보기" className="flex flex-wrap gap-2">
+        <Link aria-current={!params.view ? "page" : undefined} className={`inline-flex min-h-11 items-center rounded-lg px-4 text-sm font-black ${!params.view ? "bg-slate-950 text-white" : "border border-slate-300 bg-white text-slate-800"}`} href="/admin/stores">매장 목록</Link>
+        <Link aria-current={params.view === "members" ? "page" : undefined} className={`inline-flex min-h-11 items-center rounded-lg px-4 text-sm font-black ${params.view === "members" ? "bg-slate-950 text-white" : "border border-slate-300 bg-white text-slate-800"}`} href="/admin/stores?view=members">점주·구성원 관리</Link>
+      </nav>
       <div className="grid gap-3 sm:grid-cols-3">
         <Summary label="전체 매장" value={stores?.length || 0} />
         <Summary label="중복 의심" value={stores?.filter((store) => store.duplicateSuspected).length || 0} tone="warn" />
         <Summary label="유통사 연결" value={stores?.reduce((sum, store) => sum + store.connections.length, 0) || 0} />
       </div>
       <form className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto_auto]" method="get">
+        {params.view === "members" ? <input name="view" type="hidden" value="members" /> : null}
         <input aria-label="매장 검색" className="h-11 min-w-0 rounded-lg border border-slate-300 px-3 text-sm" defaultValue={params.q} name="q" placeholder="매장명, 사업자번호, 주소, 유통사 검색" />
         <label className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-bold"><input defaultChecked={params.duplicate === "1"} name="duplicate" type="checkbox" value="1" />중복 의심만</label>
         <button className="min-h-11 rounded-lg bg-slate-950 px-4 text-sm font-black text-white" type="submit">조회</button>
       </form>
       {!stores ? <Notice kind="error" text="매장 목록 조회에 실패했습니다. 0건과 구분해 표시합니다." /> : null}
-      {stores && !filtered.length ? <Notice kind="status" text="조건에 맞는 매장이 없습니다." /> : null}
-      {selected ? <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.6fr)]">
-        <div className="space-y-2">
-          {filtered.map((store) => <Link aria-current={selected.id === store.id ? "page" : undefined} className={`block rounded-xl border p-3 ${selected.id === store.id ? "border-violet-400 bg-violet-50" : "border-slate-200 bg-white"}`} href={href(params, store.id)} key={store.id}>
-            <div className="flex min-w-0 items-start justify-between gap-2"><p className="min-w-0 break-words text-sm font-black text-slate-950">{store.storeName}</p>{store.duplicateSuspected ? <Badge className="shrink-0 bg-rose-100 text-rose-800">중복 의심</Badge> : null}</div>
-            <p className="mt-1 break-words text-xs font-semibold text-slate-600">{store.address || "주소 미입력"}</p>
-            <p className="mt-2 text-xs font-bold text-slate-500">유통사 {store.connections.length} · 사람 {store.members.length} · {statusLabel(store.status)}</p>
-          </Link>)}
-        </div>
-        <StoreDetail store={selected} />
-      </div> : null}
+      {stores && params.view === "members" ? <AdminStoreMemberDirectoryTable rows={memberRows} /> : null}
+      {stores && !params.view && !selected ? <AdminStoreDirectoryTable rows={filtered.map((store) => ({
+        id: store.id, companyNames: store.connections.map((item) => item.companyName).join(", ") || "미연결",
+        storeName: store.storeName, ownerName: store.members.find((item) => item.role === "owner" && item.status === "active")?.name || "없음",
+        status: statusLabel(store.status), createdAt: store.createdAt, recentOrderAt: store.recentOrderAt,
+      }))} /> : null}
+      {stores && !params.view && params.storeId && !selected ? <Notice kind="status" text="선택한 매장을 찾을 수 없습니다. 목록에서 다시 선택해 주세요." /> : null}
+      {selected && !params.view ? <div className="space-y-4"><Link className="inline-flex min-h-11 items-center text-sm font-black text-violet-800 underline" href="/admin/stores">← 매장 목록으로</Link><StoreDetail store={selected} /></div> : null}
     </section>
   </main>;
 }
@@ -70,7 +77,6 @@ function Row({ text, title }: { text: string; title: string }) { return <div cla
 function Info({ label, value }: { label: string; value: string }) { return <div className="min-w-0"><p className="text-xs font-bold text-slate-500">{label}</p><p className="mt-1 break-words font-black text-slate-900">{value}</p></div>; }
 function Summary({ label, tone, value }: { label: string; tone?: "warn"; value: number }) { return <Card className={tone ? "border-rose-200 bg-rose-50" : ""}><CardContent className="p-4"><p className="text-xs font-bold text-slate-500">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value.toLocaleString()}</p></CardContent></Card>; }
 function Notice({ kind, text }: { kind: "error" | "status"; text: string }) { return <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900" role={kind === "error" ? "alert" : "status"}><AlertTriangle aria-hidden="true" className="h-5 w-5 shrink-0" />{text}</div>; }
-function href(params: { duplicate?: string; q?: string }, storeId: string) { const q = new URLSearchParams(); if (params.q) q.set("q", params.q); if (params.duplicate) q.set("duplicate", params.duplicate); q.set("storeId", storeId); return `/admin/stores?${q}`; }
 const statusLabel = (value: string) => ({ active: "활성", suspended: "멈춤", closed: "종료", registration_pending: "개업 준비 중", removed: "내보냄" }[value] || value);
 const roleLabel = (value: string) => ({ owner: "점주", manager: "관리자", staff: "직원" }[value] || value);
 const originLabel = (value: string) => ({ direct: "직접 가입", link: "초대 연결", backfill: "기존 매장 전환" }[value] || value);
