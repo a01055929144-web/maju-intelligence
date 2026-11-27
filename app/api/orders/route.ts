@@ -129,21 +129,24 @@ export async function GET(request: NextRequest) {
     const accountIds = Array.from(new Set(items.map((order) => order.store_account_id).filter((id): id is string => Boolean(id))));
     const erpEnabled = erpOrderDocumentsEnabled(scope);
     const draftReceipt = orderReceiptDraftEnabled(scope);
-    const [customers, members, accounts, documents] = await Promise.all([
+    const [customers, members, pending, profiles, documents] = await Promise.all([
       customerIds.length ? supabaseRequest<CustomerRow[]>(
         `normalized_customers?company_id=eq.${company}&id=in.(${customerIds.join(",")})&select=id,customer_name,address,delivery_base_address,delivery_address_detail`,
       ) : Promise.resolve([]),
       memberIds.length ? supabaseRequest<Array<{ id: string; role: string; app_users: { name: string | null } | null }>>(
         `store_account_members?company_id=eq.${company}&id=in.(${memberIds.join(",")})&select=id,role,app_users(name)`,
       ) : Promise.resolve([]),
-      accountIds.length ? supabaseRequest<Array<{ id: string; customer_review_status: string; store_profiles: { access_password_updated_at: string | null } | null }>>(
-        `store_accounts?company_id=eq.${company}&id=in.(${accountIds.join(",")})&select=id,customer_review_status,store_profiles(access_password_updated_at)`,
+      accountIds.length ? supabaseRequest<Array<{ id: string }>>(
+        `store_accounts?company_id=eq.${company}&id=in.(${accountIds.join(",")})&customer_review_status=eq.needs_review&select=id`,
+      ) : Promise.resolve([]),
+      accountIds.length ? supabaseRequest<Array<{ id: string; store_profiles: { access_password_updated_at: string | null } | null }>>(
+        `store_accounts?company_id=eq.${company}&id=in.(${accountIds.join(",")})&select=id,store_profiles(access_password_updated_at)`,
       ) : Promise.resolve([]),
       draftReceipt ? readOrderSaleDocuments(scope, items.map(order => order.id))
         : erpEnabled ? readConfirmedOrderSaleDocuments(scope, items.map(order => order.id)) : undefined,
     ]);
-    const needsReview = new Set(accounts.filter((row) => row.customer_review_status === "needs_review").map((row) => row.id));
-    const passwordSet = new Map(accounts.map((row) => [row.id, Boolean(row.store_profiles?.access_password_updated_at)]));
+    const needsReview = new Set(pending.map((row) => row.id));
+    const passwordSet = new Map(profiles.map((row) => [row.id, Boolean(row.store_profiles?.access_password_updated_at)]));
     const customerById = new Map(customers.map((customer) => [customer.id, customer]));
     const memberLabel = new Map(members.map((member) => [member.id,
       `${member.app_users?.name?.trim().slice(0, 80) || "이름 미등록"} · ${MEMBER_ROLE[member.role] || "구성원"}`]));

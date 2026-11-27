@@ -45,7 +45,8 @@ describe("order inbox API", () => {
     if (path.startsWith("normalized_customers?") && path.includes("ilike")) return [{ id: "c1" }];
     if (path.startsWith("normalized_customers?")) return [{ id: "c1", customer_name: "송파 시험 매장", address: "옛 주소", delivery_base_address: "서울 송파구 합성로 1", delivery_address_detail: "101호" }];
     if (path.startsWith("store_account_members?")) return [{ id: "m1", role: "owner", app_users: { name: "합성 점주" } }];
-    if (path.startsWith("store_accounts?")) return [{ id: "a1", customer_review_status: "confirmed", store_profiles: { access_password_updated_at: "2026-11-01T00:00:00Z" } }];
+    if (path.startsWith("store_accounts?") && path.includes("customer_review_status=eq.needs_review")) return [];
+    if (path.startsWith("store_accounts?")) return [{ id: "a1", store_profiles: { access_password_updated_at: "2026-11-01T00:00:00Z" } }];
     if (path.startsWith("business_documents?")) return [];
     throw new Error(`unexpected ${path}`);
   };
