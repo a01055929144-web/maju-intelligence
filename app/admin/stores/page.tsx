@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AlertTriangle, Building2, History, Store, Users } from "lucide-react";
 import { AdminPageHeader } from "../admin-page-header";
 import { AdminStoreDirectoryTable, AdminStoreMemberDirectoryTable } from "@/components/admin-store-directory-tables";
+import { AdminStoreStatusControl } from "@/components/admin-store-status-control";
 import { StoreActivityList } from "@/components/store-activity-list";
 import { AdminStoreConnectionActions } from "@/components/admin-store-connection-actions";
 import { Badge } from "@/components/ui/badge";
@@ -54,21 +55,23 @@ export default async function AdminStoresPage({ searchParams }: { searchParams: 
         status: statusLabel(store.status), createdAt: store.createdAt, recentOrderAt: store.recentOrderAt,
       }))} /> : null}
       {stores && !params.view && params.storeId && !selected ? <Notice kind="status" text="선택한 매장을 찾을 수 없습니다. 목록에서 다시 선택해 주세요." /> : null}
-      {selected && !params.view ? <div className="space-y-4"><Link className="inline-flex min-h-11 items-center text-sm font-black text-violet-800 underline" href="/admin/stores">← 매장 목록으로</Link><StoreDetail store={selected} /></div> : null}
+      {selected && !params.view ? <div className="space-y-4"><Link className="inline-flex min-h-11 items-center text-sm font-black text-violet-800 underline" href="/admin/stores">← 매장 목록으로</Link><StoreDetail canChangeStatus={session.role === "super_admin"} store={selected} /></div> : null}
     </section>
   </main>;
 }
 
-function StoreDetail({ store }: { store: Awaited<ReturnType<typeof getAdminStoreDirectory>>[number] }) {
+function StoreDetail({ canChangeStatus, store }: { canChangeStatus: boolean; store: Awaited<ReturnType<typeof getAdminStoreDirectory>>[number] }) {
+  const allowed = new Set((process.env.FEATURE_ADMIN_STORE_MANAGEMENT_COMPANY_IDS || "").split(",").map((id) => id.trim()).filter(Boolean));
+  const statusCompanies = store.connections.filter((item) => allowed.has(item.companyId)).map((item) => ({ id: item.companyId, name: item.companyName }));
   return <div className="min-w-0 space-y-4">
-    <Card><CardHeader><div className="flex flex-wrap items-center gap-2"><CardTitle className="break-words">{store.storeName}</CardTitle><Badge>{statusLabel(store.status)}</Badge>{store.duplicateSuspected ? <Badge className="bg-rose-100 text-rose-800">중복 확인 필요</Badge> : null}</div></CardHeader><CardContent className="grid gap-3 text-sm sm:grid-cols-2">
+    <Card><CardHeader><div className="flex flex-wrap items-center gap-2"><CardTitle className="break-words">{store.storeName}</CardTitle><AdminStoreStatusControl companies={statusCompanies} enabled={canChangeStatus} initialStatus={store.status} storeProfileId={store.id} />{store.duplicateSuspected ? <Badge className="bg-rose-100 text-rose-800">중복 확인 필요</Badge> : null}</div></CardHeader><CardContent className="grid gap-3 text-sm sm:grid-cols-2">
       <Info label="사업자번호" value={formatBusinessNumber(store.businessNumber)} /><Info label="영업 상태" value={statusLabel(store.businessStatus)} />
       <Info label="주소" value={store.address || "미입력"} /><Info label="가입 경로" value={originLabel(store.origin)} />
     </CardContent></Card>
     <Section icon={Building2} title={`연결 유통사 ${store.connections.length}`} empty="연결된 유통사가 없습니다.">{store.connections.map((item) => <div className="min-w-0 space-y-2" key={item.id}><Row title={item.companyName} text={`${item.customerName} · ${statusLabel(item.status)}${item.reviewStatus === "needs_review" ? " · 매출처 확인 필요" : ""}`} /><StoreActivityList companyId={item.companyId} storeAccountId={item.id} /><AdminStoreConnectionActions companyId={item.companyId} storeAccountId={item.id} /></div>)}</Section>
     <Section icon={Users} title={`사람 ${store.members.length}`} empty="연결된 사람이 없습니다.">{store.members.map((item) => <Row key={item.id} title={`${item.name} · ${roleLabel(item.role)}`} text={[item.phone, item.email, statusLabel(item.status)].filter(Boolean).join(" · ")} />)}</Section>
     <Section icon={History} title={`변경 기록 ${store.changes.length}`} empty="기록된 변경이 없습니다.">{store.changes.slice(0, 20).map((item) => <Row key={item.id} title={item.fields.map(fieldLabel).join(", ") || "매장 정보 변경"} text={`${item.actorName} · ${formatDate(item.createdAt)}`} />)}</Section>
-    <p className="rounded-lg bg-slate-100 p-3 text-xs font-bold leading-5 text-slate-600">사업자 재확인과 멈추기·풀기, 관리자 감사 기록 쓰기는 기존 칸·함수 계약을 확인한 뒤 별도 PR로 추가합니다.</p>
+    <p className="rounded-lg bg-slate-100 p-3 text-xs font-bold leading-5 text-slate-600">멈추기·풀기는 대표 관리자만 사용할 수 있으며 상태 변경과 감사 기록은 함께 저장됩니다.</p>
   </div>;
 }
 
