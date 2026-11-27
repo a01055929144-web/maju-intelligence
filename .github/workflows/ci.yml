@@ -98,6 +98,17 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-66-order-dispatch.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-66-partial-dispatch-final-cancel.pg17.test.sql
 
+      - name: Verify CX-151 sales area delivery sync on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx151_sales_area_delivery_sync_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/cx151-sales-area-delivery-sync.pg17.test.sql
+
       - name: Verify purchase date replace draft on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:

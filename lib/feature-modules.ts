@@ -86,6 +86,15 @@ export function areManualCustomerCoordinatesEnabled(
   return isExplicitlyEnabled(enabled) && Boolean(companyId && getHoldModulesEnabledCompanyIds(companies).has(companyId));
 }
 
+/** CX-151: 운영 SQL 적용 뒤 명시적으로 허용한 회사만 영업 지역-배송권역 동기화를 연다. */
+export function isSalesAreaDeliverySyncEnabled(
+  companyId?: string | null,
+  enabled = process.env.SALES_AREA_DELIVERY_SYNC_ENABLED || "",
+  companies = process.env.SALES_AREA_DELIVERY_SYNC_ENABLED_COMPANY_IDS || ""
+) {
+  return isExplicitlyEnabled(enabled) && Boolean(companyId && getHoldModulesEnabledCompanyIds(companies).has(companyId));
+}
+
 export const CORE_LEADS_HREF = "/leads?type=permit";
 /** 로그인 · 작업공간 선택 뒤 첫 화면 = 오늘 할 일 (2026-11-03 대표 결정) */
 export const CORE_HOME_HREF = "/dashboard";
